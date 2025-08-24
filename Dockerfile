@@ -49,11 +49,11 @@ RUN git clone --depth 1 --branch ${HUGO_BRANCH} ${HUGO_REPO} .
 # Build Hugo
 RUN --mount=target=. \
     --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build,id=go-build-$TARGETPLATFORM <<EOT
-    set -ex
-    xx-go build -tags "$HUGO_BUILD_TAGS" -ldflags "-s -w -X github.com/gohugoio/hugo/common/hugo.vendorInfo=docker" -o /usr/bin/hugo
-    xx-verify /usr/bin/hugo
-EOT
+    --mount=type=cache,target=/root/.cache/go-build,id=go-build-$TARGETPLATFORM \
+    sh -c "set -ex && \
+      xx-go build -tags \"$HUGO_BUILD_TAGS\" -ldflags \"-s -w -X github.com/gohugoio/hugo/common/hugo.vendorInfo=docker\" -o /usr/bin/hugo && \
+      xx-verify /usr/bin/hugo"
+
 
 # ------------------------------
 # Dart Sass stage
@@ -99,5 +99,5 @@ ENV PATH="/var/hugo/bin/dart-sass:$PATH"
 # Expose Hugo server port
 EXPOSE 1313
 
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["hugo"]
 CMD ["--help"]
