@@ -28,7 +28,7 @@ func TestErroridf(t *testing.T) {
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 ignoreErrors = ['error-b','error-C']
--- layouts/index.html --
+-- layouts/home.html --
 {{ erroridf "error-a" "%s" "a"}}
 {{ erroridf "error-b" "%s" "b"}}
 {{ erroridf "error-C" "%s" "C"}}
@@ -39,7 +39,7 @@ ignoreErrors = ['error-b','error-C']
 	b, err := hugolib.TestE(t, files)
 
 	b.Assert(err, qt.IsNotNil)
-	b.AssertLogMatches(`ERROR a\nYou can suppress this error by adding the following to your site configuration:\nignoreLogs = \['error-a'\]`)
+	b.AssertLogMatches(`ERROR a\nYou can suppress this error by adding the following to your project configuration:\nignoreLogs = \['error-a'\]`)
 	b.AssertLogMatches(`ERROR D`)
 	b.AssertLogMatches(`! ERROR C`)
 	b.AssertLogMatches(`! ERROR c`)
@@ -52,7 +52,7 @@ func TestWarnidf(t *testing.T) {
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 ignoreLogs = ['warning-b', 'WarniNg-C']
--- layouts/index.html --
+-- layouts/home.html --
 {{ warnidf "warning-a" "%s" "a"}}
 {{ warnidf "warning-b" "%s" "b"}}
 {{ warnidf "warNing-C" "%s" "c"}}

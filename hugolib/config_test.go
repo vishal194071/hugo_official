@@ -1,4 +1,4 @@
-// Copyright 2016-present The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,16 +16,16 @@ package hugolib
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/bep/logg"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/allconfig"
+	"github.com/gohugoio/hugo/htesting"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/spf13/afero"
 )
 
@@ -54,8 +54,8 @@ title = "English Comments Title"
 	enSite := b.H.Sites[0]
 	b.Assert(enSite.Title(), qt.Equals, "English Title")
 	b.Assert(enSite.Home().Title(), qt.Equals, "English Title")
-	b.Assert(enSite.Params(), qt.DeepEquals, maps.Params{
-		"comments": maps.Params{
+	b.Assert(enSite.Params(), qt.DeepEquals, hmaps.Params{
+		"comments": hmaps.Params{
 			"color": "blue",
 			"title": "English Comments Title",
 		},
@@ -93,20 +93,21 @@ myparam = "svParamValue"
 `
 		b := Test(t, files)
 
-		enSite := b.H.Sites[0]
-		svSite := b.H.Sites[1]
-		b.Assert(enSite.Title(), qt.Equals, "English Title")
-		b.Assert(enSite.Home().Title(), qt.Equals, "English Title")
-		b.Assert(enSite.Params()["myparam"], qt.Equals, "enParamValue")
-		b.Assert(enSite.Params()["p1"], qt.Equals, "p1en")
-		b.Assert(enSite.Params()["p2"], qt.Equals, "p2base")
-		b.Assert(svSite.Params()["p1"], qt.Equals, "p1base")
-		b.Assert(enSite.conf.StaticDir[0], qt.Equals, "mystatic")
+		b.Assert(len(b.H.Sites), qt.Equals, 2)
+		enSiteH := b.SiteHelper("en", "", "")
+		svSiteH := b.SiteHelper("sv", "", "")
+		b.Assert(enSiteH.S.Title(), qt.Equals, "English Title")
+		b.Assert(enSiteH.S.Home().Title(), qt.Equals, "English Title")
+		b.Assert(enSiteH.S.Params()["myparam"], qt.Equals, "enParamValue")
+		b.Assert(enSiteH.S.Params()["p1"], qt.Equals, "p1en")
+		b.Assert(enSiteH.S.Params()["p2"], qt.Equals, "p2base")
+		b.Assert(svSiteH.S.Params()["p1"], qt.Equals, "p1base")
+		b.Assert(enSiteH.S.conf.StaticDir[0], qt.Equals, "mystatic")
 
-		b.Assert(svSite.Title(), qt.Equals, "Svensk Title")
-		b.Assert(svSite.Home().Title(), qt.Equals, "Svensk Title")
-		b.Assert(svSite.Params()["myparam"], qt.Equals, "svParamValue")
-		b.Assert(svSite.conf.StaticDir[0], qt.Equals, "mysvstatic")
+		b.Assert(svSiteH.S.Title(), qt.Equals, "Svensk Title")
+		b.Assert(svSiteH.S.Home().Title(), qt.Equals, "Svensk Title")
+		b.Assert(svSiteH.S.Params()["myparam"], qt.Equals, "svParamValue")
+		b.Assert(svSiteH.S.conf.StaticDir[0], qt.Equals, "mysvstatic")
 	})
 
 	t.Run("disable default language", func(t *testing.T) {
@@ -124,15 +125,10 @@ weight = 1
 [languages.sv]
 weight = 2
 `
-		b, err := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		).BuildE()
+		b, err := TestE(t, files)
 
 		b.Assert(err, qt.IsNotNil)
-		b.Assert(err.Error(), qt.Contains, "cannot disable default content language")
+		b.Assert(err.Error(), qt.Contains, `default language "sv" is disabled`)
 	})
 
 	t.Run("no internal config from outside", func(t *testing.T) {
@@ -163,7 +159,7 @@ p2 = "p2base"
 [params.pm2]
 pm21 = "pm21base"
 pm22 = "pm22base"
--- layouts/index.html --
+-- layouts/home.html --
 p1: {{ .Site.Params.p1 }}
 p2: {{ .Site.Params.p2 }}
 pm21: {{ .Site.Params.pm2.pm21 }}
@@ -173,13 +169,9 @@ pm31: {{ .Site.Params.pm3.pm31 }}
 
 
 `
-		b := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-				Environ:     []string{"HUGO_PARAMS_P2=p2env", "HUGO_PARAMS_PM2_PM21=pm21env", "HUGO_PARAMS_PM3_PM31=pm31env"},
-			},
-		).Build()
+		b := Test(t, files, TestOptWithConfig(func(c *IntegrationTestConfig) {
+			c.Environ = []string{"HUGO_PARAMS_P2=p2env", "HUGO_PARAMS_PM2_PM21=pm21env", "HUGO_PARAMS_PM3_PM31=pm31env"}
+		}))
 
 		b.AssertFileContent("public/index.html", "p1: p1base\np2: p2env\npm21: pm21env\npm22: pm22base\npm31: pm31env")
 	})
@@ -212,7 +204,7 @@ p2 = "p2en"
 sub1 = "sub1en"
 [languages.sv]
 title = "Svensk Title Theme"
--- layouts/index.html --
+-- layouts/home.html --
 title: {{ .Title }}|
 p1: {{ .Site.Params.p1 }}|
 p2: {{ .Site.Params.p2 }}|
@@ -244,7 +236,7 @@ weight = 2
 [languages.no]
 weight = 3
 
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 `
 
@@ -253,17 +245,12 @@ Home.
 		for i, v := range environ {
 			environ[i] = strings.ReplaceAll(v, " ", delim)
 		}
-		b := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-				Environ:     environ,
-				BuildCfg:    BuildCfg{SkipRender: true},
-			},
-		).Build()
+		b := Test(t, files, TestOptSkipRender(), TestOptWithConfig(func(c *IntegrationTestConfig) {
+			c.Environ = environ
+		}))
 
 		conf := b.H.Configs.Base
-		b.Assert(conf.DisableLanguages, qt.DeepEquals, []string{"sv", "no"})
+		b.Assert(conf.DisableLanguages, qt.DeepEquals, []string{"no", "sv"})
 		b.Assert(conf.DisableKinds, qt.DeepEquals, []string{"taxonomy", "term"})
 	}
 }
@@ -328,11 +315,11 @@ baseName = "o1main"
 
 [languages]
 [languages.en]
-languageName = "English"
+label = "English"
 [languages.en.params]
 pl1 = "p1-en-main"
 [languages.nb]
-languageName = "Norsk"
+label = "Norsk"
 [languages.nb.params]
 pl1 = "p1-nb-main"
 
@@ -381,7 +368,7 @@ baseName = "o2theme"
 
 [languages]
 [languages.en]
-languageName = "English2"
+label = "English2"
 [languages.en.params]
 pl1 = "p1-en-theme"
 pl2 = "p2-en-theme"
@@ -390,7 +377,7 @@ name   = "menu-lang-en-main"
 [[languages.en.menu.theme]]
 name   = "menu-lang-en-theme"
 [languages.nb]
-languageName = "Norsk2"
+label = "Norsk2"
 [languages.nb.params]
 pl1 = "p1-nb-theme"
 pl2 = "p2-nb-theme"
@@ -409,14 +396,12 @@ name = "menu-main-theme"
 name = "menu-theme"
 
 `
-
-	buildForConfig := func(t testing.TB, mainConfig, themeConfig string) *sitesBuilder {
-		b := newTestSitesBuilder(t)
-		b.WithConfigFile("toml", mainConfig).WithThemeConfigFile("toml", themeConfig)
-		return b.Build(BuildCfg{})
+	buildForConfig := func(t testing.TB, mainConfig, themeConfig string) *IntegrationTestBuilder {
+		files := "-- hugo.toml --\n" + mainConfig + "\n-- themes/test-theme/hugo.toml --\n" + themeConfig
+		return Test(t, files)
 	}
 
-	buildForStrategy := func(t testing.TB, s string) *sitesBuilder {
+	buildForStrategy := func(t testing.TB, s string) *IntegrationTestBuilder {
 		mainConfig := strings.ReplaceAll(mainConfigTemplate, "MERGE_PARAMS", s)
 		return buildForConfig(t, mainConfig, themeConfig)
 	}
@@ -424,15 +409,15 @@ name = "menu-theme"
 	c.Run("Merge default", func(c *qt.C) {
 		b := buildForStrategy(c, "")
 
-		got := b.Configs.Base
+		got := b.H.Configs.Base
 
-		b.Assert(got.Params, qt.DeepEquals, maps.Params{
-			"b": maps.Params{
+		b.Assert(got.Params, qt.DeepEquals, hmaps.Params{
+			"b": hmaps.Params{
 				"b1": "b1 main",
-				"c": maps.Params{
+				"c": hmaps.Params{
 					"bc1": "bc1 main",
 					"bc2": "bc2 theme",
-					"d":   maps.Params{"bcd1": string("bcd1 theme")},
+					"d":   hmaps.Params{"bcd1": string("bcd1 theme")},
 				},
 				"b2": "b2 theme",
 			},
@@ -446,14 +431,14 @@ name = "menu-theme"
 	c.Run("Merge shallow", func(c *qt.C) {
 		b := buildForStrategy(c, fmt.Sprintf("_merge=%q", "shallow"))
 
-		got := b.Configs.Base.Params
+		got := b.H.Configs.Base.Params
 
 		// Shallow merge, only add new keys to params.
-		b.Assert(got, qt.DeepEquals, maps.Params{
+		b.Assert(got, qt.DeepEquals, hmaps.Params{
 			"p1": "p1 main",
-			"b": maps.Params{
+			"b": hmaps.Params{
 				"b1": "b1 main",
-				"c": maps.Params{
+				"c": hmaps.Params{
 					"bc1": "bc1 main",
 				},
 			},
@@ -468,9 +453,9 @@ name = "menu-theme"
 			"[params]\np1 = \"p1 theme\"\n",
 		)
 
-		got := b.Configs.Base.Params
+		got := b.H.Configs.Base.Params
 
-		b.Assert(got, qt.DeepEquals, maps.Params{
+		b.Assert(got, qt.DeepEquals, hmaps.Params{
 			"p1": "p1 theme",
 		})
 	})
@@ -489,7 +474,7 @@ name = "menu-theme"
 				"baseURL=\"http://example.com\"\n"+fmt.Sprintf(smapConfigTempl, "monthly"),
 			)
 
-			got := b.Configs.Base
+			got := b.H.Configs.Base
 
 			if mergeStrategy == "none" {
 				b.Assert(got.Sitemap, qt.DeepEquals, config.SitemapConfig{ChangeFreq: "", Disable: false, Priority: -1, Filename: "sitemap.xml"})
@@ -505,101 +490,75 @@ name = "menu-theme"
 func TestLoadConfigFromThemeDir(t *testing.T) {
 	t.Parallel()
 
-	mainConfig := `
+	files := `
+-- hugo.toml --
 theme = "test-theme"
-
 [params]
 m1 = "mv1"
-`
-
-	themeConfig := `
+-- themes/test-theme/hugo.toml --
 [params]
 t1 = "tv1"
 t2 = "tv2"
-`
-
-	themeConfigDir := filepath.Join("themes", "test-theme", "config")
-	themeConfigDirDefault := filepath.Join(themeConfigDir, "_default")
-	themeConfigDirProduction := filepath.Join(themeConfigDir, "production")
-
-	projectConfigDir := "config"
-
-	b := newTestSitesBuilder(t)
-	b.WithConfigFile("toml", mainConfig).WithThemeConfigFile("toml", themeConfig)
-	b.Assert(b.Fs.Source.MkdirAll(themeConfigDirDefault, 0o777), qt.IsNil)
-	b.Assert(b.Fs.Source.MkdirAll(themeConfigDirProduction, 0o777), qt.IsNil)
-	b.Assert(b.Fs.Source.MkdirAll(projectConfigDir, 0o777), qt.IsNil)
-
-	b.WithSourceFile(filepath.Join(projectConfigDir, "config.toml"), `[params]
+-- config/_default/config.toml --
+[params]
 m2 = "mv2"
-`)
-	b.WithSourceFile(filepath.Join(themeConfigDirDefault, "config.toml"), `[params]
+-- themes/test-theme/config/_default/config.toml --
+[params]
 t2 = "tv2d"
 t3 = "tv3d"
-`)
-
-	b.WithSourceFile(filepath.Join(themeConfigDirProduction, "config.toml"), `[params]
+-- themes/test-theme/config/production/config.toml --
+[params]
 t3 = "tv3p"
-`)
+-- layouts/home.html --
+m1: {{ .Site.Params.m1 }}
+m2: {{ .Site.Params.m2 }}
+t1: {{ .Site.Params.t1 }}
+t2: {{ .Site.Params.t2 }}
+t3: {{ .Site.Params.t3 }}
+`
 
-	b.Build(BuildCfg{})
+	b := Test(t, files)
 
-	got := b.Configs.Base.Params
+	got := b.H.Configs.Base.Params
 
-	b.Assert(got, qt.DeepEquals, maps.Params{
-		"t3": "tv3p",
+	b.Assert(got, qt.DeepEquals, hmaps.Params{
 		"m1": "mv1",
+		"m2": "mv2",
 		"t1": "tv1",
 		"t2": "tv2d",
+		"t3": "tv3p",
 	})
 }
 
 func TestPrivacyConfig(t *testing.T) {
 	t.Parallel()
 
-	c := qt.New(t)
-
-	tomlConfig := `
-
+	files := `
+-- hugo.toml --
 someOtherValue = "foo"
-
-[privacy]
 [privacy.youtube]
 privacyEnhanced = true
+-- layouts/home.html --
+Privacy Enhanced: {{ .Site.Config.Privacy.YouTube.PrivacyEnhanced }}
 `
-
-	b := newTestSitesBuilder(t)
-	b.WithConfigFile("toml", tomlConfig)
-	b.Build(BuildCfg{SkipRender: true})
-
-	c.Assert(b.H.Sites[0].Config().Privacy.YouTube.PrivacyEnhanced, qt.Equals, true)
+	b := Test(t, files)
+	b.AssertFileContent("public/index.html", "Privacy Enhanced: true")
 }
 
 func TestLoadConfigModules(t *testing.T) {
 	t.Parallel()
 
-	c := qt.New(t)
-
-	// https://github.com/gohugoio/hugoThemes#themetoml
-
 	const (
-		// Before Hugo 0.56 each theme/component could have its own theme.toml
-		// with some settings, mostly used on the Hugo themes site.
-		// To preserve combability we read these files into the new "modules"
-		// section in config.toml.
 		o1t = `
 name = "Component o1"
 license = "MIT"
 min_version = 0.38
 `
-		// This is the component's config.toml, using the old theme syntax.
 		o1c = `
 theme = ["n2"]
 `
-
 		n1 = `
 title = "Component n1"
-
 [module]
 description = "Component n1 description"
 [module.hugoVersion]
@@ -610,86 +569,75 @@ extended = true
 path="o1"
 [[module.imports]]
 path="n3"
-
-
 `
-
 		n2 = `
 title = "Component n2"
 `
-
 		n3 = `
 title = "Component n3"
 `
-
 		n4 = `
 title = "Component n4"
 `
 	)
 
-	b := newTestSitesBuilder(t)
-
-	writeThemeFiles := func(name, configTOML, themeTOML string) {
-		b.WithSourceFile(filepath.Join("themes", name, "data", "module.toml"), fmt.Sprintf("name=%q", name))
-		if configTOML != "" {
-			b.WithSourceFile(filepath.Join("themes", name, "config.toml"), configTOML)
-		}
-		if themeTOML != "" {
-			b.WithSourceFile(filepath.Join("themes", name, "theme.toml"), themeTOML)
-		}
-	}
-
-	writeThemeFiles("n1", n1, "")
-	writeThemeFiles("n2", n2, "")
-	writeThemeFiles("n3", n3, "")
-	writeThemeFiles("n4", n4, "")
-	writeThemeFiles("o1", o1c, o1t)
-
-	b.WithConfigFile("toml", `
+	files := `
+-- hugo.toml --
 [module]
 [[module.imports]]
 path="n1"
 [[module.imports]]
 path="n4"
+-- themes/n1/hugo.toml --
+` + n1 + `
+-- themes/n2/hugo.toml --
+` + n2 + `
+-- themes/n3/hugo.toml --
+` + n3 + `
+-- themes/n4/hugo.toml --
+` + n4 + `
+-- themes/o1/hugo.toml --
+` + o1c + `
+-- themes/o1/theme.toml --
+` + o1t + `
+-- themes/n1/data/module.toml --
+name="n1"
+-- themes/n2/data/module.toml --
+name="n2"
+-- themes/n3/data/module.toml --
+name="n3"
+-- themes/n4/data/module.toml --
+name="n4"
+-- themes/o1/data/module.toml --
+name="o1"
+`
 
-`)
-
-	b.Build(BuildCfg{})
+	b := Test(t, files)
 
 	modulesClient := b.H.Configs.ModulesClient
 	var graphb bytes.Buffer
 	modulesClient.Graph(&graphb)
 
-	expected := `project n1
-n1 o1
-o1 n2
-n1 n3
-project n4
-`
+	expected := "project n1\nn1 o1\no1 n2\nn1 n3\nproject n4\n"
 
-	c.Assert(graphb.String(), qt.Equals, expected)
+	b.Assert(graphb.String(), qt.Equals, expected)
 }
 
 func TestInvalidDefaultMarkdownHandler(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup]
 defaultMarkdownHandler = 'blackfriday'
 -- content/_index.md --
 ## Foo
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 
 `
 
-	b, err := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	).BuildE()
+	b, err := TestE(t, files)
 
 	b.Assert(err, qt.IsNotNil)
 	b.Assert(err.Error(), qt.Contains, "Configured defaultMarkdownHandler \"blackfriday\" not found. Did you mean to use goldmark? Blackfriday was removed in Hugo v0.100.0.")
@@ -711,7 +659,7 @@ themeconfigdirparam = "themeconfigdirvalue"
 -- themes/mytheme/hugo.toml --
 [params]
 themeparam = "themevalue"
--- layouts/index.html --
+-- layouts/home.html --
 rootparam: {{ site.Params.rootparam }}
 rootconfigparam: {{ site.Params.rootconfigparam }}
 themeparam: {{ site.Params.themeparam }}
@@ -720,18 +668,12 @@ themeconfigdirparam: {{ site.Params.themeconfigdirparam }}
 `
 
 	for _, configName := range []string{"hugo.toml", "config.toml"} {
-		configName := configName
 		t.Run(configName, func(t *testing.T) {
 			t.Parallel()
 
 			files := strings.ReplaceAll(filesTemplate, "hugo.toml", configName)
 
-			b, err := NewIntegrationTestBuilder(
-				IntegrationTestConfig{
-					T:           t,
-					TxtarString: files,
-				},
-			).BuildE()
+			b, err := TestE(t, files)
 
 			b.Assert(err, qt.IsNil)
 			b.AssertFileContent("public/index.html",
@@ -746,6 +688,7 @@ themeconfigdirparam: {{ site.Params.themeconfigdirparam }}
 
 // Issue #11089
 func TestHugoConfigSliceOverrides(t *testing.T) {
+	htesting.SkipSlowTestUnlessCI(t)
 	t.Parallel()
 
 	filesTemplate := `
@@ -760,9 +703,9 @@ weigHt = WEIGHT_EN
 title = "Swedish"
 wEight =  WEIGHT_SV
 disableKinds = ["page"]
--- layouts/index.html --
+-- layouts/home.html --
 Home: {{ .Lang}}|{{ len site.RegularPages }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 -- content/p1.en.md --
 -- content/p2.en.md --
@@ -776,13 +719,9 @@ Single.
 		files = strings.ReplaceAll(files, "WEIGHT_SV", "2")
 
 		cfg := config.New()
-		b, err := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-				BaseCfg:     cfg,
-			},
-		).BuildE()
+		b, err := TestE(t, files, TestOptWithConfig(func(c *IntegrationTestConfig) {
+			c.BaseCfg = cfg
+		}))
 
 		b.Assert(err, qt.IsNil)
 		b.AssertFileContent("public/index.html", "Home: en|2|")
@@ -795,13 +734,9 @@ Single.
 
 		for range 20 {
 			cfg := config.New()
-			b, err := NewIntegrationTestBuilder(
-				IntegrationTestConfig{
-					T:           t,
-					TxtarString: files,
-					BaseCfg:     cfg,
-				},
-			).BuildE()
+			b, err := TestE(t, files, TestOptWithConfig(func(c *IntegrationTestConfig) {
+				c.BaseCfg = cfg
+			}))
 
 			b.Assert(err, qt.IsNil)
 			b.AssertFileContent("public/index.html", "Home: en|2|")
@@ -827,19 +762,14 @@ mediaType = 'text/html'
 [outputFormats.myformat]
 baseName = 'myindex'
 mediaType = 'text/html'
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 
 
 `
 
-	b, err := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	).BuildE()
+	b, err := TestE(t, files)
 
 	b.Assert(err, qt.IsNil)
 	b.AssertFileContent("public/myindex.html", "Home.")
@@ -862,19 +792,14 @@ myparam = "enParamValue"
 title = "Svensk Title"
 [languages.sv.params]
 myparam = "svParamValue"
--- layouts/index.html --
+-- layouts/home.html --
 MyParam: {{ site.Params.myparam }}
 ThisIsAParam: {{ site.Params.thisIsAParam }}
 
 
 `
 
-	b, err := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	).BuildE()
+	b, err := TestE(t, files)
 
 	b.Assert(err, qt.IsNil)
 	b.AssertFileContent("public/index.html", `
@@ -908,26 +833,20 @@ title: "My English Section"
 ---
 title: "My Swedish Section"
 ---
--- layouts/index.html --
+-- layouts/home.html --
 LanguageCode: {{ eq site.LanguageCode site.Language.LanguageCode }}|{{ site.Language.LanguageCode }}|
 {{ range $i, $e := (slice site .Site) }}
-{{ $i }}|AllPages: {{ len .AllPages }}|Sections: {{ if .Sections }}true{{ end }}|BuildDrafts: {{ .BuildDrafts }}|Param: {{ .Language.Params.myparam }}|Language string: {{ .Language }}|Languages: {{ .Languages }}
+{{ $i }}|Pages: {{ len .Pages }}|Sections: {{ if .Sections }}true{{ end }}|Param: {{ .Language.Params.myparam }}|Language string: {{ .Language }}|
 {{ end }}
 
 `
-	b := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			LogLevel:    logg.LevelWarn,
-		},
-	).Build()
+	b := Test(t, files, TestOptWarn())
 
-	{
-		b.Assert(b.H.Log.LoggCount(logg.LevelWarn), qt.Equals, 1)
-	}
+	b.Assert(b.H.Log.LoggCount(logg.LevelWarn), qt.Equals, 1)
+
 	b.AssertFileContent("public/index.html", `
-AllPages: 4|
+0|Pages: 2|
+1|Pages: 2|
 Sections: true|
 Param: enParamValue
 Param: enParamValue
@@ -950,7 +869,7 @@ params:
   mainSections:
 -- content/mysection/_index.md --
 -- content/mysection/mycontent.md --
--- layouts/index.html --
+-- layouts/home.html --
 mainSections: {{ site.Params.mainSections }}
 
 `
@@ -966,24 +885,20 @@ func TestConfigHugoWorkingDir(t *testing.T) {
 
 	files := `
 -- hugo.toml --
--- layouts/index.html --
+-- layouts/home.html --
 WorkingDir: {{ hugo.WorkingDir }}|
 
 `
-	b := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			WorkingDir:  "myworkingdir",
-		},
-	).Build()
+	b := Test(t, files, TestOptWithConfig(func(c *IntegrationTestConfig) {
+		c.WorkingDir = "myworkingdir"
+	}))
 
 	b.AssertFileContent("public/index.html", `
 WorkingDir: myworkingdir|
 `)
 }
 
-func TestConfigMergeLanguageDeepEmptyLefSide(t *testing.T) {
+func TestConfigMergeLanguageDeepEmptyLeftSide(t *testing.T) {
 	t.Parallel()
 
 	files := `
@@ -991,23 +906,23 @@ func TestConfigMergeLanguageDeepEmptyLefSide(t *testing.T) {
 [params]
 p1 = "p1base"
 [languages.en]
-languageCode = 'en-US'
-languageName = 'English'
+locale = 'en-US'
+label = 'English'
 weight = 1
 [languages.en.markup.goldmark.extensions.typographer]
 leftDoubleQuote = '&ldquo;'   # default &ldquo;
 rightDoubleQuote = '&rdquo;'  # default &rdquo;
 
 [languages.de]
-languageCode = 'de-DE'
-languageName = 'Deutsch'
+locale = 'de-DE'
+label = 'Deutsch'
 weight = 2
 [languages.de.params]
 p1 = "p1de"
 [languages.de.markup.goldmark.extensions.typographer]
 leftDoubleQuote = '&laquo;'   # default &ldquo;
 rightDoubleQuote = '&raquo;'  # default &rdquo;
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 p1: {{ site.Params.p1 }}|
 -- content/_index.en.md --
@@ -1038,17 +953,12 @@ func TestConfigLegacyValues(t *testing.T) {
 # taxonomyTerm was renamed to taxonomy in Hugo 0.60.0.
 disableKinds = ["taxonomyTerm"]
 
--- layouts/index.html --
+-- layouts/home.html --
 Home
 
 `
 
-	b, err := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	).BuildE()
+	b, err := TestE(t, files)
 
 	b.Assert(err, qt.IsNil)
 	b.AssertFileContent("public/index.html", `
@@ -1078,9 +988,9 @@ notAlternative = true
 ---
 outputs: ["html", "htaccess"]
 ---
--- layouts/index.html --
+-- layouts/home.html --
 HTML.
--- layouts/_default/list.htaccess --
+-- layouts/list.htaccess --
 HTACCESS.
 
 
@@ -1089,22 +999,6 @@ HTACCESS.
 	b := Test(t, files)
 
 	b.AssertFileContent("public/.htaccess", "HTACCESS")
-}
-
-func TestConfigLanguageCodeTopLevel(t *testing.T) {
-	t.Parallel()
-
-	files := `
--- hugo.toml --
-languageCode = "en-US"
--- layouts/index.html --
-LanguageCode: {{ .Site.LanguageCode }}|{{ site.Language.LanguageCode }}|
-
-
-`
-	b := Test(t, files)
-
-	b.AssertFileContent("public/index.html", "LanguageCode: en-US|en-US|")
 }
 
 // See #11159
@@ -1123,7 +1017,7 @@ path = "foo"
 [languages.sv.mediatypes."text/html"]
 suffixes = ["bar"]
 
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 
@@ -1151,7 +1045,7 @@ func TestConfigMiscPanics(t *testing.T) {
 		files := `
 -- hugo.yaml --
 params:
--- layouts/index.html --
+-- layouts/home.html --
 Foo: {{ site.Params.foo }}|
 
 
@@ -1175,20 +1069,15 @@ defaultContentLanguage = "en"
 	lang = "en"
 	languageName = "English"
 	weight = 1
--- layouts/index.html --
+-- layouts/home.html --
 Foo: {{ site.Params.foo }}|
 
 
 	`
-		b, err := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		).BuildE()
+		b, err := TestE(t, files)
 
 		b.Assert(err, qt.IsNotNil)
-		b.Assert(err.Error(), qt.Contains, "no languages")
+		b.Assert(err.Error(), qt.Contains, "invalid language configuration ")
 	})
 
 	// Issue 11044
@@ -1207,15 +1096,10 @@ weight = 1
 
 
 	`
-		b, err := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		).BuildE()
+		b, err := TestE(t, files)
 
 		b.Assert(err, qt.IsNotNil)
-		b.Assert(err.Error(), qt.Contains, "defaultContentLanguage does not match any language definition")
+		b.Assert(err.Error(), qt.Contains, `defaultContentLanguage "sv" not found in languages configuration`)
 	})
 }
 
@@ -1227,7 +1111,7 @@ func TestConfigModuleDefaultMountsInConfig(t *testing.T) {
 -- hugo.toml --
 baseURL = "https://example.org"
 contentDir = "mycontent"
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 
@@ -1235,7 +1119,9 @@ Home.
 	b := Test(t, files)
 
 	b.Assert(b.H.Configs.Base.Module.Mounts, qt.HasLen, 7)
-	b.Assert(b.H.Configs.LanguageConfigSlice[0].Module.Mounts, qt.HasLen, 7)
+	b.Assert(b.H.Configs.Base.Languages.Config.Sorted[0].Name, qt.Equals, "en")
+	firstLang := b.H.Configs.Base.Languages.Config.Sorted[0].Name
+	b.Assert(b.H.Configs.LanguageConfigMap[firstLang].Module.Mounts, qt.HasLen, 7)
 }
 
 func TestDefaultContentLanguageInSubdirOnlyOneLanguage(t *testing.T) {
@@ -1250,7 +1136,7 @@ defaultContentLanguageInSubdir = true
 disableKinds = ["taxonomy", "term", "page", "section"]
 -- content/foo/bar.txt --
 Foo.
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 `
 		b := Test(t, files)
@@ -1278,7 +1164,7 @@ title = "English Title"
 title = "Swedish Title"
 -- content/foo/bar.txt --
 Foo.
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 `
 		b := Test(t, files)
@@ -1306,7 +1192,7 @@ title = "English Title"
 title = "Swedish Title"
 -- content/foo/bar.txt --
 Foo.
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 `
 		b := Test(t, files)
@@ -1329,7 +1215,7 @@ title = "English Title"
 [languages.sv]
 title = "Swedish Title"
 disabled = true
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 
@@ -1351,7 +1237,7 @@ disableDefaultLanguageRedirect = true
 title = "English Title"
 [languages.sv]
 title = "Swedish Title"
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 
@@ -1370,14 +1256,9 @@ func TestLoadConfigYamlEnvVar(t *testing.T) {
 			env = defaultEnv
 		}
 
-		b := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-				Environ:     env,
-				BuildCfg:    BuildCfg{SkipRender: true},
-			},
-		).Build()
+		b := Test(t, files, TestOptSkipRender(), TestOptWithConfig(func(c *IntegrationTestConfig) {
+			c.Environ = env
+		}))
 
 		outputs := b.H.Configs.Base.Outputs
 		if env == nil {
@@ -1484,9 +1365,9 @@ category = 'categories'
 title: "P1"
 categories: ["c1"]
 ---
--- layouts/index.html --
+-- layouts/home.html --
 Home.
--- layouts/_default/list.html --
+-- layouts/list.html --
 List.
 
 
@@ -1507,7 +1388,7 @@ func TestKindsUnknown(t *testing.T) {
 disableKinds = ['foo', 'home']
 [outputs]
 foo = ['HTML', 'AMP', 'RSS']
--- layouts/_default/list.html --
+-- layouts/list.html --
 List.
 
 
@@ -1533,7 +1414,7 @@ func TestDeprecateTaxonomyTerm(t *testing.T) {
 disableKinds = ['taxonomyTerm']
 [outputs]
 taxonomyterm = ['HTML', 'AMP', 'RSS']
--- layouts/_default/list.html --
+-- layouts/list.html --
 List.
 
 
@@ -1556,17 +1437,533 @@ func TestDisableKindsIssue12144(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ["page"]
-defaultContentLanguage = "pt-br"
--- layouts/index.html --
+defaultContentLanguage = "pt"
+[languages]
+[languages.en]
+weight = 1
+title = "English"
+[languages.pt]
+weight = 2
+title = "Portuguese"
+-- layouts/home.html --
 Home.
--- content/custom/index.pt-br.md --
+-- content/custom/index.br.md --
 ---
 title: "P1 pt"
 ---
--- content/custom/index.en-us.md --
+-- content/custom/index.en.md --
 ---
 title: "P1 us"
 ---
 `
 	Test(t, files)
+}
+
+func TestConfigYAMLAnchorsMerge(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.yaml --
+definitions:
+  params: &params
+    p1: p1alias
+
+theme: "mytheme"
+defaultContentLanguage: en
+defaultContentLanguageInSubdir: true
+
+params:
+    <<: *params
+
+languages:
+  en:
+    weight: 1
+  no:
+    weight: 2
+    params:
+      <<: *params
+      p2: p2no
+  sv:
+    weight: 3
+    params: *params
+
+-- layouts/all.html --
+Params: {{ site.Params }}|
+-- themes/mytheme/hugo.yaml --
+definitions:
+  params: &params
+    p1: p1aliastheme
+    p2: p2aliastheme
+
+params: *params
+
+
+`
+	b := Test(t, files)
+
+	b.AssertFileContent("public/en/index.html", "Params: map[p1:p1alias p2:p2aliastheme]|")
+	b.AssertFileContent("public/no/index.html", "Params: map[p1:p1alias p2:p2no]|")
+	b.AssertFileContent("public/sv/index.html", "Params: map[p1:p1alias p2:p2aliastheme]|")
+}
+
+func TestConfigYAMLAnchorsCyclicReference(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.yaml --
+definitions:
+  params: &params
+    p1: p1alias
+
+params:
+    p3: *params
+
+languages:
+  en:
+    weight: 1
+  sv:
+    weight: 2
+    params: *params
+
+-- layouts/all.html --
+Params: {{ site.Params }}|
+
+`
+
+	for range 4 {
+		b := Test(t, files)
+		b.AssertFileContent("public/index.html", "Params: map[p3:map[p1:p1alias]]|")
+		b.AssertFileContent("public/sv/index.html", "Params: map[p1:p1alias p3:map[p1:p1alias]]|")
+
+	}
+}
+
+func TestConfigYAMLNilMapIssue14074(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- config/_default/taxonomies.yaml --
+# empty on purpose
+-- hugo.yaml --
+
+`
+
+	Test(t, files)
+}
+
+// Issue 14269
+// When the legacy API deprecations are promoted to errors: flip Test() to TestE() and assert an error.
+func TestLanguageDeprecated(t *testing.T) {
+	t.Parallel()
+
+	const defaultConfig = `
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+defaultContentLanguageInSubdir = true
+`
+
+	tests := []struct {
+		name   string
+		config string
+		layout string
+	}{
+		{
+			name:   "config key languageCode",
+			config: "languageCode = 'en-US'\n",
+			layout: "-- layouts/home.html --\nhome\n",
+		},
+		{
+			name:   "config key languages.en.languageCode",
+			config: "[languages.en]\nlanguageCode = 'en-US'\n",
+			layout: "-- layouts/home.html --\nhome\n",
+		},
+		{
+			name:   "config key languages.en.languageDirection",
+			config: "[languages.en]\nlanguageDirection = 'ltr'\n",
+			layout: "-- layouts/home.html --\nhome\n",
+		},
+		{
+			name:   "config key languages.en.languageName",
+			config: "[languages.en]\nlanguageName = 'English'\n",
+			layout: "-- layouts/home.html --\nhome\n",
+		},
+		{
+			name:   "template Site.LanguageCode",
+			config: "",
+			layout: "-- layouts/home.html --\n{{ .Site.LanguageCode }}\n",
+		},
+		{
+			name:   "template Language.LanguageCode",
+			config: "",
+			layout: "-- layouts/home.html --\n{{ .Site.Language.LanguageCode }}\n",
+		},
+		{
+			name:   "template Language.LanguageDirection",
+			config: "",
+			layout: "-- layouts/home.html --\n{{ .Site.Language.LanguageDirection }}\n",
+		},
+		{
+			name:   "template Language.LanguageName",
+			config: "",
+			layout: "-- layouts/home.html --\n{{ .Site.Language.LanguageName }}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			files := "-- hugo.toml --\n" + defaultConfig + tt.config + tt.layout
+			b := Test(t, files, TestOptInfo())
+			b.AssertLogMatches("deprecated")
+		})
+	}
+}
+
+// Issue 14269
+// When the legacy API deprecations are promoted to errors: no changes needed.
+func TestLanguageNewAPI(t *testing.T) {
+	t.Parallel()
+
+	const (
+		defaultConfig = `
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+defaultContentLanguageInSubdir = true
+`
+		layout = `
+-- layouts/home.html --
+{{ $l := .Site.Language -}}
+{{ printf "NA: %s|" $l.Name -}}
+{{ printf "LO: %s|" $l.Locale -}}
+{{ printf "DI: %s|" $l.Direction -}}
+{{ printf "LA: %s|" $l.Label -}}
+`
+	)
+
+	tests := []struct {
+		name   string
+		config string
+		want   map[string]string
+	}{
+		{
+			name:   "Default config",
+			config: "",
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en|DI: |LA: |",
+			},
+		},
+		{
+			name: "Multilingual per-lang new config keys",
+			config: `
+[languages.en]
+locale = 'en-US'
+direction = 'ltr'
+label = 'English'
+[languages.fr]
+locale = 'fr-FR'
+direction = 'ltr'
+label = 'French'
+`,
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en-US|DI: ltr|LA: English|",
+				"public/fr/index.html": "NA: fr|LO: fr-FR|DI: ltr|LA: French|",
+			},
+		},
+		{
+			name:   "Monolingual root locale",
+			config: "locale = 'en-US'\n",
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en-US|DI: |LA: |",
+			},
+		},
+		{
+			name: "Multilingual root locale",
+			config: `
+locale = 'en-US'
+[languages.en]
+[languages.fr]
+`,
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en-US|DI: |LA: |",
+				"public/fr/index.html": "NA: fr|LO: fr|DI: |LA: |",
+			},
+		},
+		{
+			name: "Multilingual per-lang locale overrides root locale",
+			config: `
+locale = 'en-NZ'
+[languages.en]
+locale = 'en-US'
+[languages.fr]
+locale = 'fr-FR'
+`,
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en-US|DI: |LA: |",
+				"public/fr/index.html": "NA: fr|LO: fr-FR|DI: |LA: |",
+			},
+		},
+		{
+			name: "Multilingual non-default defaultContentLanguage root locale",
+			config: `
+defaultContentLanguage = 'fr'
+locale = 'fr-FR'
+[languages.en]
+[languages.fr]
+`,
+			want: map[string]string{
+				"public/en/index.html": "NA: en|LO: en|DI: |LA: |",
+				"public/fr/index.html": "NA: fr|LO: fr-FR|DI: |LA: |",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			files := "-- hugo.toml --\n" + defaultConfig + tt.config + layout
+			b := Test(t, files)
+			for path, content := range tt.want {
+				b.AssertFileContent(path, content)
+			}
+		})
+	}
+}
+
+// Issue 14269
+// When the legacy API deprecations are promoted to errors: delete this function.
+func TestLanguageDeprecationMigration(t *testing.T) {
+	t.Parallel()
+
+	const (
+		defaultConfig = `
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+defaultContentLanguageInSubdir = true
+`
+		layout = `
+-- layouts/home.html --
+{{ $l := .Site.Language -}}
+{{ printf "LO: %s|" $l.Locale -}}
+{{ printf "DI: %s|" $l.Direction -}}
+{{ printf "LA: %s|" $l.Label -}}
+`
+	)
+
+	tests := []struct {
+		name           string
+		config         string
+		want           map[string]string
+		wantLogMatches []string
+	}{
+		{
+			name: "Monolingual root languageCode",
+			config: `
+languageCode = 'en-US'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`! config key languages.*\.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Monolingual locale wins over languageCode",
+			config: `
+locale = 'en-US'
+languageCode = 'en-CA'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`! config key languages.*\.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual root languageCode",
+			config: `
+languageCode = 'en-US'
+[languages.en]
+[languages.fr]
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: |LA: |",
+				"public/fr/index.html": "LO: fr|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`! config key languages.*\.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual per-lang languageCode overrides root languageCode",
+			config: `
+languageCode = 'en-NZ'
+[languages.en]
+languageCode = 'en-US'
+[languages.fr]
+languageCode = 'fr-FR'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: |LA: |",
+				"public/fr/index.html": "LO: fr-FR|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`config key languages.en.languageCode was deprecated`,
+				`config key languages.fr.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual per-lang locale overrides root languageCode",
+			config: `
+languageCode = 'en-NZ'
+[languages.en]
+locale = 'en-US'
+[languages.fr]
+locale = 'fr-FR'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: |LA: |",
+				"public/fr/index.html": "LO: fr-FR|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`! config key languages.*\.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual root locale overrides per-lang languageCode",
+			config: `
+locale = 'en-NZ'
+[languages.en]
+languageCode = 'en-US'
+[languages.fr]
+languageCode = 'fr-FR'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-NZ|DI: |LA: |",
+				"public/fr/index.html": "LO: fr-FR|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`! config key languageCode was deprecated`,
+				`config key languages.en.languageCode was deprecated`,
+				`config key languages.fr.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual non-default defaultContentLanguage root languageCode",
+			config: `
+defaultContentLanguage = 'fr'
+languageCode = 'fr-FR'
+[languages.en]
+[languages.fr]
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en|DI: |LA: |",
+				"public/fr/index.html": "LO: fr-FR|DI: |LA: |",
+			},
+			wantLogMatches: []string{
+				`config key languageCode was deprecated`,
+				`! config key languages.*\.languageCode was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual per-lang old config keys",
+			config: `
+[languages.en]
+languageCode = 'en-US'
+languageDirection = 'ltr'
+languageName = 'English'
+[languages.fr]
+languageCode = 'fr-FR'
+languageDirection = 'ltr'
+languageName = 'French'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: ltr|LA: English|",
+				"public/fr/index.html": "LO: fr-FR|DI: ltr|LA: French|",
+			},
+			wantLogMatches: []string{
+				`! config key languageCode was deprecated`,
+				`config key languages.en.languageCode was deprecated`,
+				`config key languages.fr.languageCode was deprecated`,
+				`config key languages.en.languageDirection was deprecated`,
+				`config key languages.fr.languageDirection was deprecated`,
+				`config key languages.en.languageName was deprecated`,
+				`config key languages.fr.languageName was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+				`! config key languages.*\.direction was deprecated`,
+				`! config key languages.*\.label was deprecated`,
+			},
+		},
+		{
+			name: "Multilingual per-lang new config keys override old",
+			config: `
+[languages.en]
+locale = 'en-US'
+direction = 'ltr'
+label = 'English'
+
+languageCode = 'en-US'
+languageDirection = 'foo'
+languageName = 'English New Zealand'
+[languages.fr]
+locale = 'fr-FR'
+direction = 'ltr'
+label = 'French'
+
+languageCode = 'fr-CA'
+languageDirection = 'bar'
+languageName = 'French Canadian'
+`,
+			want: map[string]string{
+				"public/en/index.html": "LO: en-US|DI: ltr|LA: English|",
+				"public/fr/index.html": "LO: fr-FR|DI: ltr|LA: French|",
+			},
+			wantLogMatches: []string{
+				`! config key languageCode was deprecated`,
+				`config key languages.en.languageCode was deprecated`,
+				`config key languages.fr.languageCode was deprecated`,
+				`config key languages.en.languageDirection was deprecated`,
+				`config key languages.fr.languageDirection was deprecated`,
+				`config key languages.en.languageName was deprecated`,
+				`config key languages.fr.languageName was deprecated`,
+				`! config key locale was deprecated`,
+				`! config key languages.*\.locale was deprecated`,
+				`! config key languages.*\.direction was deprecated`,
+				`! config key languages.*\.label was deprecated`,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			files := "-- hugo.toml --\n" + defaultConfig + "\n" + tt.config + "\n" + layout
+
+			b := Test(t, files, TestOptInfo())
+			for path, content := range tt.want {
+				b.AssertFileContent(path, content)
+			}
+			for _, pattern := range tt.wantLogMatches {
+				b.AssertLogMatches(pattern)
+			}
+		})
+	}
 }

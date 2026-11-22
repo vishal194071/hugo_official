@@ -7,8 +7,7 @@ params:
   functions_and_methods:
     aliases: [lower]
     returnType: string
-    signatures: [strings.ToLower INPUT]
-aliases: [/functions/lower]
+    signatures: [strings.ToLower STRING]
 ---
 
 ```go-html-template

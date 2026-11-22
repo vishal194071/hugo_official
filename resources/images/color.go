@@ -16,13 +16,12 @@ package images
 import (
 	"encoding/hex"
 	"fmt"
-	"hash/fnv"
 	"image/color"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gohugoio/hugo/common/hstrings"
-	"slices"
 )
 
 type colorGoProvider interface {
@@ -65,16 +64,17 @@ func (c Color) String() string {
 // For hashstructure. This struct is used in template func options
 // that needs to be able to hash a Color.
 // For internal use only.
-func (c Color) Hash() (uint64, error) {
-	h := fnv.New64a()
-	h.Write([]byte(c.hex))
-	return h.Sum64(), nil
+func (c Color) Key() string {
+	return c.hex
 }
 
 func (c *Color) init() error {
-	c.hex = ColorGoToHexString(c.color)
-	r, g, b, _ := c.color.RGBA()
-	c.luminance = 0.2126*c.toSRGB(uint8(r)) + 0.7152*c.toSRGB(uint8(g)) + 0.0722*c.toSRGB(uint8(b))
+	// Normalize to the canonical non-premultiplied form so that equal colors
+	// compare equal whether they came from a hex string or from image pixels.
+	nrgba := color.NRGBAModel.Convert(c.color).(color.NRGBA)
+	c.color = nrgba
+	c.hex = ColorGoToHexString(nrgba)
+	c.luminance = 0.2126*c.toSRGB(nrgba.R) + 0.7152*c.toSRGB(nrgba.G) + 0.0722*c.toSRGB(nrgba.B)
 	return nil
 }
 
@@ -91,10 +91,13 @@ func (c Color) toSRGB(i uint8) float64 {
 // Note that it does no additional checks, so callers must make sure
 // that the palette is valid for the relevant format.
 func AddColorToPalette(c color.Color, p color.Palette) color.Palette {
-	var found bool
-	if slices.Contains(p, c) {
-		found = true
-	}
+	// Compare color values rather than interface values, so that e.g. a
+	// color.NRGBA is found even if the palette holds it as a color.RGBA.
+	cr, cg, cb, ca := c.RGBA()
+	found := slices.ContainsFunc(p, func(v color.Color) bool {
+		vr, vg, vb, va := v.RGBA()
+		return cr == vr && cg == vg && cb == vb && ca == va
+	})
 
 	if !found {
 		p = append(color.Palette{c}, p...)
@@ -111,12 +114,13 @@ func ReplaceColorInPalette(c color.Color, p color.Palette) {
 
 // ColorGoToHexString converts a color.Color to a hex string.
 func ColorGoToHexString(c color.Color) string {
-	r, g, b, a := c.RGBA()
-	rgba := color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)}
-	if rgba.A == 0xff {
-		return fmt.Sprintf("#%.2x%.2x%.2x", rgba.R, rgba.G, rgba.B)
+	// Hex notation is not alpha-premultiplied, so convert via NRGBA to
+	// un-premultiply the color components of any transparent color.
+	nrgba := color.NRGBAModel.Convert(c).(color.NRGBA)
+	if nrgba.A == 0xff {
+		return fmt.Sprintf("#%.2x%.2x%.2x", nrgba.R, nrgba.G, nrgba.B)
 	}
-	return fmt.Sprintf("#%.2x%.2x%.2x%.2x", rgba.R, rgba.G, rgba.B, rgba.A)
+	return fmt.Sprintf("#%.2x%.2x%.2x%.2x", nrgba.R, nrgba.G, nrgba.B, nrgba.A)
 }
 
 // ColorGoToColor converts a color.Color to a Color.
@@ -145,7 +149,9 @@ func HexStringsToColors(s ...string) []Color {
 	return colors
 }
 
-func toColorGo(v any) (color.Color, bool, error) {
+// ToColorGo converts v, a Color or a hex color string, to a color.Color.
+// The second return value is false if v is not of a supported type.
+func ToColorGo(v any) (color.Color, bool, error) {
 	switch vv := v.(type) {
 	case colorGoProvider:
 		return vv.ColorGo(), true, nil
@@ -172,11 +178,11 @@ func hexStringToColorGo(s string) (color.Color, error) {
 	s = strings.ToLower(s)
 
 	if len(s) == 3 || len(s) == 4 {
-		var v string
+		var v strings.Builder
 		for _, r := range s {
-			v += string(r) + string(r)
+			v.WriteString(string(r) + string(r))
 		}
-		s = v
+		s = v.String()
 	}
 
 	// Standard colors.
@@ -198,5 +204,8 @@ func hexStringToColorGo(s string) (color.Color, error) {
 		return nil, err
 	}
 
-	return color.RGBA{b[0], b[1], b[2], b[3]}, nil
+	// Hex notation is not alpha-premultiplied, so this must be a color.NRGBA;
+	// as a color.RGBA any transparent color would be invalid (component > alpha)
+	// and corrupted when drawn onto an alpha-premultiplied image. See issue 12536.
+	return color.NRGBA{b[0], b[1], b[2], b[3]}, nil
 }

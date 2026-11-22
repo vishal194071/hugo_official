@@ -17,90 +17,93 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/loggers"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 
 	qt "github.com/frankban/quicktest"
 )
 
 func TestPageMatcher(t *testing.T) {
 	c := qt.New(t)
-	developmentTestSite := testSite{h: hugo.NewInfo(testConfig{environment: "development"}, nil)}
-	productionTestSite := testSite{h: hugo.NewInfo(testConfig{environment: "production"}, nil)}
+
+	opts := HugoInfoOptions{
+		Conf: testConfig{environment: "development"},
+	}
+	developmentTestSite := &testSite{h: NewHugoInfo(opts)}
+
+	opts = HugoInfoOptions{
+		Conf: testConfig{environment: "production"},
+	}
+	productionTestSite := &testSite{h: NewHugoInfo(opts)}
+
+	dec := cascadeConfigDecoder{}
 
 	p1, p2, p3 := &testPage{path: "/p1", kind: "section", lang: "en", site: developmentTestSite},
 		&testPage{path: "p2", kind: "page", lang: "no", site: productionTestSite},
-		&testPage{path: "p3", kind: "page", lang: "en"}
+		&testPage{path: "p3", kind: "page", lang: "en", site: developmentTestSite}
 
 	c.Run("Matches", func(c *qt.C) {
-		m := PageMatcher{Kind: "section"}
+		matches := func(m PageMatcher, p Page) bool {
+			c.Assert(m.compileGlobs(), qt.IsNil)
+			return m.Matches(p)
+		}
 
-		c.Assert(m.Matches(p1), qt.Equals, true)
-		c.Assert(m.Matches(p2), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Kind: "section"}, p1), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Kind: "section"}, p2), qt.Equals, false)
 
-		m = PageMatcher{Kind: "page"}
-		c.Assert(m.Matches(p1), qt.Equals, false)
-		c.Assert(m.Matches(p2), qt.Equals, true)
-		c.Assert(m.Matches(p3), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Kind: "page"}, p1), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Kind: "page"}, p2), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Kind: "page"}, p3), qt.Equals, true)
 
-		m = PageMatcher{Kind: "page", Path: "/p2"}
-		c.Assert(m.Matches(p1), qt.Equals, false)
-		c.Assert(m.Matches(p2), qt.Equals, true)
-		c.Assert(m.Matches(p3), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Kind: "page", Path: "/p2"}, p1), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Kind: "page", Path: "/p2"}, p2), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Kind: "page", Path: "/p2"}, p3), qt.Equals, false)
 
-		m = PageMatcher{Path: "/p*"}
-		c.Assert(m.Matches(p1), qt.Equals, true)
-		c.Assert(m.Matches(p2), qt.Equals, true)
-		c.Assert(m.Matches(p3), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Path: "/p*"}, p1), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Path: "/p*"}, p2), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Path: "/p*"}, p3), qt.Equals, true)
 
-		m = PageMatcher{Lang: "en"}
-		c.Assert(m.Matches(p1), qt.Equals, true)
-		c.Assert(m.Matches(p2), qt.Equals, false)
-		c.Assert(m.Matches(p3), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Environment: "development"}, p1), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Environment: "development"}, p2), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Environment: "development"}, p3), qt.Equals, true)
 
-		m = PageMatcher{Environment: "development"}
-		c.Assert(m.Matches(p1), qt.Equals, true)
-		c.Assert(m.Matches(p2), qt.Equals, false)
-		c.Assert(m.Matches(p3), qt.Equals, false)
-
-		m = PageMatcher{Environment: "production"}
-		c.Assert(m.Matches(p1), qt.Equals, false)
-		c.Assert(m.Matches(p2), qt.Equals, true)
-		c.Assert(m.Matches(p3), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Environment: "production"}, p1), qt.Equals, false)
+		c.Assert(matches(PageMatcher{Environment: "production"}, p2), qt.Equals, true)
+		c.Assert(matches(PageMatcher{Environment: "production"}, p3), qt.Equals, false)
 	})
 
 	c.Run("Decode", func(c *qt.C) {
 		var v PageMatcher
-		c.Assert(decodePageMatcher(map[string]any{"kind": "foo"}, &v), qt.Not(qt.IsNil))
-		c.Assert(decodePageMatcher(map[string]any{"kind": "{foo,bar}"}, &v), qt.Not(qt.IsNil))
-		c.Assert(decodePageMatcher(map[string]any{"kind": "taxonomy"}, &v), qt.IsNil)
-		c.Assert(decodePageMatcher(map[string]any{"kind": "{taxonomy,foo}"}, &v), qt.IsNil)
-		c.Assert(decodePageMatcher(map[string]any{"kind": "{taxonomy,term}"}, &v), qt.IsNil)
-		c.Assert(decodePageMatcher(map[string]any{"kind": "*"}, &v), qt.IsNil)
-		c.Assert(decodePageMatcher(map[string]any{"kind": "home", "path": filepath.FromSlash("/a/b/**")}, &v), qt.IsNil)
-		c.Assert(v, qt.Equals, PageMatcher{Kind: "home", Path: "/a/b/**"})
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "foo"}, &v), qt.Not(qt.IsNil))
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "{foo,bar}"}, &v), qt.Not(qt.IsNil))
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "taxonomy"}, &v), qt.IsNil)
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "{taxonomy,foo}"}, &v), qt.IsNil)
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "{taxonomy,term}"}, &v), qt.IsNil)
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "*"}, &v), qt.IsNil)
+		c.Assert(dec.decodePageMatcher(map[string]any{"kind": "home", "path": filepath.FromSlash("/a/b/**")}, &v), qt.IsNil)
+		c.Assert(v, qt.DeepEquals, PageMatcher{Kind: "home", Path: "/a/b/**"})
 	})
 
 	c.Run("mapToPageMatcherParamsConfig", func(c *qt.C) {
 		fn := func(m map[string]any) PageMatcherParamsConfig {
-			v, err := mapToPageMatcherParamsConfig(m)
+			v, err := dec.mapToPageMatcherParamsConfig(m)
 			c.Assert(err, qt.IsNil)
 			return v
 		}
 		c.Assert(fn(map[string]any{"_target": map[string]any{"kind": "page"}, "foo": "bar"}), qt.DeepEquals, PageMatcherParamsConfig{
-			Params: maps.Params{},
-			Fields: maps.Params{
+			Params: hmaps.Params{},
+			Fields: hmaps.Params{
 				"foo": "bar",
 			},
 			Target: PageMatcher{Path: "", Kind: "page", Lang: "", Environment: ""},
 		})
 
 		c.Assert(fn(map[string]any{"target": map[string]any{"kind": "page"}, "params": map[string]any{"foo": "bar"}}), qt.DeepEquals, PageMatcherParamsConfig{
-			Params: maps.Params{
+			Params: hmaps.Params{
 				"foo": "bar",
 			},
-			Fields: maps.Params{},
+			Fields: hmaps.Params{},
 			Target: PageMatcher{Path: "", Kind: "page", Lang: "", Environment: ""},
 		})
 	})
@@ -129,24 +132,78 @@ func TestDecodeCascadeConfig(t *testing.T) {
 		},
 	}
 
-	got, err := DecodeCascadeConfig(loggers.NewDefault(), true, in)
-
+	got, err := DecodeCascadeConfig(in)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.IsNotNil)
-	c.Assert(got.Config.Keys(), qt.DeepEquals, []PageMatcher{{Kind: "page", Environment: "production"}, {Kind: "page"}})
-
-	c.Assert(got.SourceStructure, qt.DeepEquals, []PageMatcherParamsConfig{
-		{
-			Params: maps.Params{"a": string("av")},
-			Fields: maps.Params{},
-			Target: PageMatcher{Kind: "page", Environment: "production"},
+	c.Assert(got.InitConfig(loggers.NewDefault(), nil, nil), qt.IsNil)
+	c.Assert(got.c[0].Config.Cascades, qt.HasLen, 2)
+	first := got.c[0].Config.Cascades[0]
+	c.Assert(first, qt.DeepEquals, PageMatcherParamsConfig{
+		Params: hmaps.Params{
+			"a": "av",
 		},
-		{Params: maps.Params{"b": string("bv")}, Fields: maps.Params{}, Target: PageMatcher{Kind: "page"}},
+		Fields: hmaps.Params{},
+		Target: PageMatcher{
+			Kind:        "page",
+			Sites:       sitesmatrix.Sites{},
+			Environment: "production",
+		},
 	})
 
-	got, err = DecodeCascadeConfig(loggers.NewDefault(), true, nil)
+	c.Assert(got.c[0].SourceStructure, qt.DeepEquals, []PageMatcherParamsConfig{
+		{
+			Params: hmaps.Params{"a": string("av")},
+			Fields: hmaps.Params{},
+			Target: PageMatcher{Kind: "page", Environment: "production"},
+		},
+		{Params: hmaps.Params{"b": string("bv")}, Fields: hmaps.Params{}, Target: PageMatcher{Kind: "page"}},
+	})
+
+	got, err = DecodeCascadeConfig(nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.InitConfig(loggers.NewDefault(), nil, nil), qt.IsNil)
+	c.Assert(got.Len(), qt.Equals, 0)
+}
+
+func TestDecodeCascadeConfigWithSitesMatrix(t *testing.T) {
+	c := qt.New(t)
+
+	in := []map[string]any{
+		{
+			"params": map[string]any{
+				"a": "av",
+			},
+			"sites": map[string]any{
+				"matrix": map[string]any{
+					"roles": "pro",
+				},
+			},
+			"target": map[string]any{
+				"kind":        "page",
+				"Environment": "production",
+				"sites": map[string]any{
+					"matrix": map[string]any{
+						"languages": []string{"en", "{no,sv}"},
+						"versions":  "v1**",
+					},
+				},
+			},
+		},
+	}
+
+	dims := sitesmatrix.NewTestingDimensions([]string{"en", "no", "sv"}, []string{"v1", "v2"}, []string{"free", "pro"})
+
+	got, err := DecodeCascadeConfig(in)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got, qt.IsNotNil)
+	c.Assert(got.InitConfig(loggers.NewDefault(), nil, dims), qt.IsNil)
+	v := got.c[0].Config.Cascades[0]
+	c.Assert(v.Target.Kind, qt.Equals, "page")
+	c.Assert(v.Target.Environment, qt.Equals, "production")
+
+	matrix := v.Target.SitesMatrixCompiled
+	c.Assert(matrix.HasVector(sitesmatrix.Vector{0, 0, 0}), qt.IsTrue)  // en, v1, free
+	c.Assert(matrix.HasVector(sitesmatrix.Vector{0, 1, 0}), qt.IsFalse) // en, v2, free
 }
 
 type testConfig struct {

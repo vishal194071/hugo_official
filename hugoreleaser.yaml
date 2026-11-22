@@ -2,24 +2,31 @@ project: hugo
 
 # Common definitions.
 definitions:
+  archive_type_macos: &archive_type_macos
+    extra_files: []
+    type:
+      format: _plugin
+      extension: .pkg
+    plugin:
+      id: macospkgremote
+      type: gorun
+      command: github.com/gohugoio/hugoreleaser-archive-plugins/macospkgremote@93cfa1388b241e71f7896e65b641d9f78ce7618a
+    custom_settings:
+      package_identifier: io.gohugo.hugo
+      package_version:
+        ${HUGORELEASER_TAG}
+        # Needed by Wazero (currently only used when transform.ToMath is used)
+        # Note that we pass this map to s3 which takes metadata as a map of strings.
+      package_entitlements: "com.apple.security.cs.allow-jit,com.apple.security.cs.allow-unsigned-executable-memory"
+      bucket: s3fptest
+      queue: https://sqs.eu-north-1.amazonaws.com/656975317043/s3fptest_client
+      access_key_id: ${S3RPC_CLIENT_ACCESS_KEY_ID}
+      secret_access_key: ${S3RPC_CLIENT_SECRET_ACCESS_KEY}
   archive_type_zip: &archive_type_zip
     type:
       format: zip
       extension: .zip
-  env_extended_linux: &env_extended_linux
-    - CGO_ENABLED=1
-    - CC=aarch64-linux-gnu-gcc
-    - CXX=aarch64-linux-gnu-g++
-  env_extended_windows: &env_extended_windows
-    - CGO_ENABLED=1
-    - CC=x86_64-w64-mingw32-gcc
-    - CXX=x86_64-w64-mingw32-g++
-  env_extended_darwin: &env_extended_darwin
-    - CGO_ENABLED=1
-    - CC=o64-clang
-    - CXX=o64-clang++
-  name_template_extended_withdeploy: &name_template_extended_withdeploy "{{ .Project }}_extended_withdeploy_{{ .Tag | trimPrefix `v` }}_{{ .Goos }}-{{ .Goarch }}"
-  name_template_extended: &name_template_extended "{{ .Project }}_extended_{{ .Tag | trimPrefix `v` }}_{{ .Goos }}-{{ .Goarch }}"
+  name_template_withdeploy: &name_template_withdeploy "{{ .Project }}_withdeploy_{{ .Tag | trimPrefix `v` }}_{{ .Goos }}-{{ .Goarch }}"
   archive_deb: &archive_deb
     binary_dir: /usr/local/bin
     extra_files: []
@@ -36,8 +43,19 @@ definitions:
       maintainer: Bjørn Erik Pedersen <bjorn.erik.pedersen@gmail.com>
       description: A fast and flexible Static Site Generator written in Go.
       license: Apache-2.0
-archive_alias_replacements:
-  linux-amd64.tar.gz: Linux-64bit.tar.gz
+# The extended builds were removed in v0.170.0.
+# To avoid breaking CI setups etc. using the old archive names, we publish copies of the most downloaded archives under the old names.
+archive_aliases:
+  "hugo_{{ .Tag | trimPrefix `v` }}_linux-amd64.tar.gz":
+    - "hugo_{{ .Tag | trimPrefix `v` }}_Linux-64bit.tar.gz"
+    - "hugo_extended_{{ .Tag | trimPrefix `v` }}_linux-amd64.tar.gz"
+    - "hugo_extended_{{ .Tag | trimPrefix `v` }}_Linux-64bit.tar.gz"
+  "hugo_{{ .Tag | trimPrefix `v` }}_linux-amd64.deb":
+    - "hugo_extended_{{ .Tag | trimPrefix `v` }}_linux-amd64.deb"
+  "hugo_{{ .Tag | trimPrefix `v` }}_linux-arm64.tar.gz":
+    - "hugo_extended_{{ .Tag | trimPrefix `v` }}_linux-arm64.tar.gz"
+  "hugo_{{ .Tag | trimPrefix `v` }}_windows-amd64.zip":
+    - "hugo_extended_{{ .Tag | trimPrefix `v` }}_windows-amd64.zip"
 go_settings:
   go_proxy: https://proxy.golang.org
   go_exe: go
@@ -94,9 +112,6 @@ release_settings:
 builds:
   - path: container1/unix/regular
     os:
-      - goos: darwin
-        archs:
-          - goarch: universal
       - goos: linux
         archs:
           - goarch: amd64
@@ -121,68 +136,34 @@ builds:
       - goos: solaris
         archs:
           - goarch: amd64
-  - path: container1/unix/extended
+  - path: container1/unix/withdeploy
     build_settings:
       flags:
         - -buildmode
         - exe
         - -tags
-        - extended
-      env:
-        - CGO_ENABLED=1
+        - withdeploy
     os:
-      - goos: darwin
-        build_settings:
-          env: *env_extended_darwin
-        archs:
-          - goarch: universal
       - goos: linux
         archs:
           - goarch: amd64
-  - path: container1/unix/extended-withdeploy
-    build_settings:
-      flags:
-        - -buildmode
-        - exe
-        - -tags
-        - extended,withdeploy
-      env:
-        - CGO_ENABLED=1
+          - goarch: arm64
+  - path: container1/macos/regular
     os:
       - goos: darwin
-        build_settings:
-          env: *env_extended_darwin
         archs:
           - goarch: universal
-      - goos: linux
-        archs:
-          - goarch: amd64
-  - path: container2/linux/extended
+  - path: container1/macos/withdeploy
     build_settings:
       flags:
         - -buildmode
         - exe
         - -tags
-        - extended
+        - withdeploy
     os:
-      - goos: linux
-        build_settings:
-          env: *env_extended_linux
+      - goos: darwin
         archs:
-          - goarch: arm64
-  - path: container2/linux/extended-withdeploy
-    build_settings:
-      flags:
-        - -buildmode
-        - exe
-        - -tags
-        - extended,withdeploy
-    os:
-      - goos: linux
-        build_settings:
-          env: *env_extended_linux
-        archs:
-          - goarch: arm64
+          - goarch: universal
   - path: container1/windows/regular
     os:
       - goos: windows
@@ -191,30 +172,13 @@ builds:
         archs:
           - goarch: amd64
           - goarch: arm64
-  - path: container1/windows/extended
+  - path: container1/windows/withdeploy
     build_settings:
       flags:
         - -buildmode
         - exe
         - -tags
-        - extended
-      env: *env_extended_windows
-      ldflags: -s -w -X github.com/gohugoio/hugo/common/hugo.vendorInfo=gohugoio -extldflags '-static'
-    os:
-      - goos: windows
-        build_settings:
-          binary: hugo.exe
-        archs:
-          - goarch: amd64
-  - path: container1/windows/extended-withdeploy
-    build_settings:
-      flags:
-        - -buildmode
-        - exe
-        - -tags
-        - extended,withdeploy
-      env: *env_extended_windows
-      ldflags: -s -w -X github.com/gohugoio/hugo/common/hugo.vendorInfo=gohugoio -extldflags '-static'
+        - withdeploy
     os:
       - goos: windows
         build_settings:
@@ -225,46 +189,32 @@ archives:
   - paths:
       - builds/container1/unix/regular/**
   - paths:
-      - builds/container1/unix/extended/**
+      - builds/container1/unix/withdeploy/**
     archive_settings:
-      name_template: *name_template_extended
+      name_template: *name_template_withdeploy
   - paths:
-      - builds/container1/unix/extended-withdeploy/**
-    archive_settings:
-      name_template: *name_template_extended_withdeploy
+      - builds/**/macos/regular/**
+    archive_settings: *archive_type_macos
   - paths:
-      - builds/container2/*/extended/**
+      - builds/**/macos/withdeploy/**
     archive_settings:
-      name_template: *name_template_extended
-  - paths:
-      - builds/container2/*/extended-withdeploy/**
-    archive_settings:
-      name_template: *name_template_extended_withdeploy
+      name_template: *name_template_withdeploy
+      <<: *archive_type_macos
   - paths:
       - builds/**/windows/regular/**
     archive_settings: *archive_type_zip
   - paths:
-      - builds/**/windows/extended/**
+      - builds/**/windows/withdeploy/**
     archive_settings:
-      name_template: *name_template_extended
-      <<: *archive_type_zip
-  - paths:
-      - builds/**/windows/extended-withdeploy/**
-    archive_settings:
-      name_template: *name_template_extended_withdeploy
+      name_template: *name_template_withdeploy
       <<: *archive_type_zip
   - paths:
       - builds/**/regular/linux/{arm64,amd64}
     archive_settings: *archive_deb
   - paths:
-      - builds/**/extended/linux/{arm64,amd64}
+      - builds/**/withdeploy/linux/{arm64,amd64}
     archive_settings:
-      name_template: *name_template_extended
-      <<: *archive_deb
-  - paths:
-      - builds/**/extended-withdeploy/linux/{arm64,amd64}
-    archive_settings:
-      name_template: *name_template_extended_withdeploy
+      name_template: *name_template_withdeploy
       <<: *archive_deb
 releases:
   - paths:

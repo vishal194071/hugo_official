@@ -4,23 +4,22 @@ description: Hugo provides built-in sitemap templates.
 categories: []
 keywords: []
 weight: 130
-aliases: [/layout/sitemap/,/templates/sitemap-template/]
 ---
 
 ## Overview
 
-Hugo's embedded sitemap templates conform to v0.9 of the [sitemap protocol].
+Hugo's embedded sitemap templates conform to v0.9 of the [sitemap protocol][].
 
-With a monolingual project, Hugo generates a sitemap.xml file in the root of the [`publishDir`] using the [embedded sitemap template].
+With a monolingual project, Hugo generates a sitemap.xml file in the root of the `public` directory using the [embedded sitemap template][].
 
 With a multilingual project, Hugo generates:
 
-- A sitemap.xml file in the root of each site (language) using the [embedded sitemap template]
-- A sitemap.xml file in the root of the [`publishDir`] using the [embedded sitemapindex template]
+- A sitemap.xml file in the root of each site (language) using the [embedded sitemap template][]
+- A sitemap.xml file in the root of the `public` directory using the [embedded sitemapindex template][]
 
 ## Configuration
 
-See [configure sitemap](/configuration/sitemap).
+See [configure sitemap][].
 
 ## Override default values
 
@@ -42,13 +41,13 @@ To override the built-in sitemapindex.xml template, create a new `layouts/sitema
 
 ## Disable sitemap generation
 
-You may disable sitemap generation in your site configuration:
+You may disable sitemap generation in your project configuration:
 
 {{< code-toggle file=hugo >}}
 disableKinds = ['sitemap']
 {{</ code-toggle >}}
 
-[`publishDir`]: /configuration/all/#publishdir
-[embedded sitemap template]: {{% eturl sitemap %}}
-[embedded sitemapindex template]: {{% eturl sitemapindex %}}
+[configure sitemap]: /configuration/sitemap/
+[embedded sitemap template]: <{{% eturl sitemap %}}>
+[embedded sitemapindex template]: <{{% eturl sitemapindex %}}>
 [sitemap protocol]: https://www.sitemaps.org/protocol.html

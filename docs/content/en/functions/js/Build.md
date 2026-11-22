@@ -1,6 +1,6 @@
 ---
 title: js.Build
-description: Bundle, transpile, tree shake, and minify JavaScript resources.
+description: Returns a resource created by bundling, transpiling, tree shaking, and minifying the given JavaScript resource.
 categories: []
 keywords: []
 params:
@@ -10,7 +10,10 @@ params:
     signatures: ['js.Build [OPTIONS] RESOURCE']
 ---
 
-The `js.Build` function uses the [evanw/esbuild] package to:
+> [!NOTE]
+> The `js.Build` function is backed by the [`evanw/esbuild`][] package, providing a mature, high-performance foundation for bundling, transformation, and minification.
+
+Use the `js.Build` function to:
 
 - Bundle
 - Transpile (TypeScript and JSX)
@@ -21,9 +24,8 @@ The `js.Build` function uses the [evanw/esbuild] package to:
 ```go-html-template
 {{ with resources.Get "js/main.js" }}
   {{$opts := dict
-    "minify" (not hugo.IsDevelopment)
-    "sourceMap" (cond hugo.IsDevelopment "external" "")
-    "targetPath" "js/main.js"
+    "minify" (cond hugo.IsDevelopment false true)
+    "sourceMap" (cond hugo.IsDevelopment "linked" "none")
   }}
   {{ with . | js.Build $opts }}
     {{ if hugo.IsDevelopment }}
@@ -39,17 +41,23 @@ The `js.Build` function uses the [evanw/esbuild] package to:
 
 ## Options
 
-targetPath
-: (`string`) If not set, the source path will be used as the base target path. Note that the target path's extension may change if the target MIME type is different, e.g. when the source is TypeScript.
+The `js.Build` function accepts an options map.
 
-format
+`format`
 : (`string`) The output format. One of: `iife`, `cjs`, `esm`. Default is `iife`, a self-executing function, suitable for inclusion as a `<script>` tag.
+
+`importContext`
+: {{< new-in 0.165.0 />}}
+: (`resource.ResourceGetter`) A [resource getter](g) to use when resolving import statements. Hugo searches this context first, matching by the path as written in the statement, before falling back to the file system.
+
+`targetPath`
+: (`string`) If not set, the source path will be used as the base target path. Note that the target path's extension may change if the target MIME type is different, e.g. when the source is TypeScript.
 
 {{% include "/_common/functions/js/options.md" %}}
 
-## Import JS code from the assets directory
+## Import from the assets directory
 
-`js.Build` has full support for the virtual union file system in [Hugo Modules](/hugo-modules/). You can see some simple examples in this [test project](https://github.com/gohugoio/hugoTestProjectJSModImports), but in short this means that you can do this:
+`js.Build` has full support for Hugo's [unified file system](g). You can see some simple examples in this [test project][], but in short this means that you can do this:
 
 ```js
 import { hello } from 'my/module';
@@ -75,9 +83,7 @@ For other files (e.g. `JSON`, `CSS`) you need to use the relative path including
 import * as data from 'my/module/data.json';
 ```
 
-Any imports in a file outside `assets` or that does not resolve to a component inside `assets` will be resolved by [ESBuild](https://esbuild.github.io/) with the **project directory** as the resolve directory (used as the starting point when looking for `node_modules` etc.). Also see [hugo mod npm pack](/commands/hugo_mod_npm_pack/). If you have any imported npm dependencies in your project, you need to make sure to run `npm install` before you run `hugo`.
-
-Also note the new `params` option that can be passed from template to your JS files, e.g.:
+Also note the [`params`](#params) option that can be passed from template to your JS files, e.g.:
 
 ```go-html-template
 {{ $js := resources.Get "js/main.js" | js.Build (dict "params" (dict "api" "https://example.org/api")) }}
@@ -89,18 +95,46 @@ And then in your JS file:
 import * as params from '@params';
 ```
 
-Hugo will, by default, generate a `assets/jsconfig.json` file that maps the imports. This is useful for navigation/intellisense help inside code editors, but if you don't need/want it, you can [turn it off](/configuration/build/).
+Hugo will, by default, generate a `assets/jsconfig.json` file that maps the imports. This is useful for navigation/intellisense help inside code editors, but if you don't need/want it, you can [turn it off][].
 
 ## Node.js dependencies
 
-Use the `js.Build` function to include Node.js dependencies.
+Use the `js.Build` function to include Node dependencies. Run `npm install` to install your dependencies before you build your site.
 
-Any imports in a file outside `assets` or that does not resolve to a component inside `assets` will be resolved by [esbuild](https://esbuild.github.io/) with the **project directory** as the resolve directory (used as the starting point when looking for `node_modules` etc.). Also see [hugo mod npm pack](/commands/hugo_mod_npm_pack/). If you have any imported npm dependencies in your project, you need to make sure to run `npm install` before you run `hugo`.
+If an import does not resolve to a file in the `assets` directory, or if the importing file is outside the `assets` directory, [`esbuild`][] resolves the import. It looks for packages in `node_modules` directories, starting from the project directory, but only within the allowed paths. See [file system access](#file-system-access).
 
-The start directory for resolving npm packages (aka. packages that live inside a `node_modules` directory) is always the main project directory.
+> [!NOTE]
+> If you're developing a theme/component that is supposed to be imported and depends on dependencies inside `package.json`, we recommend reading about [`hugo mod npm pack`][], a tool to consolidate all the npm dependencies in a project.
 
-> [!note]
-> If you're developing a theme/component that is supposed to be imported and depends on dependencies inside `package.json`, we recommend reading about [hugo mod npm pack](/commands/hugo_mod_npm_pack/), a tool to consolidate all the npm dependencies in a project.
+## File system access
+
+{{% include "/_common/functions/node-permissions/imports.md" %}}
+
+## Artifacts
+
+{{< new-in 0.165.0 />}}
+
+In addition to the main output, Hugo may publish other files as part of the build:
+
+- Files copied to the output directory by esbuild's `file` loader, such as fonts and images
+- A source map, when the `sourceMap` option is `external` or `linked`
+
+The `Data` method on the returned resource exposes these files as a slice of artifacts, where each artifact provides `MediaType`, `Permalink`, and `RelPermalink` methods.
+
+For example, to render preload links for image files published by the build:
+
+```go-html-template
+{{ with resources.Get "js/main.js" }}
+  {{ with . | js.Build }}
+    {{ range .Data.Artifacts }}
+      {{ if eq .MediaType.MainType "image" }}
+        <link rel="preload" href="{{ .RelPermalink }}" as="image" type="{{ .MediaType.Type }}">
+      {{ end }}
+    {{ end }}
+    <script src="{{ .RelPermalink }}"></script>
+  {{ end }}
+{{ end }}
+```
 
 ## Examples
 
@@ -119,4 +153,8 @@ Or with options:
 <script src="{{ $built.RelPermalink }}" defer></script>
 ```
 
-[evanw/esbuild]: https://github.com/evanw/esbuild
+[`esbuild`]: https://esbuild.github.io/
+[`evanw/esbuild`]: https://github.com/evanw/esbuild
+[`hugo mod npm pack`]: /commands/hugo_mod_npm_pack/
+[test project]: https://github.com/gohugoio/hugoTestProjectJSModImports
+[turn it off]: /configuration/build/#nojsconfiginassets

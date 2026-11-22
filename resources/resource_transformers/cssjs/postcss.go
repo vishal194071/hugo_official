@@ -87,6 +87,10 @@ type InlineImports struct {
 	// Note that the inline importer does not process url location or imports with media queries,
 	// so those will be left as-is even without enabling this option.
 	SkipInlineImportsNotFound bool
+
+	// User provided import context. If set, imports are looked up here first,
+	// by the path as written in the @import statement, then in the assets filesystem.
+	ImportContext any
 }
 
 // Some of the options from https://github.com/postcss/postcss-cli
@@ -157,17 +161,23 @@ func (t *postcssTransformation) Transform(ctx *resources.ResourceTransformationC
 	if options.Config != "" {
 		configFile = options.Config
 	} else {
-		configFile = "postcss.config.js"
+		for _, name := range []string{"postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"} {
+			configFile = t.rs.BaseFs.ResolveJSConfigFile(name)
+			if configFile != "" {
+				break
+			}
+		}
 	}
 
-	configFile = filepath.Clean(configFile)
-
-	// We need an absolute filename to the config file.
-	if !filepath.IsAbs(configFile) {
-		configFile = t.rs.BaseFs.ResolveJSConfigFile(configFile)
-		if configFile == "" && options.Config != "" {
-			// Only fail if the user specified config file is not found.
-			return fmt.Errorf("postcss config %q not found", options.Config)
+	if configFile != "" {
+		configFile = filepath.Clean(configFile)
+		// We need an absolute filename to the config file.
+		if !filepath.IsAbs(configFile) {
+			configFile = t.rs.BaseFs.ResolveJSConfigFile(configFile)
+			if configFile == "" && options.Config != "" {
+				// Only fail if the user specified config file is not found.
+				return fmt.Errorf("postcss config %q not found", options.Config)
+			}
 		}
 	}
 
@@ -187,14 +197,11 @@ func (t *postcssTransformation) Transform(ctx *resources.ResourceTransformationC
 	stderr := io.MultiWriter(infow, &errBuf)
 	cmdArgs = append(cmdArgs, hexec.WithStderr(stderr))
 	cmdArgs = append(cmdArgs, hexec.WithStdout(ctx.To))
+	cmdArgs = append(cmdArgs, hexec.WithDir(t.rs.Cfg.BaseConfig().WorkingDir))
 	cmdArgs = append(cmdArgs, hexec.WithEnviron(hugo.GetExecEnviron(t.rs.Cfg.BaseConfig().WorkingDir, t.rs.Cfg, t.rs.BaseFs.Assets.Fs)))
 
 	cmd, err := ex.Npx(binaryName, cmdArgs...)
 	if err != nil {
-		if hexec.IsNotFound(err) {
-			// This may be on a CI server etc. Will fall back to pre-built assets.
-			return &herrors.FeatureNotAvailableError{Cause: err}
-		}
 		return err
 	}
 
@@ -206,6 +213,7 @@ func (t *postcssTransformation) Transform(ctx *resources.ResourceTransformationC
 	src := ctx.From
 
 	imp := newImportResolver(
+		ctx.Ctx,
 		ctx.From,
 		ctx.InPath,
 		options.InlineImports,
@@ -227,10 +235,8 @@ func (t *postcssTransformation) Transform(ctx *resources.ResourceTransformationC
 
 	err = cmd.Run()
 	if err != nil {
-		if hexec.IsNotFound(err) {
-			return &herrors.FeatureNotAvailableError{
-				Cause: err,
-			}
+		if herrors.IsExecNotFoundError(err) {
+			return err
 		}
 		return imp.toFileError(errBuf.String())
 	}

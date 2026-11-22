@@ -18,13 +18,15 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/config/testconfig"
+	"github.com/gohugoio/hugo/htesting"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -195,8 +197,6 @@ func TestDictionary(t *testing.T) {
 		{[]any{5, "b"}, false},
 		{[]any{"a", "b", "c"}, false},
 	} {
-		i := i
-		test := test
 		c.Run(fmt.Sprint(i), func(c *qt.C) {
 			c.Parallel()
 			errMsg := qt.Commentf("[%d] %v", i, test.values)
@@ -536,7 +536,7 @@ func TestSeq(t *testing.T) {
 		{[]any{1, -1, 2}, false},
 		{[]any{2, 1, 1}, false},
 		{[]any{2, 1, 1, 1}, false},
-		{[]any{2001}, false},
+		{[]any{-1000001}, false},
 		{[]any{}, false},
 		{[]any{0, -1000000}, false},
 		{[]any{tstNoStringer{}}, false},
@@ -669,6 +669,15 @@ func TestUnion(t *testing.T) {
 		{[]string{"1", "2"}, []int{3}, []string{}, false},
 		{[]int{1, 2}, []string{"1", "2"}, []int{}, false},
 
+		// numeric []A ∪ []B unify. See issue 15323.
+		{[]int{1}, []float64{1.0}, []int{1}, false},
+		{[]int{1, 2}, []float64{2.0, 3.0}, []int{1, 2, 3}, false},
+		{[]float64{1.0}, []int{1, 2}, []float64{1.0, 2.0}, false},
+		{[]int{}, []float64{1.0}, []int{1}, false},
+		// Values not representable in l1's element type are skipped.
+		{[]int8{1}, []int64{300}, []int8{1}, false},
+		{[]int{1}, []float64{1.5}, []int{1}, false},
+
 		// []T ∪ []T
 		{[]string{"a", "b", "c", "c"}, []string{"a", "b", "b"}, []string{"a", "b", "c"}, false},
 		{[]string{"a", "b"}, []string{"a", "b", "c"}, []string{"a", "b", "c"}, false},
@@ -698,7 +707,7 @@ func TestUnion(t *testing.T) {
 		{[]any{"a", "b", "c", "c"}, []string{"a", "b", "d"}, []any{"a", "b", "c", "d"}, false},
 		{[]any{}, []string{}, []any{}, false},
 		{[]any{1, 2}, []int{2, 3}, []any{1, 2, 3}, false},
-		{[]any{1, 2}, []int8{2, 3}, []any{1, 2, 3}, false}, // 28
+		{[]any{1, 2}, []int8{2, 3}, []any{1, 2, int8(3)}, false},
 		{[]any{uint(1), uint(2)}, []uint{2, 3}, []any{uint(1), uint(2), uint(3)}, false},
 		{[]any{1.1, 2.2}, []float64{2.2, 3.3}, []any{1.1, 2.2, 3.3}, false},
 
@@ -788,6 +797,87 @@ func TestUniq(t *testing.T) {
 	}
 }
 
+func TestD(t *testing.T) {
+	t.Parallel()
+	ns := newNs()
+
+	const (
+		errNumberOfRequestedValuesRegexPattern = `.*the number of requested values.*`
+		errMaximumRequestedValueRegexPattern   = `.*the maximum requested value.*`
+		errSeedValueRegexPattern               = `.*the seed value.*`
+	)
+
+	tests := []struct {
+		name        string
+		seed        any
+		n           any
+		hi          any
+		wantResult  []int
+		wantErrText string
+	}{
+		// n <= hi
+		{"seed_eq_42", 42, 5, 100, []int{24, 34, 66, 82, 96}, ""},
+		{"seed_eq_31", 31, 5, 100, []int{12, 37, 38, 69, 98}, ""},
+		{"n_lt_hi", 42, 9, 10, []int{0, 1, 2, 3, 4, 6, 7, 8, 9}, ""},
+		{"n_eq_hi", 42, 10, 10, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, ""},
+		{"hi_eq_max_size", 42, 5, maxSeqSize, []int{240121, 347230, 669726, 829701, 957989}, ""},
+		// n > hi
+		{"n_gt_hi", 42, 11, 10, []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, ""},
+		// zero values
+		{"seed_eq_0", 0, 5, 100, []int{0, 2, 29, 50, 72}, ""},
+		{"n_eq_0", 42, 0, 100, []int{}, ""},
+		{"hi_eq_0", 42, 5, 0, []int{}, ""},
+		// errors: values < 0
+		{"seed_lt_0", -42, 5, 100, nil, errSeedValueRegexPattern},
+		{"n_lt_0", 42, -1, 100, nil, errNumberOfRequestedValuesRegexPattern},
+		{"hi_lt_0", 42, 5, -100, nil, errMaximumRequestedValueRegexPattern},
+		// errors: values that can't be cast to int
+		{"seed_invalid_type", "foo", 5, 100, nil, errSeedValueRegexPattern},
+		{"n_invalid_type", 42, "bar", 100, nil, errNumberOfRequestedValuesRegexPattern},
+		{"hi_invalid_type", 42, 5, "baz", nil, errMaximumRequestedValueRegexPattern},
+		// errors: values that exceed maxSeqSize
+		{"n_gt_max_size", 42, maxSeqSize + 1, 10, nil, errNumberOfRequestedValuesRegexPattern},
+		{"hi_gt_max_size", 42, 5, maxSeqSize + 1, nil, errMaximumRequestedValueRegexPattern},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := qt.New(t)
+
+			got, err := ns.D(tt.seed, tt.n, tt.hi)
+
+			if tt.wantErrText != "" {
+				c.Assert(err, qt.ErrorMatches, tt.wantErrText, qt.Commentf("n=%d, hi=%d", tt.n, tt.hi))
+				c.Assert(got, qt.IsNil, qt.Commentf("Expected nil result on error"))
+				return
+			}
+
+			c.Assert(err, qt.IsNil, qt.Commentf("Did not expect an error, but got: %v", err))
+			c.Assert(got, qt.DeepEquals, tt.wantResult)
+		})
+	}
+}
+
+func BenchmarkD2(b *testing.B) {
+	ns := newNs()
+	runBenchmark := func(seed, n, max any) {
+		name := fmt.Sprintf("n=%d,max=%d", n, max)
+		b.Run(name, func(b *testing.B) {
+			for b.Loop() {
+				_, _ = ns.D(seed, n, max)
+			}
+		})
+	}
+
+	runBenchmark(32, 5, 100)
+	runBenchmark(32, 50, 1000)
+	runBenchmark(32, 10, 10000)
+	runBenchmark(32, 500, 10000)
+	runBenchmark(32, 10, 500000)
+	runBenchmark(32, 5000, 500000)
+}
+
 func (x *TstX) TstRp() string {
 	return "r" + x.A
 }
@@ -833,10 +923,10 @@ type TstX struct {
 }
 
 type TstParams struct {
-	params maps.Params
+	params hmaps.Params
 }
 
-func (x TstParams) Params() maps.Params {
+func (x TstParams) Params() hmaps.Params {
 	return x.params
 }
 
@@ -869,4 +959,73 @@ func ToTstXIs(slice any) []TstXI {
 
 func newNs() *Namespace {
 	return New(testconfig.GetTestDeps(nil, nil))
+}
+
+// Numbers are compared by exact value across int, uint and float types in
+// all set operations.
+// See issue 15358.
+func TestSetOperationsExactNumbers(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+	ns := newNs()
+
+	a := int64(1<<53 + 1)
+	b := int64(1 << 53)
+	bf := float64(b)
+	u := uint64(math.MaxUint64)
+	im := int64(math.MaxInt64)
+	um := uint64(math.MaxInt64)
+
+	type testCase struct {
+		fn     func() (any, error)
+		expect any
+	}
+
+	tests := []testCase{
+		{func() (any, error) { return ns.In([]any{a}, b) }, false},
+		{func() (any, error) { return ns.In([]any{a}, bf) }, false},
+		{func() (any, error) { return ns.In([]any{b}, bf) }, true},
+		{func() (any, error) { return ns.In([]any{um}, im) }, true},
+		{func() (any, error) { return ns.In([]any{u}, float64(u)) }, false},
+		{func() (any, error) { return ns.In([]any{-1}, u) }, false},
+
+		{func() (any, error) { return ns.Intersect([]any{a}, []any{a}) }, []any{a}},
+		{func() (any, error) { return ns.Intersect([]any{a}, []any{b}) }, []any{}},
+		{func() (any, error) { return ns.Intersect([]any{a, b}, []any{b, a}) }, []any{a, b}},
+		{func() (any, error) { return ns.Intersect([]any{b}, []any{bf}) }, []any{b}},
+		{func() (any, error) { return ns.Intersect([]uint64{u}, []uint64{u}) }, []uint64{u}},
+		{func() (any, error) { return ns.Intersect([]any{um}, []any{im}) }, []any{um}},
+		{func() (any, error) { return ns.Intersect([]any{-1}, []any{u}) }, []any{}},
+
+		{func() (any, error) { return ns.Union([]any{a}, []any{b}) }, []any{a, b}},
+		{func() (any, error) { return ns.Union([]any{b}, []any{bf}) }, []any{b}},
+		{func() (any, error) { return ns.Union([]any{um}, []any{im}) }, []any{um}},
+		{func() (any, error) { return ns.Union([]int64{a}, []float64{bf}) }, []int64{a, b}},
+		{func() (any, error) { return ns.Union([]any{}, []any{1, 1.0}) }, []any{1}},
+
+		{func() (any, error) { return ns.Uniq([]any{um, im, float64(1 << 63), uint64(1 << 63)}) }, []any{um, float64(1 << 63)}},
+
+		{func() (any, error) { return ns.SymDiff([]any{a}, []any{b}) }, []any{b, a}},
+		{func() (any, error) { return ns.SymDiff([]any{um}, []any{im}) }, []any{}},
+
+		{func() (any, error) { return ns.Complement([]any{bf}, []any{a, b}) }, []any{a}},
+		{func() (any, error) { return ns.Complement([]any{im}, []any{um}) }, []any{}},
+	}
+
+	if !htesting.Is32Bit() {
+		tests = append(tests, []testCase{
+			{func() (any, error) { return ns.In([]int64{a}, int(a)) }, true},
+			{func() (any, error) { return ns.Intersect([]int64{a}, []int{int(a)}) }, []int64{a}},
+			{func() (any, error) { return ns.Union([]any{a}, []any{int(a)}) }, []any{a}},
+			{func() (any, error) { return ns.Uniq([]any{a, b, a, int(a), bf}) }, []any{a, b}},
+			{func() (any, error) { return ns.SymDiff([]any{a}, []any{int(a)}) }, []any{}},
+			{func() (any, error) { return ns.Complement([]any{int(a)}, []any{a, b}) }, []any{b}},
+		}...)
+	}
+
+	for i, test := range tests {
+		result, err := test.fn()
+		c.Assert(err, qt.IsNil, qt.Commentf("[%d]", i))
+		c.Assert(result, qt.DeepEquals, test.expect, qt.Commentf("[%d]", i))
+	}
 }

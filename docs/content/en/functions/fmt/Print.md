@@ -1,6 +1,6 @@
 ---
 title: fmt.Print
-description: Prints the default representation of the given arguments using the standard `fmt.Print` function.
+description: Returns the default string representation of the given arguments.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [print]
     returnType: string
     signatures: [fmt.Print INPUT]
-aliases: [/functions/print]
 ---
 
 ```go-html-template

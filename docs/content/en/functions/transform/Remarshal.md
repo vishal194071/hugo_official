@@ -1,6 +1,6 @@
 ---
 title: transform.Remarshal
-description: Marshals a string of serialized data, or a map, into a string of serialized data in the specified format.
+description: Returns a string of serialized data in the specified format, marshaled from a string of serialized data or a map.
 categories: []
 keywords: []
 params:
@@ -8,23 +8,29 @@ params:
     aliases: []
     returnType: string
     signatures: [transform.Remarshal FORMAT INPUT]
-aliases: [/functions/transform.remarshal]
 ---
+
+## Usage
 
 The format must be one of `json`, `toml`, `yaml`, or `xml`. If the input is a string of serialized data, it must be valid JSON, TOML, YAML, or XML.
 
-> [!note]
+> [!NOTE]
 > This function is primarily a helper for Hugo's documentation, used to convert configuration and front matter examples to JSON, TOML, and YAML.
 >
 > This is not a general purpose converter, and may change without notice if required for Hugo's documentation site.
 
-Example 1
-: Convert a string of TOML to JSON.
+## Examples
+
+The following examples convert data from one serialized format to another.
+
+### TOML to JSON
+
+This example converts a string of TOML to JSON:
 
 ```go-html-template
 {{ $s := `
   baseURL = 'https://example.org/'
-  languageCode = 'en-US'
+  locale = 'en-US'
   title = 'ABC Widgets'
 `}}
 <pre>{{ transform.Remarshal "json" $s }}</pre>
@@ -35,7 +41,7 @@ Resulting HTML:
 ```html
 <pre>{
    &#34;baseURL&#34;: &#34;https://example.org/&#34;,
-   &#34;languageCode&#34;: &#34;en-US&#34;,
+   &#34;locale&#34;: &#34;en-US&#34;,
    &#34;title&#34;: &#34;ABC Widgets&#34;
 }
 </pre>
@@ -46,13 +52,14 @@ Rendered in browser:
 ```text
 {
    "baseURL": "https://example.org/",
-   "languageCode": "en-US",
+   "locale": "en-US",
    "title": "ABC Widgets"
 }
 ```
 
-Example 2
-: Convert a map to YAML.
+### Map to YAML
+
+This example converts a map to YAML:
 
 ```go-html-template
 {{ $m := dict

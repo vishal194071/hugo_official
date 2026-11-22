@@ -77,8 +77,8 @@ func (n *HugoContext) Dump(source []byte, level int) {
 }
 
 func (n *HugoContext) parseAttrs(attrBytes []byte) {
-	keyPairs := bytes.Split(attrBytes, []byte(" "))
-	for _, keyPair := range keyPairs {
+	keyPairs := bytes.SplitSeq(attrBytes, []byte(" "))
+	for keyPair := range keyPairs {
 		kv := bytes.Split(keyPair, []byte("="))
 		if len(kv) != 2 {
 			continue
@@ -102,7 +102,25 @@ var (
 	hugoCtxEndDelim     = []byte("}}")
 	hugoCtxClosingDelim = []byte("/}}")
 	hugoCtxRe           = regexp.MustCompile(`{{__hugo_ctx( pid=\d+)?/?}}\n?`)
+	hugoCtxIndentedRe   = regexp.MustCompile(`(?m)^[ \t]+({{__hugo_ctx[^\n]*}})`)
 )
+
+// DedentMarkers removes leading whitespace from Hugo context marker lines
+// to prevent them from being treated as indented code blocks by Goldmark.
+func DedentMarkers(b []byte) []byte {
+	if !bytes.Contains(b, hugoCtxPrefix) {
+		return b
+	}
+	return hugoCtxIndentedRe.ReplaceAll(b, []byte("$1"))
+}
+
+// Strip strips any Hugo context markers from b.
+func Strip(b []byte) []byte {
+	if !bytes.Contains(b, hugoCtxPrefix) {
+		return b
+	}
+	return hugoCtxRe.ReplaceAll(b, nil)
+}
 
 var _ parser.InlineParser = (*hugoContextParser)(nil)
 
@@ -308,9 +326,7 @@ func (a *hugoContextExtension) Extend(m goldmark.Markdown) {
 		renderer.WithNodeRenderers(
 			util.Prioritized(&hugoContextRenderer{
 				logger: a.logger,
-				Config: html.Config{
-					Writer: html.DefaultWriter,
-				},
+				Writer: html.DefaultWriter,
 			}, 50),
 		),
 	)

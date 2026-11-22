@@ -2,9 +2,7 @@
 _comment: Do not remove front matter.
 ---
 
-Format a `time.Time` value based on [Go's reference time]:
-
-[Go's reference time]: https://pkg.go.dev/time#pkg-constants
+Format a `time.Time` value based on [Go's reference time][]:
 
 ```text
 Mon Jan 2 15:04:05 MST 2006
@@ -36,7 +34,7 @@ Time zone offsets|`"Z0700" "Z07:00" "Z07" "Z070000" "Z07:00:00"`
 {{ $t = time.AsTime $t }}
 {{ $t = $t.Format "Jan 02, 2006 3:04 PM Z07:00" }}
 
-{{ $t }} → Jan 27, 2023 11:44 PM -08:00 
+{{ $t }} → Jan 27, 2023 11:44 PM -08:00
 ```
 
 Strings such as `PST` and `CET` are not time zones. They are time zone _abbreviations_.
@@ -44,3 +42,5 @@ Strings such as `PST` and `CET` are not time zones. They are time zone _abbrevia
 Strings such as `-07:00` and `+01:00` are not time zones. They are time zone _offsets_.
 
 A time zone is a geographic area with the same local time. For example, the time zone abbreviated by `PST` and `PDT` (depending on Daylight Savings Time) is `America/Los_Angeles`.
+
+[Go's reference time]: https://pkg.go.dev/time#pkg-constants

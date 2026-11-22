@@ -14,13 +14,12 @@
 package helpers
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -49,7 +48,16 @@ func TCPListen() (net.Listener, *net.TCPAddr, error) {
 	return nil, nil, fmt.Errorf("unable to obtain a valid tcp port: %v", addr)
 }
 
-// FirstUpper returns a string with the first character as upper case.
+// FirstLower returns s with the first Unicode letter mapped to lowercase.
+func FirstLower(s string) string {
+	if s == "" {
+		return ""
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToLower(r)) + s[n:]
+}
+
+// FirstUpper returns s with the first Unicode letter mapped to uppercase.
 func FirstUpper(s string) string {
 	if s == "" {
 		return ""
@@ -58,82 +66,7 @@ func FirstUpper(s string) string {
 	return string(unicode.ToUpper(r)) + s[n:]
 }
 
-// UniqueStrings returns a new slice with any duplicates removed.
-func UniqueStrings(s []string) []string {
-	unique := make([]string, 0, len(s))
-	for i, val := range s {
-		var seen bool
-		for j := range i {
-			if s[j] == val {
-				seen = true
-				break
-			}
-		}
-		if !seen {
-			unique = append(unique, val)
-		}
-	}
-	return unique
-}
-
-// UniqueStringsReuse returns a slice with any duplicates removed.
-// It will modify the input slice.
-func UniqueStringsReuse(s []string) []string {
-	result := s[:0]
-	for i, val := range s {
-		var seen bool
-
-		for j := range i {
-			if s[j] == val {
-				seen = true
-				break
-			}
-		}
-
-		if !seen {
-			result = append(result, val)
-		}
-	}
-	return result
-}
-
-// UniqueStringsSorted returns a sorted slice with any duplicates removed.
-// It will modify the input slice.
-func UniqueStringsSorted(s []string) []string {
-	if len(s) == 0 {
-		return nil
-	}
-	ss := sort.StringSlice(s)
-	ss.Sort()
-	i := 0
-	for j := 1; j < len(s); j++ {
-		if !ss.Less(i, j) {
-			continue
-		}
-		i++
-		s[i] = s[j]
-	}
-
-	return s[:i+1]
-}
-
-// ReaderToBytes takes an io.Reader argument, reads from it
-// and returns bytes.
-func ReaderToBytes(lines io.Reader) []byte {
-	if lines == nil {
-		return []byte{}
-	}
-	b := bp.GetBuffer()
-	defer bp.PutBuffer(b)
-
-	b.ReadFrom(lines)
-
-	bc := make([]byte, b.Len())
-	copy(bc, b.Bytes())
-	return bc
-}
-
-// ReaderToString is the same as ReaderToBytes, but returns a string.
+// ReaderToString reads from an io.Reader and returns its content as a string.
 func ReaderToString(lines io.Reader) string {
 	if lines == nil {
 		return ""
@@ -142,41 +75,6 @@ func ReaderToString(lines io.Reader) string {
 	defer bp.PutBuffer(b)
 	b.ReadFrom(lines)
 	return b.String()
-}
-
-// ReaderContains reports whether subslice is within r.
-func ReaderContains(r io.Reader, subslice []byte) bool {
-	if r == nil || len(subslice) == 0 {
-		return false
-	}
-
-	bufflen := len(subslice) * 4
-	halflen := bufflen / 2
-	buff := make([]byte, bufflen)
-	var err error
-	var n, i int
-
-	for {
-		i++
-		if i == 1 {
-			n, err = io.ReadAtLeast(r, buff[:halflen], halflen)
-		} else {
-			if i != 2 {
-				// shift left to catch overlapping matches
-				copy(buff[:], buff[halflen:])
-			}
-			n, err = io.ReadAtLeast(r, buff[halflen:], halflen)
-		}
-
-		if n > 0 && bytes.Contains(buff, subslice) {
-			return true
-		}
-
-		if err != nil {
-			break
-		}
-	}
-	return false
 }
 
 // GetTitleFunc returns a func that can be used to transform a string to
@@ -228,17 +126,7 @@ func compareStringSlices(a, b []string) bool {
 		return false
 	}
 
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
+	return slices.Equal(a, b)
 }
 
 // SliceToLower goes through the source slice and lowers all values.

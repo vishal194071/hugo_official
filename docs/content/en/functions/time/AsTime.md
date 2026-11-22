@@ -8,12 +8,11 @@ params:
     aliases: [time]
     returnType: time.Time
     signatures: ['time.AsTime INPUT [TIMEZONE]']
-aliases: [/functions/time]
 ---
 
 ## Overview
 
-Hugo provides [functions] and [methods] to format, localize, parse, compare, and manipulate date/time values. Before you can do any of these with string representations of date/time values, you must first convert them to [`time.Time`] values using the `time.AsTime` function.
+Hugo provides [functions][] and [methods][] to format, localize, parse, compare, and manipulate date/time values. Before you can do any of these with string representations of date/time values, you must first convert them to [`time.Time`][] values using the `time.AsTime` function.
 
 ```go-html-template
 {{ $t := "2023-10-15T13:18:50-07:00" }}
@@ -26,19 +25,19 @@ As shown above, the first argument must be a parsable string representation of a
 
 {{% include "/_common/parsable-date-time-strings.md" %}}
 
-To override the default time zone, set the [`timeZone`] in your site configuration or provide a second argument to the `time.AsTime` function. For example:
+To override the default time zone, set the [`timeZone`][] in your project configuration or provide a second argument to the `time.AsTime` function. For example:
 
 ```go-html-template
 {{ time.AsTime "15 Oct 2023" "America/Los_Angeles" }}
 ```
 
-The list of valid time zones may be system dependent, but should include `UTC`, `Local`, or any location in the [IANA Time Zone database].
+The list of valid time zones may be system dependent, but should include `UTC`, `Local`, or any location in the [IANA Time Zone database][].
 
 The order of precedence for determining the time zone is:
 
 1. The time zone offset in the date/time string
 1. The time zone provided as the second argument to the `time.AsTime` function
-1. The time zone specified in your site configuration
+1. The time zone specified in your project configuration
 1. The `Etc/UTC` time zone
 
 [IANA Time Zone database]: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones

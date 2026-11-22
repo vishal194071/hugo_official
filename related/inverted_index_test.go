@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,21 +27,22 @@ import (
 )
 
 type testDoc struct {
-	keywords map[string][]Keyword
+	keywords map[string][]string
 	date     time.Time
 	name     string
 }
 
 func (d *testDoc) String() string {
-	s := "\n"
+	var s strings.Builder
+	s.WriteString("\n")
 	for k, v := range d.keywords {
-		s += k + ":\t\t"
+		s.WriteString(k + ":\t\t")
 		for _, vv := range v {
-			s += "  " + vv.String()
+			s.WriteString("  " + vv)
 		}
-		s += "\n"
+		s.WriteString("\n")
 	}
-	return s
+	return s.String()
 }
 
 func (d *testDoc) Name() string {
@@ -52,7 +55,7 @@ func newTestDoc(name string, keywords ...string) *testDoc {
 }
 
 func newTestDocWithDate(name string, date time.Time, keywords ...string) *testDoc {
-	km := make(map[string][]Keyword)
+	km := make(map[string][]string)
 
 	kw := &testDoc{keywords: km, date: date}
 
@@ -64,11 +67,7 @@ func (d *testDoc) addKeywords(name string, keywords ...string) *testDoc {
 	keywordm := createTestKeywords(name, keywords...)
 
 	for k, v := range keywordm {
-		keywords := make([]Keyword, len(v))
-		for i := range v {
-			keywords[i] = StringKeyword(v[i])
-		}
-		d.keywords[k] = keywords
+		d.keywords[k] = v
 	}
 	return d
 }
@@ -79,8 +78,8 @@ func createTestKeywords(name string, keywords ...string) map[string][]string {
 	}
 }
 
-func (d *testDoc) RelatedKeywords(cfg IndexConfig) ([]Keyword, error) {
-	return d.keywords[cfg.Name], nil
+func (d *testDoc) RelatedKeywords(cfg IndexConfig) ([]string, error) {
+	return cfg.ToKeywords(d.keywords[cfg.Name])
 }
 
 func (d *testDoc) PublishDate() time.Time {
@@ -100,7 +99,7 @@ func TestCardinalityThreshold(t *testing.T) {
 
 	idx := NewInvertedIndex(config)
 	hasKeyword := func(index, keyword string) bool {
-		_, found := idx.index[index][StringKeyword(keyword)]
+		_, found := idx.index[index][keyword]
 		return found
 	}
 
@@ -158,8 +157,7 @@ func TestSearch(t *testing.T) {
 
 	t.Run("search-tags", func(t *testing.T) {
 		c := qt.New(t)
-		var cfg IndexConfig
-		m, err := idx.search(context.Background(), newQueryElement("tags", cfg.StringsToKeywords("a", "b", "d", "z")...))
+		m, err := idx.search(context.Background(), newQueryElement("tags", "a", "b", "d", "z"))
 		c.Assert(err, qt.IsNil)
 		c.Assert(len(m), qt.Equals, 2)
 		c.Assert(m[0], qt.Equals, docs[0])
@@ -168,10 +166,9 @@ func TestSearch(t *testing.T) {
 
 	t.Run("search-tags-and-keywords", func(t *testing.T) {
 		c := qt.New(t)
-		var cfg IndexConfig
 		m, err := idx.search(context.Background(),
-			newQueryElement("tags", cfg.StringsToKeywords("a", "b", "z")...),
-			newQueryElement("keywords", cfg.StringsToKeywords("a", "b")...))
+			newQueryElement("tags", "a", "b", "z"),
+			newQueryElement("keywords", "a", "b"))
 		c.Assert(err, qt.IsNil)
 		c.Assert(len(m), qt.Equals, 3)
 		c.Assert(m[0], qt.Equals, docs[3])
@@ -243,11 +240,7 @@ func TestToKeywordsToLower(t *testing.T) {
 	keywords, err := config.ToKeywords(slice)
 	c.Assert(err, qt.IsNil)
 	c.Assert(slice, qt.DeepEquals, []string{"A", "B", "C"})
-	c.Assert(keywords, qt.DeepEquals, []Keyword{
-		StringKeyword("a"),
-		StringKeyword("b"),
-		StringKeyword("c"),
-	})
+	c.Assert(keywords, qt.DeepEquals, []string{"a", "b", "c"})
 }
 
 func TestDecodeConfig(t *testing.T) {
@@ -300,14 +293,43 @@ func TestToKeywordsAnySlice(t *testing.T) {
 	slice := []any{"A", 32, "C"}
 	keywords, err := config.ToKeywords(slice)
 	c.Assert(err, qt.IsNil)
-	c.Assert(keywords, qt.DeepEquals, []Keyword{
-		StringKeyword("A"),
-		StringKeyword("32"),
-		StringKeyword("C"),
-	})
+	c.Assert(keywords, qt.DeepEquals, []string{"A", "32", "C"})
+}
+
+func TestSplitWords(t *testing.T) {
+	c := qt.New(t)
+
+	tests := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"hello world", []string{"hello", "world"}},
+		// leading/trailing punctuation stripped
+		{"...hello...", []string{"hello"}},
+		{",hello, world!", []string{"hello", "world"}},
+		// digits preserved
+		{"go1.24", []string{"go1.24"}},
+		// HTML entities decoded
+		{"foo &amp;bar", []string{"foo", "bar"}},
+		// fast path: single token, no whitespace
+		{"&amp;foo&amp;", []string{"foo"}},
+		// &nbsp; and similar entities that decode to whitespace must not use the fast path
+		{"Apples&nbsp;and&nbsp;oranges!", []string{"Apples", "and", "oranges"}},
+		// punctuation-only tokens dropped
+		{"hello --- world", []string{"hello", "world"}},
+		// mixed spaces
+		{"  foo   bar  ", []string{"foo", "bar"}},
+	}
+
+	for _, tt := range tests {
+		c.Assert(slices.Collect(splitWordsSeq(tt.in)), qt.DeepEquals, tt.want, qt.Commentf("input: %q", tt.in))
+	}
 }
 
 func BenchmarkRelatedNewIndex(b *testing.B) {
+	rnd := rand.New(rand.NewSource(32))
 	pages := make([]*testDoc, 100)
 	numkeywords := 30
 	allKeywords := make([]string, numkeywords)
@@ -316,7 +338,7 @@ func BenchmarkRelatedNewIndex(b *testing.B) {
 	}
 
 	for i := range pages {
-		start := rand.Intn(len(allKeywords))
+		start := rnd.Intn(len(allKeywords))
 		end := start + 3
 		if end >= len(allKeywords) {
 			end = start + 1
@@ -324,7 +346,7 @@ func BenchmarkRelatedNewIndex(b *testing.B) {
 
 		kw := newTestDoc("tags", allKeywords[start:end]...)
 		if i%5 == 0 {
-			start := rand.Intn(len(allKeywords))
+			start := rnd.Intn(len(allKeywords))
 			end := start + 3
 			if end >= len(allKeywords) {
 				end = start + 1
@@ -344,7 +366,7 @@ func BenchmarkRelatedNewIndex(b *testing.B) {
 	}
 
 	b.Run("singles", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			idx := NewInvertedIndex(cfg)
 			for _, doc := range pages {
 				idx.Add(context.Background(), doc)
@@ -353,7 +375,7 @@ func BenchmarkRelatedNewIndex(b *testing.B) {
 	})
 
 	b.Run("all", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			idx := NewInvertedIndex(cfg)
 			docs := make([]Document, len(pages))
 			for i := range pages {
@@ -365,10 +387,10 @@ func BenchmarkRelatedNewIndex(b *testing.B) {
 }
 
 func BenchmarkRelatedMatchesIn(b *testing.B) {
-	var icfg IndexConfig
-	q1 := newQueryElement("tags", icfg.StringsToKeywords("keyword2", "keyword5", "keyword32", "asdf")...)
-	q2 := newQueryElement("keywords", icfg.StringsToKeywords("keyword3", "keyword4")...)
+	q1 := newQueryElement("tags", "keyword2", "keyword5", "keyword32", "asdf")
+	q2 := newQueryElement("keywords", "keyword3", "keyword4")
 
+	rnd := rand.New(rand.NewSource(32))
 	docs := make([]*testDoc, 1000)
 	numkeywords := 20
 	allKeywords := make([]string, numkeywords)
@@ -387,7 +409,7 @@ func BenchmarkRelatedMatchesIn(b *testing.B) {
 	idx := NewInvertedIndex(cfg)
 
 	for i := range docs {
-		start := rand.Intn(len(allKeywords))
+		start := rnd.Intn(len(allKeywords))
 		end := start + 3
 		if end >= len(allKeywords) {
 			end = start + 1
@@ -401,13 +423,55 @@ func BenchmarkRelatedMatchesIn(b *testing.B) {
 		idx.Add(context.Background(), newTestDoc(index, allKeywords[start:end]...))
 	}
 
-	b.ResetTimer()
 	ctx := context.Background()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		if i%10 == 0 {
 			idx.search(ctx, q2)
 		} else {
 			idx.search(ctx, q1)
+		}
+	}
+}
+
+func BenchmarkRelatedTokenizeCreateIndex(b *testing.B) {
+	rnd := rand.New(rand.NewSource(32))
+	keywordsCfg := IndexConfig{Name: "keywords", Weight: 100, Tokenize: true}
+
+	docs := make([]*testDoc, 100)
+	numGroups := 5
+	numKeywords := 3
+	allKeywords := make([]string, numGroups)
+	for i := range numGroups {
+		for j := range numKeywords {
+			allKeywords[i] += fmt.Sprintf("keyword%d ", i*numKeywords+j+1)
+		}
+	}
+
+	for i := range docs {
+		start := rnd.Intn(len(allKeywords))
+		end := start + 3
+		if end >= len(allKeywords) {
+			end = start + 1
+		}
+
+		kws := slices.Clone(allKeywords[start:end])
+		kws = append(kws, "keyword3")
+		docs[i] = newTestDoc("keywords", kws...)
+	}
+
+	for b.Loop() {
+		cfg := Config{
+			Threshold: 10,
+			Indices:   IndicesConfig{keywordsCfg},
+		}
+
+		idx := NewInvertedIndex(cfg)
+
+		for j := range docs {
+			idx.Add(context.Background(), docs[j])
+		}
+		if err := idx.Finalize(context.Background()); err != nil {
+			b.Fatal(err)
 		}
 	}
 }

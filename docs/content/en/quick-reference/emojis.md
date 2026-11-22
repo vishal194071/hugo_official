@@ -9,14 +9,9 @@ params:
 
 ## Attribution
 
-This quick reference guide was generated using the [ikatyang/emoji-cheat-sheet] project which reads from the [GitHub Emoji API] and the [Unicode Full Emoji List].
+This quick reference guide was generated using the [ikatyang/emoji-cheat-sheet][] project which reads from the [GitHub Emoji API][] and the [Unicode Full Emoji List][].
 
-Note that GitHub [custom emoji] are not supported.
-
-[custom emoji]: #github-custom-emoji
-[github emoji api]: https://api.github.com/emojis
-[ikatyang/emoji-cheat-sheet]: https://github.com/ikatyang/emoji-cheat-sheet/
-[unicode full emoji list]: https://unicode.org/emoji/charts/full-emoji-list.html
+Note that GitHub [custom emoji](#github-custom-emoji) are not supported.
 
 ## Usage
 
@@ -40,14 +35,17 @@ Hello! &#x1f44b;
 
 And in your browser... Hello! :wave:
 
-To process an emoji shortcode from within a template, use the [`emojify`] function or pass the string through the [`RenderString`] method on a `Page` object:
+To process an emoji shortcode from within a template, use the [`emojify`][] function or pass the string through the [`RenderString`][] method on a `Page` object:
 
 ```go-html-template
 {{ "Hello! :wave:" | .RenderString }}
 ```
 
-[`emojify`]: /functions/transform/emojify/
+[GitHub Emoji API]: https://api.github.com/emojis
+[Unicode Full Emoji List]: https://unicode.org/emoji/charts/full-emoji-list.html
 [`RenderString`]: /methods/page/renderstring/
+[`emojify`]: /functions/transform/emojify/
+[ikatyang/emoji-cheat-sheet]: https://github.com/ikatyang/emoji-cheat-sheet/
 
 <!--
 To generate the sections below:
@@ -639,6 +637,9 @@ Then...
 | [top](#animals--nature) | :blowfish: | `:blowfish:` | :shark: | `:shark:` | [top](#table-of-contents) |
 | [top](#animals--nature) | :octopus: | `:octopus:` | :shell: | `:shell:` | [top](#table-of-contents) |
 | [top](#animals--nature) | :coral: | `:coral:` | :jellyfish: | `:jellyfish:` | [top](#table-of-contents) |
+| [top](#animals--nature) | :crab: | `:crab:` | :lobster: | `:lobster:` | [top](#table-of-contents) |
+| [top](#animals--nature) | :shrimp: | `:shrimp:` | :squid: | `:squid:` | [top](#table-of-contents) |
+| [top](#animals--nature) | :oyster: | `:oyster:` | | | [top](#table-of-contents) |
 
 ### Animal Bug
 
@@ -683,7 +684,6 @@ Then...
 - [Food Vegetable](#food-vegetable)
 - [Food Prepared](#food-prepared)
 - [Food Asian](#food-asian)
-- [Food Marine](#food-marine)
 - [Food Sweet](#food-sweet)
 - [Drink](#drink)
 - [Dishware](#dishware)
@@ -752,14 +752,6 @@ Then...
 | [top](#food--drink) | :moon_cake: | `:moon_cake:` | :dango: | `:dango:` | [top](#table-of-contents) |
 | [top](#food--drink) | :dumpling: | `:dumpling:` | :fortune_cookie: | `:fortune_cookie:` | [top](#table-of-contents) |
 | [top](#food--drink) | :takeout_box: | `:takeout_box:` | | | [top](#table-of-contents) |
-
-### Food Marine
-
-| | ico | shortcode | ico | shortcode | |
-| - | :-: | - | :-: | - | - |
-| [top](#food--drink) | :crab: | `:crab:` | :lobster: | `:lobster:` | [top](#table-of-contents) |
-| [top](#food--drink) | :shrimp: | `:shrimp:` | :squid: | `:squid:` | [top](#table-of-contents) |
-| [top](#food--drink) | :oyster: | `:oyster:` | | | [top](#table-of-contents) |
 
 ### Food Sweet
 
@@ -1130,9 +1122,9 @@ Then...
 
 | | ico | shortcode | ico | shortcode | |
 | - | :-: | - | :-: | - | - |
-| [top](#objects) | :saxophone: | `:saxophone:` | :accordion: | `:accordion:` | [top](#table-of-contents) |
-| [top](#objects) | :guitar: | `:guitar:` | :musical_keyboard: | `:musical_keyboard:` | [top](#table-of-contents) |
-| [top](#objects) | :trumpet: | `:trumpet:` | :violin: | `:violin:` | [top](#table-of-contents) |
+| [top](#objects) | :saxophone: | `:saxophone:` | :trumpet: | `:trumpet:` | [top](#table-of-contents) |
+| [top](#objects) | :accordion: | `:accordion:` | :guitar: | `:guitar:` | [top](#table-of-contents) |
+| [top](#objects) | :musical_keyboard: | `:musical_keyboard:` | :violin: | `:violin:` | [top](#table-of-contents) |
 | [top](#objects) | :banjo: | `:banjo:` | :drum: | `:drum:` | [top](#table-of-contents) |
 | [top](#objects) | :long_drum: | `:long_drum:` | :maracas: | `:maracas:` | [top](#table-of-contents) |
 | [top](#objects) | :flute: | `:flute:` | | | [top](#table-of-contents) |
@@ -1188,7 +1180,7 @@ Then...
 
 | | ico | shortcode | ico | shortcode | |
 | - | :-: | - | :-: | - | - |
-| [top](#objects) | :moneybag: | `:moneybag:` | :coin: | `:coin:` | [top](#table-of-contents) |
+| [top](#objects) | :coin: | `:coin:` | :moneybag: | `:moneybag:` | [top](#table-of-contents) |
 | [top](#objects) | :yen: | `:yen:` | :dollar: | `:dollar:` | [top](#table-of-contents) |
 | [top](#objects) | :euro: | `:euro:` | :pound: | `:pound:` | [top](#table-of-contents) |
 | [top](#objects) | :money_with_wings: | `:money_with_wings:` | :credit_card: | `:credit_card:` | [top](#table-of-contents) |
@@ -1670,12 +1662,13 @@ Then...
 | - | :-: | - | :-: | - | - |
 | [top](#github-custom-emoji) | :accessibility: | `:accessibility:` | :atom: | `:atom:` | [top](#table-of-contents) |
 | [top](#github-custom-emoji) | :basecamp: | `:basecamp:` | :basecampy: | `:basecampy:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :bowtie: | `:bowtie:` | :dependabot: | `:dependabot:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :electron: | `:electron:` | :feelsgood: | `:feelsgood:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :finnadie: | `:finnadie:` | :fishsticks: | `:fishsticks:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :goberserk: | `:goberserk:` | :godmode: | `:godmode:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :hurtrealbad: | `:hurtrealbad:` | :neckbeard: | `:neckbeard:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :octocat: | `:octocat:` | :rage1: | `:rage1:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :rage2: | `:rage2:` | :rage3: | `:rage3:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :rage4: | `:rage4:` | :shipit: | `:shipit:` | [top](#table-of-contents) |
-| [top](#github-custom-emoji) | :suspect: | `:suspect:` | :trollface: | `:trollface:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :bowtie: | `:bowtie:` | :copilot: | `:copilot:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :dependabot: | `:dependabot:` | :electron: | `:electron:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :feelsgood: | `:feelsgood:` | :finnadie: | `:finnadie:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :fishsticks: | `:fishsticks:` | :goberserk: | `:goberserk:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :godmode: | `:godmode:` | :hurtrealbad: | `:hurtrealbad:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :neckbeard: | `:neckbeard:` | :octocat: | `:octocat:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :rage1: | `:rage1:` | :rage2: | `:rage2:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :rage3: | `:rage3:` | :rage4: | `:rage4:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :shipit: | `:shipit:` | :suspect: | `:suspect:` | [top](#table-of-contents) |
+| [top](#github-custom-emoji) | :trollface: | `:trollface:` | | | [top](#table-of-contents) |

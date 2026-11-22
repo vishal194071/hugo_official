@@ -3,43 +3,36 @@ title: Syntax highlighting
 description: Add syntax highlighting to code examples.
 categories: []
 keywords: [highlight]
-aliases: [/extras/highlighting/,/extras/highlight/,/tools/syntax-highlighting/]
 ---
 
 Hugo provides several methods to add syntax highlighting to code examples:
 
-- Use the [`transform.Highlight`] function within your templates
-- Use the [`highlight`] shortcode with any [content format](g)
+- Use the [`transform.Highlight`][] function within your templates
+- Use the [`highlight`][] shortcode with any [content format](g)
 - Use fenced code blocks with the Markdown content format
-
-[`transform.Highlight`]: /functions/transform/highlight/
-[`highlight`]: /shortcodes/highlight/
 
 ## Fenced code blocks
 
 In its default configuration, Hugo highlights code examples within fenced code blocks, following this form:
 
-````text {file="content/example.md"}
+````md {file="content/example.md"}
 ```LANG [OPTIONS]
 CODE
 ```
 ````
 
-CODE
+`CODE`
 : The code to highlight.
 
-LANG
-: The language of the code to highlight. Choose from one of the [supported languages]. This value is case-insensitive.
+`LANG`
+: The language of the code to highlight. Choose from one of the [supported languages](#languages). This value is case-insensitive. If omitted or unsupported, Hugo renders the text as a plain text block without syntax highlighting. Consistent with the [CommonMark][] specification, fenced code blocks require a known language identifier to trigger semantic syntax highlighting.
 
-OPTIONS
-: One or more space-separated or comma-separated key-value pairs wrapped in braces. Set default values for each option in your [site configuration]. The key names are case-insensitive.
-
-[supported languages]: #languages
-[site configuration]: /configuration/markup/#highlight
+`OPTIONS`
+: One or more space-separated or comma-separated key-value pairs wrapped in braces. Set default values for each option in your [project configuration][]. The key names are case-insensitive.
 
 For example, with this Markdown:
 
-````text {file="content/example.md"}
+````md {file="content/example.md"}
 ```go {linenos=inline hl_lines=[3,"6-8"] style=emacs}
 package main
 
@@ -75,7 +68,7 @@ func main() {
 
 When documenting shortcode usage, escape the tag delimiters:
 
-````text {file="content/example.md"}
+````md {file="content/example.md"}
 ```text {linenos=inline}
 {{</*/* shortcode-1 */*/>}}
 
@@ -95,8 +88,13 @@ Hugo renders this to:
 
 These are the supported languages. Use one of the identifiers, not the language name, when specifying a language for:
 
-- The [`transform.Highlight`] function
-- The [`highlight`] shortcode
+- The [`transform.Highlight`][] function
+- The [`highlight`][] shortcode
 - Fenced code blocks
 
 {{< chroma-lexers >}}
+
+[CommonMark]: https://spec.commonmark.org/current/#indented-code-blocks
+[`highlight`]: /shortcodes/highlight/
+[`transform.Highlight`]: /functions/transform/highlight/
+[project configuration]: /configuration/markup/#highlight

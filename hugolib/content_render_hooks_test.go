@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ func TestRenderHooksRSS(t *testing.T) {
 -- hugo.toml --
 baseURL = "https://example.org"
 disableKinds = ["taxonomy", "term"]
--- layouts/index.html --
+-- layouts/home.html --
 {{ $p := site.GetPage "p1.md" }}
 {{ $p2 := site.GetPage "p2.md" }}
 P1: {{ $p.Content }}
@@ -36,13 +36,13 @@ P2: {{ $p2.Content }}
 {{ $p3 := site.GetPage "p3.md" }}
 P2: {{ $p2.Content }}
 P3: {{ $p3.Content }}
--- layouts/_default/_markup/render-link.html --
+-- layouts/_markup/render-link.html --
 html-link: {{ .Destination | safeURL }}|
--- layouts/_default/_markup/render-link.rss.xml --
+-- layouts/_markup/render-link.rss.xml --
 xml-link: {{ .Destination | safeURL }}|
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 html-heading: {{ .Text }}|
--- layouts/_default/_markup/render-heading.rss.xml --
+-- layouts/_markup/render-heading.rss.xml --
 xml-heading: {{ .Text }}|
 -- content/p1.md --
 ---
@@ -87,7 +87,7 @@ func TestRenderHooksRSSOnly(t *testing.T) {
 -- hugo.toml --
 baseURL = "https://example.org"
 disableKinds = ["taxonomy", "term"]
--- layouts/index.html --
+-- layouts/home.html --
 {{ $p := site.GetPage "p1.md" }}
 {{ $p2 := site.GetPage "p2.md" }}
 P1: {{ $p.Content }}
@@ -97,9 +97,9 @@ P2: {{ $p2.Content }}
 {{ $p3 := site.GetPage "p3.md" }}
 P2: {{ $p2.Content }}
 P3: {{ $p3.Content }}
--- layouts/_default/_markup/render-link.rss.xml --
+-- layouts/_markup/render-link.rss.xml --
 xml-link: {{ .Destination | safeURL }}|
--- layouts/_default/_markup/render-heading.rss.xml --
+-- layouts/_markup/render-heading.rss.xml --
 xml-heading: {{ .Text }}|
 -- content/p1.md --
 ---
@@ -141,28 +141,24 @@ xml-heading: Heading in p2|
 
 // https://github.com/gohugoio/hugo/issues/6629
 func TestRenderLinkWithMarkupInText(t *testing.T) {
-	b := newTestSitesBuilder(t)
-	b.WithConfigFile("toml", `
+	t.Parallel()
 
+	files := `
+-- hugo.toml --
 baseURL="https://example.org"
-
 [markup]
   [markup.goldmark]
     [markup.goldmark.renderer]
       unsafe = true
-
-`)
-
-	b.WithTemplates("index.html", `
+-- layouts/home.html --
 {{ $p := site.GetPage "p1.md" }}
 P1: {{ $p.Content }}
-
-	`,
-		"_default/_markup/render-link.html", `html-link: {{ .Destination | safeURL }}|Text: {{ .Text }}|Plain: {{ .PlainText | safeHTML }}`,
-		"_default/_markup/render-image.html", `html-image: {{ .Destination | safeURL }}|Text: {{ .Text }}|Plain: {{ .PlainText | safeHTML }}`,
-	)
-
-	b.WithContent("p1.md", `---
+-- layouts/_markup/render-link.html --
+html-link: {{ .Destination | safeURL }}|Text: {{ .Text }}|Plain: {{ .PlainText | safeHTML }}
+-- layouts/_markup/render-image.html --
+html-image: {{ .Destination | safeURL }}|Text: {{ .Text }}|Plain: {{ .PlainText | safeHTML }}
+-- content/p1.md --
+---
 title: "p1"
 ---
 
@@ -173,10 +169,9 @@ Some regular **markup**.
 Image:
 
 ![Hello<br> Goodbye](image.jpg)END
+`
 
-`)
-
-	b.Build(BuildCfg{})
+	b := Test(t, files)
 
 	b.AssertFileContent("public/index.html", `
   P1: <p>START: html-link: https://gohugo.io|Text: <strong>should be bold</strong>|Plain: should be boldEND</p>
@@ -208,7 +203,7 @@ title: "p2"
 ## E
 ## F
 
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 Heading: {{ .Text }}|
 {{ with .Page }}
 Self Fragments: {{ .Fragments.Identifiers }}|
@@ -216,7 +211,7 @@ Self Fragments: {{ .Fragments.Identifiers }}|
 {{ with (site.GetPage "p1.md") }}
 P1 Fragments: {{ .Fragments.Identifiers }}|
 {{ end }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content}}
 `
 
@@ -244,9 +239,9 @@ defaultContentLanguageInSubdir = true
 duplicateResourceFiles = false
 [markup.goldmark.renderhooks]
 [markup.goldmark.renderhooks.link]
-#enableDefault = false
+#useEmbedded = 'never'
 [markup.goldmark.renderhooks.image]
-#enableDefault = false
+#useEmbedded = 'never'
 [languages]
 [languages.en]
 weight = 1
@@ -281,7 +276,7 @@ title: "p2 en"
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
 -- content/p2/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Title }}|{{ .Content }}|$
 
 `
@@ -296,7 +291,7 @@ iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAA
 	})
 
 	t.Run("Disabled", func(t *testing.T) {
-		b := Test(t, strings.ReplaceAll(files, "#enableDefault = false", "enableDefault = false"))
+		b := Test(t, strings.ReplaceAll(files, "#useEmbedded = 'never'", "useEmbedded = 'never'"))
 
 		b.AssertFileContent("public/nn/p1/index.html",
 			"p1|<p><a href=\"p2\">P2</a>", "<img src=\"pixel.png\" alt=\"Pixel\">")
@@ -309,9 +304,9 @@ func TestRenderHooksDefaultEscape(t *testing.T) {
 [markup.goldmark.extensions.typographer]
 disable = true
 [markup.goldmark.renderHooks.image]
-enableDefault = ENABLE
+useEmbedded = 'WHEN'
 [markup.goldmark.renderHooks.link]
-enableDefault = ENABLE
+useEmbedded = 'WHEN'
 [markup.goldmark.parser]
 wrapStandAloneImageWithinParagraph = false
 [markup.goldmark.parser.attribute]
@@ -327,18 +322,17 @@ Link: [text-"<>&](/destination-"<> 'title-"<>&')
 Image: ![alt-"<>&](/destination-"<> 'title-"<>&')
 {class="><script>alert()</script>" id="baz"}
 
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 `
 
-	for _, enabled := range []bool{true, false} {
-		enabled := enabled
-		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+	for _, when := range []string{"auto", "never", "always", "fallback"} {
+		t.Run(fmt.Sprint(when), func(t *testing.T) {
 			t.Parallel()
-			b := Test(t, strings.ReplaceAll(files, "ENABLE", fmt.Sprint(enabled)))
+			b := Test(t, strings.ReplaceAll(files, "WHEN", fmt.Sprint(when)))
 
 			// The escaping is slightly different between the two.
-			if enabled {
+			if when == "always" || when == "fallback" {
 				b.AssertFileContent("public/index.html",
 					"Link: <a href=\"/destination-%22%3C%3E\" title=\"title-&#34;&lt;&gt;&amp;\">text-&quot;&lt;&gt;&amp;</a>",
 					"img src=\"/destination-%22%3C%3E\" alt=\"alt-&#34;&lt;&gt;&amp;\" title=\"title-&#34;&lt;&gt;&amp;\">",
@@ -368,9 +362,9 @@ title: "p1"
 First line.
 Second line.
 ----------------
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 Plain text: {{ .PlainText }}|Text: {{ .Text }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content: {{ .Content}}|
 }
 `
@@ -385,13 +379,13 @@ Content: {{ .Content}}|
 func TestContentOutputReuseRenderHooksAndShortcodesHTMLOnly(t *testing.T) {
 	files := `
 -- hugo.toml --
--- layouts/index.html --
+-- layouts/home.html --
 HTML: {{ .Title }}|{{ .Content }}|
 -- layouts/index.xml --
 XML: {{ .Title }}|{{ .Content }}|
 -- layouts/_markup/render-heading.html --
 Render heading.
--- layouts/shortcodes/myshortcode.html --
+-- layouts/_shortcodes/myshortcode.html --
 My shortcode.
 -- content/_index.md --
 ---
@@ -413,7 +407,7 @@ func TestContentOutputNoReuseRenderHooksInBothHTMLAnXML(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ["taxonomy", "term"]
--- layouts/index.html --
+-- layouts/home.html --
 HTML: {{ .Title }}|{{ .Content }}|
 -- layouts/index.xml --
 XML: {{ .Title }}|{{ .Content }}|
@@ -441,16 +435,16 @@ func TestContentOutputNoReuseShortcodesInBothHTMLAnXML(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ["taxonomy", "term"]
--- layouts/index.html --
+-- layouts/home.html --
 HTML: {{ .Title }}|{{ .Content }}|
 -- layouts/index.xml --
 XML: {{ .Title }}|{{ .Content }}|
 -- layouts/_markup/render-heading.html --
 Render heading.
 
--- layouts/shortcodes/myshortcode.html --
+-- layouts/_shortcodes/myshortcode.html --
 My shortcode HTML.
--- layouts/shortcodes/myshortcode.xml --
+-- layouts/_shortcodes/myshortcode.xml --
 My shortcode XML.
 -- content/_index.md --
 ---

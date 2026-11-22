@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gohugoio/hugo/htesting"
+
 	"github.com/gohugoio/hugo/cache/filecache"
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
@@ -64,7 +66,7 @@ assetDir = "assets"
 archeTypedir = "archetypes"
 
 [caches]
-[caches.getJSON]
+[caches.misc]
 maxAge = "10h"
 dir = ":cacheDir/c"
 
@@ -78,11 +80,13 @@ dir = ":cacheDir/c"
 		configStr = strings.Replace(configStr, "\\", winPathSep, -1)
 
 		p := newPathsSpec(t, osfs, configStr)
+		fileCachConfig := p.Cfg.GetConfigSection("caches").(filecache.Configs)
 
-		caches, err := filecache.NewCaches(p)
+		caches, err := filecache.NewCaches(fileCachConfig, p.Fs.Source)
 		c.Assert(err, qt.IsNil)
+		caches.SetResourceFs(p.SourceFs)
 
-		cache := caches.Get("GetJSON")
+		cache := caches.Get("Misc")
 		c.Assert(cache, qt.Not(qt.IsNil))
 
 		cache = caches.Get("Images")
@@ -104,7 +108,7 @@ dir = ":cacheDir/c"
 			return []byte("bcd"), nil
 		}
 
-		for _, ca := range []*filecache.Cache{caches.ImageCache(), caches.AssetsCache(), caches.GetJSONCache(), caches.GetCSVCache()} {
+		for _, ca := range []*filecache.Cache{caches.ImageCache(), caches.AssetsCache()} {
 			for range 2 {
 				info, r, err := ca.GetOrCreate("a", rf("abc"))
 				c.Assert(err, qt.IsNil)
@@ -132,8 +136,6 @@ dir = ":cacheDir/c"
 			}
 		}
 
-		c.Assert(caches.Get("getJSON"), qt.Not(qt.IsNil))
-
 		info, w, err := caches.ImageCache().WriteCloser("mykey")
 		c.Assert(err, qt.IsNil)
 		c.Assert(info.Name, qt.Equals, "mykey")
@@ -149,7 +151,7 @@ dir = ":cacheDir/c"
 		r.Close()
 		c.Assert(string(b), qt.Equals, "Hugo is great!")
 
-		info, b, err = caches.ImageCache().GetBytes("mykey")
+		info, b, err = caches.ImageCache().GetItemBytes("mykey")
 		c.Assert(err, qt.IsNil)
 		c.Assert(info.Name, qt.Equals, "mykey")
 		c.Assert(string(b), qt.Equals, "Hugo is great!")
@@ -158,6 +160,7 @@ dir = ":cacheDir/c"
 }
 
 func TestFileCacheConcurrent(t *testing.T) {
+	htesting.SkipSlowTestUnlessCI(t)
 	t.Parallel()
 
 	c := qt.New(t)
@@ -172,18 +175,19 @@ assetDir = "assets"
 archeTypedir = "archetypes"
 
 [caches]
-[caches.getjson]
+[caches.misc]
 maxAge = "1s"
 dir = "/cache/c"
 
 `
 
 	p := newPathsSpec(t, afero.NewMemMapFs(), configStr)
-
-	caches, err := filecache.NewCaches(p)
+	fileCachConfig := p.Cfg.GetConfigSection("caches").(filecache.Configs)
+	caches, err := filecache.NewCaches(fileCachConfig, p.Fs.Source)
 	c.Assert(err, qt.IsNil)
+	caches.SetResourceFs(p.Fs.Source)
 
-	const cacheName = "getjson"
+	const cacheName = "misc"
 
 	filenameData := func(i int) (string, string) {
 		data := fmt.Sprintf("data: %d", i)
@@ -248,7 +252,12 @@ func TestFileCacheReadOrCreateErrorInRead(t *testing.T) {
 		}
 	}
 
-	cache := filecache.NewCache(afero.NewMemMapFs(), 100*time.Hour, "")
+	cfg := filecache.FileCacheConfig{
+		MaxAge: 100 * time.Hour,
+		Dir:    "cache/c",
+	}
+
+	cache := filecache.NewCache(afero.NewMemMapFs(), cfg)
 
 	const id = "a32"
 
@@ -270,7 +279,46 @@ func newPathsSpec(t *testing.T, fs afero.Fs, configStr string) *helpers.PathSpec
 	cfg, err := config.FromConfigString(configStr, "toml")
 	c.Assert(err, qt.IsNil)
 	acfg := testconfig.GetTestConfig(fs, cfg)
-	p, err := helpers.NewPathSpec(hugofs.NewFrom(fs, acfg.BaseConfig()), acfg, nil)
+	p, err := helpers.NewPathSpec(hugofs.NewFrom(fs, acfg.BaseConfig()), acfg, nil, nil)
 	c.Assert(err, qt.IsNil)
 	return p
+}
+
+// A failed create must not leave a (partial) entry behind that
+// would be read as valid on the next call. See issue 15522.
+func TestFileCacheReadOrCreateErrorInCreate(t *testing.T) {
+	t.Parallel()
+	c := qt.New(t)
+
+	cache := filecache.NewCache(afero.NewMemMapFs(), filecache.FileCacheConfig{
+		MaxAge: 100 * time.Hour,
+		Dir:    "cache/c",
+	})
+
+	const id = "a32"
+
+	var reads int
+	read := func(info filecache.ItemInfo, r io.ReadSeeker) error {
+		reads++
+		return nil
+	}
+	createErr := errors.New("create failed")
+
+	_, err := cache.ReadOrCreate(id, read, func(info filecache.ItemInfo, w io.WriteCloser) error {
+		defer w.Close()
+		w.Write([]byte("partial"))
+		return createErr
+	})
+	c.Assert(err, qt.Equals, createErr)
+
+	var created bool
+	_, err = cache.ReadOrCreate(id, read, func(info filecache.ItemInfo, w io.WriteCloser) error {
+		defer w.Close()
+		created = true
+		_, err := w.Write([]byte("v1"))
+		return err
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(reads, qt.Equals, 0)
+	c.Assert(created, qt.IsTrue)
 }

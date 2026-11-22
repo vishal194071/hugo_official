@@ -1,6 +1,6 @@
 ---
 title: urls.JoinPath
-description: Joins the provided elements into a URL string and cleans the result of any ./ or ../ elements. If the argument list is empty, JoinPath returns an empty string.
+description: Returns a URL string created by joining the provided elements and cleaning the result of any ./ or ../ elements, or an empty string if the argument list is empty.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: []
     returnType: string
     signatures: [urls.JoinPath ELEMENT...]
-aliases: [/functions/urls.joinpath]
 ---
 
 ```go-html-template
@@ -22,6 +21,6 @@ aliases: [/functions/urls.joinpath]
 {{ urls.JoinPath (slice "a" "b") }} → a/b
 ```
 
-Unlike the [`path.Join`] function, `urls.JoinPath` retains consecutive leading slashes.
+Unlike the [`path.Join`][] function, `urls.JoinPath` retains consecutive leading slashes.
 
 [`path.Join`]: /functions/path/join/

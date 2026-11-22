@@ -27,6 +27,11 @@ import (
 	"strings"
 	"sync/atomic"
 
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
+
 	bp "github.com/gohugoio/hugo/bufferpool"
 
 	"github.com/bep/goportabletext"
@@ -79,31 +84,68 @@ type Namespace struct {
 
 // Emojify returns a copy of s with all emoji codes replaced with actual emojis.
 //
+// If s is of type template.HTML, the result is template.HTML, else a string.
+//
 // See http://www.emoji-cheat-sheet.com/
-func (ns *Namespace) Emojify(s any) (template.HTML, error) {
+func (ns *Namespace) Emojify(s any) (any, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
 	}
 
-	return template.HTML(helpers.Emojify([]byte(ss))), nil
+	res := string(helpers.Emojify([]byte(ss)))
+	switch s.(type) {
+	case template.HTML:
+		return template.HTML(res), nil
+	default:
+		return res, nil
+	}
 }
 
-// Highlight returns a copy of s as an HTML string with syntax
+// Highlight returns a copy of CODE as an HTML string with syntax
 // highlighting applied.
-func (ns *Namespace) Highlight(s any, lang string, opts ...any) (template.HTML, error) {
-	ss, err := cast.ToStringE(s)
+//
+//	transform.Highlight CODE [LANG] [OPTIONS]
+//
+// LANG is optional; it can also be set via the type option in OPTIONS, which
+// makes this work the same way as HighlightCodeBlock.
+func (ns *Namespace) Highlight(s any, args ...any) (template.HTML, error) {
+	code, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
 	}
 
-	var optsv any
-	if len(opts) > 0 {
-		optsv = opts[0]
+	var lang string
+	var opts any
+
+	switch len(args) {
+	case 0:
+	case 1:
+		// A single argument is either OPTIONS (a map or option string) or LANG.
+		if _, ok := args[0].(map[string]any); ok {
+			opts = args[0]
+		} else {
+			var arg string
+			if arg, err = cast.ToStringE(args[0]); err != nil {
+				return "", err
+			}
+			if strings.Contains(arg, "=") || strings.Contains(arg, ",") {
+				opts = arg
+			} else {
+				lang = arg
+			}
+		}
+	case 2:
+		if lang, err = cast.ToStringE(args[0]); err != nil {
+			return "", err
+		}
+		opts = args[1]
+	default:
+		return "", errors.New("transform.Highlight: expects at most 3 arguments")
 	}
 
 	hl := ns.deps.ContentSpec.Converters.GetHighlighter()
-	highlighted, err := hl.Highlight(ss, lang, optsv)
+	highlighted, err := hl.Highlight(code, lang, opts)
 	if err != nil {
 		return "", err
 	}
@@ -194,13 +236,20 @@ func (ns *Namespace) Markdownify(ctx context.Context, s any) (template.HTML, err
 }
 
 // Plainify returns a copy of s with all HTML tags removed.
-func (ns *Namespace) Plainify(s any) (template.HTML, error) {
+// If s is of type template.HTML, the result is template.HTML, else a string.
+func (ns *Namespace) Plainify(s any) (any, error) {
 	ss, err := cast.ToStringE(s)
 	if err != nil {
 		return "", err
 	}
 
-	return template.HTML(tpl.StripHTML(ss)), nil
+	res := tpl.StripHTML(ss)
+	switch s.(type) {
+	case template.HTML:
+		return template.HTML(res), nil
+	default:
+		return res, nil
+	}
 }
 
 // PortableText converts the portable text in v to Markdown.
@@ -259,7 +308,7 @@ func (ns *Namespace) ToMath(ctx context.Context, args ...any) (template.HTML, er
 		Warnings []string `json:"warnings,omitempty"`
 	}
 
-	const fileCacheEntryVersion = "v1" // Increment on incompatible changes.
+	const fileCacheEntryVersion = "v2" // Increment on incompatible changes.
 
 	s := hashing.HashString(args...)
 	key := "tomath/" + fileCacheEntryVersion + "/" + s[:2] + "/" + s[2:]
@@ -323,4 +372,33 @@ func (ns *Namespace) ToMath(ctx context.Context, args ...any) (template.HTML, er
 // For internal use.
 func (ns *Namespace) Reset() {
 	ns.cacheUnmarshal.Clear()
+}
+
+// This was added in Hugo v0.151.0 and should be considered experimental for now.
+// We need to test this out in the wild for a while before committing to this API,
+// and there will eventually be more options here.
+func (ns *Namespace) HTMLToMarkdown(ctx context.Context, args ...any) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("must provide at least one argument")
+	}
+	input, err := cast.ToStringE(args[0])
+	if err != nil {
+		return "", err
+	}
+
+	plugins := []htmltomarkdown.Plugin{
+		base.NewBasePlugin(),
+		commonmark.NewCommonmarkPlugin(),
+		table.NewTablePlugin(),
+	}
+
+	conv := htmltomarkdown.NewConverter(
+		htmltomarkdown.WithPlugins(plugins...),
+	)
+
+	markdown, err := conv.ConvertString(input)
+	if err != nil {
+		return "", err
+	}
+	return markdown, nil
 }

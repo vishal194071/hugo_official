@@ -37,7 +37,7 @@ func (c *ImageCache) getOrCreate(
 	parent *imageResource, conf images.ImageConfig,
 	createImage func() (*imageResource, image.Image, error),
 ) (*resourceAdapter, error) {
-	relTarget := parent.relTargetPathFromConfig(conf, parent.getSpec().imaging.Cfg.SourceHash)
+	relTarget := parent.relTargetPathFromConfig(conf, parent.getSpec().Imaging.Cfg.SourceHash)
 	relTargetPath := relTarget.TargetPath()
 	memKey := relTargetPath
 
@@ -66,6 +66,7 @@ func (c *ImageCache) getOrCreate(
 			})
 			img.setSourceFilenameIsHash(true)
 			img.setMediaType(conf.TargetFormat.MediaType())
+			img.Format = conf.TargetFormat
 
 			if err := img.InitConfig(r); err != nil {
 				return err
@@ -89,6 +90,7 @@ func (c *ImageCache) getOrCreate(
 			img.setOpenSource(func() (hugio.ReadSeekCloser, error) {
 				return c.fcache.Fs.Open(info.Name)
 			})
+			img.setSourceFilenameIsHash(true)
 			return img.EncodeTo(conf, conv, w)
 		}
 

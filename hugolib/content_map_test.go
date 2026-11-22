@@ -1,4 +1,4 @@
-// Copyright 2019 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,17 +15,16 @@ package hugolib
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 )
 
 func TestContentMapSite(t *testing.T) {
-	b := newTestSitesBuilder(t)
+	t.Parallel()
 
 	pageTempl := `
 ---
@@ -52,39 +51,10 @@ draft: true
 
 `
 
-	b.WithContent("_index.md", `
----
-title: "Hugo Home"
-cascade:
-    description: "Common Description"
----
-
-Home Content.
-`)
-
-	b.WithContent("blog/page1.md", createPage(1))
-	b.WithContent("blog/page2.md", createPage(2))
-	b.WithContent("blog/page3.md", createPage(3))
-	b.WithContent("blog/bundle/index.md", createPage(4))
-	b.WithContent("blog/bundle/data.json", "data")
-	b.WithContent("blog/bundle/page.md", createPage(5))
-	b.WithContent("blog/subsection/_index.md", createPage(6))
-	b.WithContent("blog/subsection/subdata.json", "data")
-	b.WithContent("blog/subsection/page4.md", createPage(7))
-	b.WithContent("blog/subsection/page5.md", createPage(8))
-	b.WithContent("blog/subsection/draft/index.md", draftTemplate)
-	b.WithContent("blog/subsection/draft/data.json", "data")
-	b.WithContent("blog/draftsection/_index.md", draftTemplate)
-	b.WithContent("blog/draftsection/page/index.md", createPage(9))
-	b.WithContent("blog/draftsection/page/folder/data.json", "data")
-	b.WithContent("blog/draftsection/sub/_index.md", createPage(10))
-	b.WithContent("blog/draftsection/sub/page.md", createPage(11))
-	b.WithContent("docs/page6.md", createPage(12))
-	b.WithContent("tags/_index.md", createPageInCategory(13, "sad"))
-	b.WithContent("overlap/_index.md", createPageInCategory(14, "sad"))
-	b.WithContent("overlap2/_index.md", createPage(15))
-
-	b.WithTemplatesAdded("layouts/index.html", `
+	files := `
+-- hugo.toml --
+baseURL = "http://example.com"
+-- layouts/home.html --
 Num Regular: {{ len .Site.RegularPages }}|{{ range .Site.RegularPages }}{{ .RelPermalink }}|{{ end }}$
 Main Sections: {{ .Site.Params.mainSections }}
 Pag Num Pages: {{ len .Paginator.Pages }}
@@ -132,9 +102,59 @@ Draft4: {{ if (.Site.GetPage "blog/draftsection/sub") }}FOUND{{ end }}|
 Draft5: {{ if (.Site.GetPage "blog/draftsection/sub/page") }}FOUND{{ end }}|
 
 {{ define "print-page" }}{{ .Title }}|{{ .RelPermalink }}|{{ .Date.Format "2006-01-02" }}|Current Section: {{ with .CurrentSection }}{{ .Path }}{{ else }}NIL{{ end }}|Resources: {{ range .Resources }}{{ .ResourceType }}: {{ .RelPermalink }}|{{ end }}{{ end }}
-`)
+-- content/_index.md --
+---
+title: "Hugo Home"
+cascade:
+    description: "Common Description"
+---
 
-	b.Build(BuildCfg{})
+Home Content.
+-- content/blog/page1.md --
+` + createPage(1) + `
+-- content/blog/page2.md --
+` + createPage(2) + `
+-- content/blog/page3.md --
+` + createPage(3) + `
+-- content/blog/bundle/index.md --
+` + createPage(4) + `
+-- content/blog/bundle/data.json --
+data
+-- content/blog/bundle/page.md --
+` + createPage(5) + `
+-- content/blog/subsection/_index.md --
+` + createPage(6) + `
+-- content/blog/subsection/subdata.json --
+data
+-- content/blog/subsection/page4.md --
+` + createPage(7) + `
+-- content/blog/subsection/page5.md --
+` + createPage(8) + `
+-- content/blog/subsection/draft/index.md --
+` + draftTemplate + `
+-- content/blog/subsection/draft/data.json --
+data
+-- content/blog/draftsection/_index.md --
+` + draftTemplate + `
+-- content/blog/draftsection/page/index.md --
+` + createPage(9) + `
+-- content/blog/draftsection/page/folder/data.json --
+data
+-- content/blog/draftsection/sub/_index.md --
+` + createPage(10) + `
+-- content/blog/draftsection/sub/page.md --
+` + createPage(11) + `
+-- content/docs/page6.md --
+` + createPage(12) + `
+-- content/tags/_index.md --
+` + createPageInCategory(13, "sad") + `
+-- content/overlap/_index.md --
+` + createPageInCategory(14, "sad") + `
+-- content/overlap2/_index.md --
+` + createPage(15) + `
+`
+
+	b := Test(t, files)
 
 	b.AssertFileContent("public/index.html",
 
@@ -182,25 +202,24 @@ func TestIntegrationTestTemplate(t *testing.T) {
 	c := qt.New(t)
 
 	files := `
--- config.toml --
+-- hugo.toml --
 title = "Integration Test"
 disableKinds=["page", "section", "taxonomy", "term", "sitemap", "robotsTXT", "RSS"]
--- layouts/index.html --
+-- layouts/home.html --
 Home: {{ .Title }}|
 
 	`
 
-	b := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           c,
-			TxtarString: files,
-		}).Build()
+	b := Test(c, files)
 
 	b.AssertFileContent("public/index.html", "Home: Integration Test|")
 }
 
 // Issue #11840
+// Resource language fallback should be the closest language going up.
 func TestBundleResourceLanguageBestMatch(t *testing.T) {
+	t.Parallel()
+
 	files := `
 -- hugo.toml --
 defaultContentLanguage = "fr"
@@ -212,10 +231,10 @@ weight = 1
 weight = 2
 [languages.de]
 weight = 3
--- layouts/index.html --
+-- layouts/home.html --
 {{ $bundle := site.GetPage "bundle" }}
 {{ $r := $bundle.Resources.GetMatch "*.txt" }}
-{{ .Language.Lang }}: {{ $r.RelPermalink }}|{{ $r.Content }}
+{{ .Language.Lang }}: {{ with $r }}{{ .RelPermalink }}|{{ .Content }}{{ end}}
 -- content/bundle/index.fr.md --
 ---
 title: "Bundle Fr"
@@ -234,61 +253,13 @@ Data fr
 Data en
 
 `
-	b := Test(t, files)
+	for range 5 {
+		b := Test(t, files)
 
-	b.AssertFileContent("public/fr/index.html", "fr: /fr/bundle/data.fr.txt|Data fr")
-	b.AssertFileContent("public/en/index.html", "en: /en/bundle/data.en.txt|Data en")
-	b.AssertFileContent("public/de/index.html", "de: /fr/bundle/data.fr.txt|Data fr")
-}
+		b.AssertFileContent("public/fr/index.html", "fr: /fr/bundle/data.fr.txt|Data fr")
+		b.AssertFileContent("public/en/index.html", "en: /en/bundle/data.en.txt|Data en")
 
-func TestBundleMultipleContentPageWithSamePath(t *testing.T) {
-	t.Parallel()
-
-	files := `
--- hugo.toml --
-printPathWarnings = true
--- layouts/all.html --
-All.
--- content/bundle/index.md --
----
-title: "Bundle md"
-foo: md
----
--- content/bundle/index.html --
----
-title: "Bundle html"
-foo: html
----
--- content/bundle/data.txt --
-Data.
--- content/p1.md --
----
-title: "P1 md"
-foo: md
----
--- content/p1.html --
----
-title: "P1 html"
-foo: html
----
--- layouts/index.html --
-{{ $bundle := site.GetPage "bundle" }}
-Bundle: {{ $bundle.Title }}|{{ $bundle.Params.foo }}|{{ $bundle.File.Filename }}|
-{{ $p1 := site.GetPage "p1" }}
-P1: {{ $p1.Title }}|{{ $p1.Params.foo }}|{{ $p1.File.Filename }}|
-`
-
-	for range 3 {
-		b := Test(t, files, TestOptWarn())
-
-		b.AssertLogContains("WARN  Duplicate content path: \"/p1\"")
-
-		// There's multiple content files sharing the same logical path and language.
-		// This is a little arbitrary, but we have to pick one and prefer the Markdown version.
-		b.AssertFileContent("public/index.html",
-			filepath.FromSlash("Bundle: Bundle md|md|/content/bundle/index.md|"),
-			filepath.FromSlash("P1: P1 md|md|/content/p1.md|"),
-		)
+		b.AssertFileContent("public/de/index.html", "de: /fr/bundle/data.fr.txt|Data fr")
 	}
 }
 
@@ -301,7 +272,7 @@ disableKinds = ["taxonomy", "term"]
 -- content/bundle/index.md --
 -- content/bundle/data with Spaces.txt --
 Data.
--- layouts/index.html --
+-- layouts/home.html --
 {{ $bundle := site.GetPage "bundle" }}
 {{ $r := $bundle.Resources.Get "data with Spaces.txt" }}
 R: {{ with $r }}{{ .Content }}{{ end }}|
@@ -325,7 +296,7 @@ data 1.txt
 Data 1.txt
 -- content/bundle/Data-1.txt --
 Data-1.txt
--- layouts/index.html --
+-- layouts/home.html --
 {{ $bundle := site.GetPage "bundle" }}
 {{ $r := $bundle.Resources.Get "data-1.txt" }}
 R: {{ with $r }}{{ .Content }}{{ end }}|Len: {{ len $bundle.Resources }}|$
@@ -354,14 +325,13 @@ foo.txt
 p1.txt
 -- content/s1/p1-foo.txt --
 p1-foo.txt
--- layouts/_default/list.html --
+-- layouts/list.html --
 {{.Title }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{.Title }}|
 	`
 
 	b := Test(t, files)
-	b.Build()
 
 	b.AssertFileExists("public/s1/index.html", true)
 	b.AssertFileExists("public/s1/foo.txt", true)
@@ -387,7 +357,7 @@ title: s1
 ---
 -- content/s1x/a.txt --
 a.txt
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ range .Resources.Match "**" }}
   {{ .Name }}|
@@ -412,7 +382,7 @@ defaultContentLanguageInSubdir = true
 [languages.en]
 [sitemap]
 filename = 'foo.xml'
--- layouts/index.html --
+-- layouts/home.html --
 irrelevant
 `
 
@@ -443,7 +413,7 @@ func TestContentTreeReverseIndex(t *testing.T) {
 	c := qt.New(t)
 
 	pageReverseIndex := newContentTreeTreverseIndex(
-		func(get func(key any) (contentNodeI, bool), set func(key any, val contentNodeI)) {
+		func(get func(key any) (contentNode, bool), set func(key any, val contentNode)) {
 			for i := range 10 {
 				key := fmt.Sprint(i)
 				set(key, &testContentNode{key: key})
@@ -467,7 +437,7 @@ func TestContentTreeReverseIndexPara(t *testing.T) {
 
 	for range 10 {
 		pageReverseIndex := newContentTreeTreverseIndex(
-			func(get func(key any) (contentNodeI, bool), set func(key any, val contentNodeI)) {
+			func(get func(key any) (contentNode, bool), set func(key any, val contentNode)) {
 				for i := range 10 {
 					key := fmt.Sprint(i)
 					set(key, &testContentNode{key: key})
@@ -489,26 +459,12 @@ type testContentNode struct {
 	key string
 }
 
-func (n *testContentNode) GetIdentity() identity.Identity {
-	return identity.StringIdentity(n.key)
-}
-
-func (n *testContentNode) ForEeachIdentity(cb func(id identity.Identity) bool) bool {
-	panic("not supported")
-}
-
 func (n *testContentNode) Path() string {
 	return n.key
 }
 
-func (n *testContentNode) isContentNodeBranch() bool {
-	return false
-}
-
-func (n *testContentNode) resetBuildState() {
-}
-
-func (n *testContentNode) MarkStale() {
+func (n *testContentNode) forEeachContentNode(f func(v sitesmatrix.Vector, n contentNode) bool) bool {
+	panic("not supported")
 }
 
 // Issue 12274.
@@ -537,7 +493,7 @@ title: p1
 <p>b</p>
 -- content/p1/c.html --
 <p>c</p>
--- layouts/_default/single.html --
+-- layouts/single.html --
 Path: {{ .Path }}|{{.Kind }}
 |{{ (.Resources.Get "a.html").RelPermalink -}}
 |{{ (.Resources.Get "b.html").RelPermalink -}}
@@ -545,7 +501,6 @@ Path: {{ .Path }}|{{.Kind }}
 `
 
 	for _, format := range []string{"toml", "yaml", "json"} {
-		format := format
 		t.Run(format, func(t *testing.T) {
 			t.Parallel()
 

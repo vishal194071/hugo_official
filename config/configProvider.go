@@ -16,19 +16,19 @@ package config
 import (
 	"time"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/common/urls"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 	"github.com/gohugoio/hugo/identity"
-	"github.com/gohugoio/hugo/langs"
 )
 
 // AllProvider is a sub set of all config settings.
 type AllProvider interface {
-	Language() *langs.Language
-	Languages() langs.Languages
-	LanguagesDefaultFirst() langs.Languages
+	Language() any
+	LanguageIndex() int
+	Languages() any
 	LanguagePrefix() string
 	BaseURL() urls.BaseURL
 	BaseURLLiveReload() urls.BaseURL
@@ -41,6 +41,7 @@ type AllProvider interface {
 	Dirs() CommonDirs
 	Quiet() bool
 	DirsBase() CommonDirs
+	FileCaches() any
 	ContentTypes() ContentTypesProvider
 	GetConfigSection(string) any
 	GetConfig() any
@@ -50,6 +51,11 @@ type AllProvider interface {
 	IsUglyURLs(section string) bool
 	DefaultContentLanguage() string
 	DefaultContentLanguageInSubdir() bool
+	DefaultContentRoleInSubdir() bool
+	DefaultContentVersionInSubdir() bool
+	DefaultContentsitesMatrix() *sitesmatrix.IntSets
+	AllSitesMatrix() *sitesmatrix.IntSets
+	IsKindEnabled(string) bool
 	IsLangDisabled(string) bool
 	SummaryLength() int
 	Pagination() Pagination
@@ -58,10 +64,11 @@ type AllProvider interface {
 	BuildDrafts() bool
 	Running() bool
 	Watching() bool
-	NewIdentityManager(name string, opts ...identity.ManagerOption) identity.Manager
+	NewIdentityManager(opts ...identity.ManagerOption) identity.Manager
 	FastRenderMode() bool
 	PrintUnusedTemplates() bool
 	EnableMissingTranslationPlaceholders() bool
+	IgnoreTailwindCSSSecurityError() bool
 	TemplateMetrics() bool
 	TemplateMetricsHints() bool
 	PrintI18nWarnings() bool
@@ -73,6 +80,8 @@ type AllProvider interface {
 	IgnoredLogs() map[string]bool
 	WorkingDir() string
 	EnableEmoji() bool
+	ConfiguredDimensions() *sitesmatrix.ConfiguredDimensions
+	CacheDirMisc() string
 }
 
 // We cannot import the media package as that would create a circular dependency.
@@ -89,7 +98,7 @@ type Provider interface {
 	GetString(key string) string
 	GetInt(key string) int
 	GetBool(key string) bool
-	GetParams(key string) maps.Params
+	GetParams(key string) hmaps.Params
 	GetStringMap(key string) map[string]any
 	GetStringMapString(key string) map[string]string
 	GetStringSlice(key string) []string
@@ -97,9 +106,9 @@ type Provider interface {
 	Set(key string, value any)
 	Keys() []string
 	Merge(key string, value any)
-	SetDefaults(params maps.Params)
+	SetDefaults(params hmaps.Params)
 	SetDefaultMergeStrategy()
-	WalkParams(walkFn func(params ...maps.KeyParams) bool)
+	WalkParams(walkFn func(params ...hmaps.KeyParams) bool)
 	IsSet(key string) bool
 }
 
@@ -110,3 +119,6 @@ func GetStringSlicePreserveString(cfg Provider, key string) []string {
 	sd := cfg.Get(key)
 	return types.ToStringSlicePreserveString(sd)
 }
+
+/*func (cd ConfiguredDimensions) Language(v sitesmatrix.Vector) ConfiguredDimension {
+}*/

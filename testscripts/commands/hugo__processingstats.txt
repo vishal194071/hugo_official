@@ -30,18 +30,18 @@ defaultLanguageInSubdir = true
 baseURL = "https://example.com/"
 [languages]
     [languages.en]
-        languageName = "English"
+        label = "English"
         weight = 1
         title = "English Title"
         contentDir = "content/en"
     [languages.fr]
-        languageName = "French"
+        label = "French"
         weight = 2
         title = "French Title"
         contentDir = "content/fr"
--- layouts/index.html --
+-- layouts/home.html --
 Home.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 {{ range .Resources }}
 {{ $img := .Resize "3x" }}

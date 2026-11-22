@@ -6,72 +6,54 @@ categories: []
 keywords: []
 ---
 
-You can configure your site to cascade front matter values to the home page and any of its descendants. However, this cascading will be prevented if the descendant already defines the field, or if a closer ancestor [node](g) has already cascaded a value for the same field through its front matter's `cascade` key.
+{{% glossary-term "cascade" %}}
 
-> [!note]
-> You can also configure cascading behavior within a page's front matter. See&nbsp;[details].
+Use the `cascade` configuration to pass values down to pages. Hugo supports two forms: a map form for a single cascade, and an array form for applying different values to different subsets of pages. Both forms support the [`target`](#target) key.
 
-For example, to cascade a "color" parameter to the home page and all its descendants:
+> [!NOTE]
+> You can also configure cascading behavior within a page's front matter. See [details][].
+
+## Map form
+
+Define a single cascade map. For example, this configuration cascades the `color` page parameter to all pages:
 
 {{< code-toggle file=hugo >}}
-title = 'Home'
 [cascade.params]
 color = 'red'
 {{< /code-toggle >}}
 
+## Array form
+
+Define an array of cascade maps to apply different values to different subsets of pages. For example, this configuration cascades a different `color` page parameter to each of the `articles` and `tutorials` sections and their descendants:
+
+{{< code-toggle file=hugo >}}
+[[cascade]]
+[cascade.params]
+color = 'red'
+[cascade.target]
+path = '{/articles,/articles/**}'
+[[cascade]]
+[cascade.params]
+color = 'blue'
+[cascade.target]
+path = '{/tutorials,/tutorials/**}'
+{{< /code-toggle >}}
+
 ## Target
 
-<!-- TODO
-Update the <version> and <date> below when we actually get around to deprecating _target.
+In both the map form and the array form, the optional `target` key accepts a [page matcher](g) to limit cascaded values to a subset of pages. If you omit `target`, values cascade to all pages.
 
-We deprecated the `_target` front matter key in favor of `target` in <version> on <date>. Remove footnote #1 on or after 2026-03-10 (15 months after deprecation).
--->
+{{% include "/_common/configuration/page-matcher.md" %}}
 
-The `target`[^1] keyword allows you to target specific pages or [environments](g). For example, to cascade a "color" parameter to pages within the "articles" section, including the "articles" section page itself:
-
-[^1]: The `_target` alias for `target` is deprecated and will be removed in a future release.
+For example, this configuration cascades the `color` page parameter to the `articles` section and its descendants, but only for the English (`en`) and German (`de`) language sites:
 
 {{< code-toggle file=hugo >}}
 [cascade.params]
 color = 'red'
 [cascade.target]
 path = '{/articles,/articles/**}'
-{{< /code-toggle >}}
-
-Use any combination of these keywords to target pages and/or environments:
-
-environment
-: (`string`) A [glob](g) pattern matching the build [environment](g). For example: `{staging,production}`.
-
-kind
-: (`string`) A [glob](g) pattern matching the [page kind](g). For example: `{taxonomy,term}`.
-
-lang
-: (`string`) A [glob](g) pattern matching the [page language]. For example: `{en,de}`.
-
-path
-: (`string`) A [glob](g) pattern matching the page's [logical path](g). For example: `{/books,/books/**}`.
-
-## Array
-
-Define an array of cascade parameters to apply different values to different targets. For example:
-
-{{< code-toggle file=hugo >}}
-[[cascade]]
-[cascade.params]
-color = 'red'
-[cascade.target]
-path = '{/books/**}'
-kind = 'page'
-lang = '{en,de}'
-[[cascade]]
-[cascade.params]
-color = 'blue'
-[cascade.target]
-path = '{/films/**}'
-kind = 'page'
-environment = 'production'
+[cascade.target.sites.matrix]
+languages = '{en,de}'
 {{< /code-toggle >}}
 
 [details]: /content-management/front-matter/#cascade-1
-[page language]: /methods/page/language/

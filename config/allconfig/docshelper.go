@@ -14,12 +14,12 @@
 package allconfig
 
 import (
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/docshelper"
 )
 
-// This is is just some helpers used to create some JSON used in the Hugo docs.
+// This is just a helper used to create some JSON used in the Hugo docs.
 func init() {
 	docsProvider := func() docshelper.DocProvider {
 		cfg := config.New()
@@ -27,12 +27,12 @@ func init() {
 			if v.internalOrDeprecated {
 				continue
 			}
-			cfg.Set(configRoot, make(maps.Params))
+			cfg.Set(configRoot, make(hmaps.Params))
 		}
-		lang := maps.Params{
-			"en": maps.Params{
-				"menus":  maps.Params{},
-				"params": maps.Params{},
+		lang := hmaps.Params{
+			"en": hmaps.Params{
+				"menus":  hmaps.Params{},
+				"params": hmaps.Params{},
 			},
 		}
 		cfg.Set("languages", lang)

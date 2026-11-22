@@ -14,6 +14,7 @@
 package pagemeta_test
 
 import (
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,6 @@ import (
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/testconfig"
 	"github.com/gohugoio/hugo/media"
-	"github.com/gohugoio/hugo/output"
 
 	"github.com/gohugoio/hugo/resources/page/pagemeta"
 
@@ -31,7 +31,10 @@ import (
 
 func newTestFd() *pagemeta.FrontMatterDescriptor {
 	return &pagemeta.FrontMatterDescriptor{
-		PageConfig: &pagemeta.PageConfig{
+		PageConfigEarly: &pagemeta.PageConfigEarly{
+			Frontmatter: make(map[string]any),
+		},
+		PageConfigLate: &pagemeta.PageConfigLate{
 			Params: make(map[string]any),
 		},
 		Location: time.UTC,
@@ -107,16 +110,16 @@ func TestFrontMatterDatesHandlers(t *testing.T) {
 		case ":git":
 			d.GitAuthorDate = d1
 		}
-		d.PageConfig.Params["date"] = d2
+		d.PageConfigEarly.Frontmatter["date"] = d2
 		c.Assert(handler.HandleDates(d), qt.IsNil)
-		c.Assert(d.PageConfig.Dates.Date, qt.Equals, d1)
-		c.Assert(d.PageConfig.Params["date"], qt.Equals, d2)
+		c.Assert(d.PageConfigLate.Dates.Date, qt.Equals, d1)
+		c.Assert(d.PageConfigLate.Params["date"], qt.Equals, d2)
 
 		d = newTestFd()
-		d.PageConfig.Params["date"] = d2
+		d.PageConfigEarly.Frontmatter["date"] = d2
 		c.Assert(handler.HandleDates(d), qt.IsNil)
-		c.Assert(d.PageConfig.Dates.Date, qt.Equals, d2)
-		c.Assert(d.PageConfig.Params["date"], qt.Equals, d2)
+		c.Assert(d.PageConfigLate.Dates.Date, qt.Equals, d2)
+		c.Assert(d.PageConfigLate.Params["date"], qt.Equals, d2)
 
 	}
 }
@@ -139,17 +142,50 @@ func TestFrontMatterDatesDefaultKeyword(t *testing.T) {
 
 	testDate, _ := time.Parse("2006-01-02", "2018-02-01")
 	d := newTestFd()
-	d.PageConfig.Params["mydate"] = testDate
-	d.PageConfig.Params["date"] = testDate.Add(1 * 24 * time.Hour)
-	d.PageConfig.Params["mypubdate"] = testDate.Add(2 * 24 * time.Hour)
-	d.PageConfig.Params["publishdate"] = testDate.Add(3 * 24 * time.Hour)
+	d.PageConfigEarly.Frontmatter["mydate"] = testDate
+	d.PageConfigEarly.Frontmatter["date"] = testDate.Add(1 * 24 * time.Hour)
+	d.PageConfigEarly.Frontmatter["mypubdate"] = testDate.Add(2 * 24 * time.Hour)
+	d.PageConfigEarly.Frontmatter["publishdate"] = testDate.Add(3 * 24 * time.Hour)
 
 	c.Assert(handler.HandleDates(d), qt.IsNil)
 
-	c.Assert(d.PageConfig.Dates.Date.Day(), qt.Equals, 1)
-	c.Assert(d.PageConfig.Dates.Lastmod.Day(), qt.Equals, 2)
-	c.Assert(d.PageConfig.Dates.PublishDate.Day(), qt.Equals, 4)
-	c.Assert(d.PageConfig.Dates.ExpiryDate.IsZero(), qt.Equals, true)
+	c.Assert(d.PageConfigLate.Dates.Date.Day(), qt.Equals, 1)
+	c.Assert(d.PageConfigLate.Dates.Lastmod.Day(), qt.Equals, 2)
+	c.Assert(d.PageConfigLate.Dates.PublishDate.Day(), qt.Equals, 4)
+	c.Assert(d.PageConfigLate.Dates.ExpiryDate.IsZero(), qt.Equals, true)
+}
+
+// Issue 14684
+// Each call to the opener must return an independent reader. With the old
+// implementation, opener() returned the same shared reader seeked to 0, so a
+// second open would reset the position of a reader already in use.
+func TestSourceValueAsOpenReadSeekCloserIsIndependent(t *testing.T) {
+	c := qt.New(t)
+	s := pagemeta.Source{Value: "abcdefgh"}
+	opener := s.ValueAsOpenReadSeekCloser()
+
+	r1, err := opener()
+	c.Assert(err, qt.IsNil)
+	defer r1.Close()
+
+	// Partially consume r1.
+	buf := make([]byte, 4)
+	_, err = io.ReadFull(r1, buf)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(buf), qt.Equals, "abcd")
+
+	// Open a second reader and fully consume it.
+	r2, err := opener()
+	c.Assert(err, qt.IsNil)
+	defer r2.Close()
+	all, err := io.ReadAll(r2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(all), qt.Equals, "abcdefgh")
+
+	// r1's position must be unaffected; it should yield the remaining half.
+	rest, err := io.ReadAll(r1)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(rest), qt.Equals, "efgh")
 }
 
 func TestContentMediaTypeFromMarkup(t *testing.T) {
@@ -174,9 +210,9 @@ func TestContentMediaTypeFromMarkup(t *testing.T) {
 		{"pdc", "text/pandoc"},
 		{"rst", "text/rst"},
 	} {
-		var pc pagemeta.PageConfig
+		var pc pagemeta.PageConfigEarly
 		pc.Content.Markup = test.in
-		c.Assert(pc.Compile("", logger, output.DefaultFormats, media.DefaultTypes), qt.IsNil)
+		c.Assert(pc.CompileForPagesFromDataPre("", logger, media.DefaultTypes), qt.IsNil)
 		c.Assert(pc.ContentMediaType.Type, qt.Equals, test.expected)
 	}
 }

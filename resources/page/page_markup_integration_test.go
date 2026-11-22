@@ -14,6 +14,8 @@
 package page_test
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gohugoio/hugo/hugolib"
@@ -33,7 +35,7 @@ title: "Post 1"
 date: "2020-01-01"
 ---
 {{% foo %}}
--- layouts/shortcodes/foo.html --
+-- layouts/_shortcodes/foo.html --
 Two *words*.
 {{/* Test that markup scope is set in all relevant constructs. */}}
 {{ if eq hugo.Context.MarkupScope "foo" }}
@@ -43,10 +45,10 @@ Sint ad mollit qui Lorem ut occaecat culpa officia. Et consectetur aute voluptat
 ### Heading 2
 Exercitation quis est consectetur occaecat nostrud. Ullamco aute mollit aliqua est amet. Exercitation ullamco consectetur dolor labore et non irure eu cillum Lorem.
 {{ end }}
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ .Content }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 Page.ContentWithoutSummmary: {{ .ContentWithoutSummary }}|
 {{ template "render-scope" (dict "page" . "scope" "main") }}
@@ -132,28 +134,28 @@ date: "2020-01-03"
 
 {{< foo >}}
 
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ with site.GetPage "p1" }}
 	{{ with .Markup "home" }}
 	 	{{ .Render.Content }}
 	{{ end }}
 {{ end }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 {{ with .Markup  }}
 	{{ with .Render }}
 	 	{{ .Content }}
 	{{ end }}
 {{ end }}
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 Render heading: title: {{ .Text}} scope: {{ hugo.Context.MarkupScope }}|
--- layouts/shortcodes/foo.html --
+-- layouts/_shortcodes/foo.html --
 Foo scope: {{ hugo.Context.MarkupScope }}|
--- layouts/shortcodes/includerendershortcodes.html --
+-- layouts/_shortcodes/includerendershortcodes.html --
 {{ $p := site.GetPage (.Get 0) }}
 includerendershortcodes: {{ hugo.Context.MarkupScope }}|{{ $p.Markup.RenderShortcodes }}|
--- layouts/shortcodes/includecontent.html --
+-- layouts/_shortcodes/includecontent.html --
 {{ $p := site.GetPage (.Get 0) }}
 includecontent: {{ hugo.Context.MarkupScope }}|{{ $p.Markup.Render.Content }}|
 
@@ -202,7 +204,7 @@ date: "2020-01-01"
 summary: "This is summary in front matter."
 ---
 This is content.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 Page.Summary: {{ .Summary }}|
 {{ with .Markup.Render }}
@@ -263,7 +265,7 @@ Another paragraph.
 This is summary.
 <!--more-->
 This is content.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 Page.Summary: {{ .Summary }}|
 {{ with .Markup.Render }}
@@ -295,10 +297,10 @@ Summary Truncated: {{ .Truncated }}|
 	)
 }
 
-func TestPageMarkupWithoutSummaryAsciidoc(t *testing.T) {
+func TestPageMarkupWithoutSummaryAsciiDoc(t *testing.T) {
 	t.Parallel()
-	if !asciidocext.Supports() {
-		t.Skip("Skip asiidoc test as not supported")
+	if ok, err := asciidocext.Supports(); !ok {
+		t.Skip(err)
 	}
 
 	files := `
@@ -315,7 +317,7 @@ Another paragraph.
 This is summary.
 <!--more-->
 This is content.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 Page.Summary: {{ .Summary }}|
 {{ with .Markup.Render }}
@@ -346,4 +348,75 @@ Summary Truncated: {{ .Truncated }}|
 		"ContentWithoutSummary: <div class=\"paragraph\">\n<p>This is content.</p>\n</div>|",
 		"Summary: <div class=\"paragraph\">\n<p>This is summary.</p>\n</div>|\nSummary Type: manual|\nSummary Truncated: true|",
 	)
+}
+
+func TestIssue13967(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','rss','section','sitemap','taxonomy','term']
+-- layouts/all.html --
+Title: {{ .Title }}|Summary: {{ .Summary }}|Truncated: {{ .Truncated }}|
+-- content/p1.md --
+---
+title: p1
+---
+<!--more--> one two three
+-- content/p2.md --
+---
+title: p2
+---
+one <!--more--> two three
+-- content/p3.md --
+---
+title: p3
+---
+one two <!--more--> three
+-- content/p4.md --
+---
+title: p4
+---
+one two three <!--more-->
+`
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/p1/index.html", `Title: p1|Summary: |Truncated: true|`)
+	b.AssertFileContent("public/p2/index.html", `Title: p2|Summary: <p>one</p>|Truncated: true|`)
+	b.AssertFileContent("public/p3/index.html", `Title: p3|Summary: <p>one two</p>|Truncated: true|`)
+	b.AssertFileContent("public/p4/index.html", `Title: p4|Summary: <p>one two three</p>|Truncated: false|`)
+}
+
+func TestIssue13968(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+summaryLength = SUMMARY_LENGTH
+-- layouts/all.html --
+Title: {{ .Title }}|Summary: {{ .Summary }}|Truncated: {{ .Truncated }}|
+-- content/_index.md --
+---
+title: home
+---
+one two three
+`
+
+	tests := []struct {
+		summaryLength int
+		want          string
+	}{
+		{0, "Title: home|Summary: |Truncated: true|"},
+		{1, "Title: home|Summary: <p>one two three</p>|Truncated: false|"},
+		{2, "Title: home|Summary: <p>one two three</p>|Truncated: false|"},
+		{3, "Title: home|Summary: <p>one two three</p>|Truncated: false|"},
+		{4, "Title: home|Summary: <p>one two three</p>|Truncated: false|"},
+	}
+
+	for _, tt := range tests {
+		f := strings.ReplaceAll(files, "SUMMARY_LENGTH", strconv.Itoa(tt.summaryLength))
+		b := hugolib.Test(t, f)
+		b.AssertFileContent("public/index.html", tt.want)
+	}
 }

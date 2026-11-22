@@ -18,7 +18,7 @@ import (
 	"image/color"
 	"image/draw"
 
-	"github.com/disintegration/gift"
+	"github.com/gohugoio/gift"
 )
 
 var _ gift.Filter = (*opacityFilter)(nil)

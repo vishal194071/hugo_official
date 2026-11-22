@@ -42,7 +42,10 @@ Doc2
 
 	b := Test(t, files)
 
-	b.AssertFileContent("public/sitemap.xml", " <loc>https://example.com/sect/doc1/</loc>", "doc2")
+	b.AssertFileContentStartsWith("public/sitemap.xml", `<?xml`) // Issue 14977
+	b.AssertFileContent("public/sitemap.xml",
+		"<loc>https://example.com/sect/doc1/</loc>", "doc2",
+	)
 }
 
 func TestSitemapMultilingual(t *testing.T) {
@@ -56,10 +59,10 @@ defaultContentLanguage = "en"
 [languages]
 [languages.en]
 weight = 1
-languageName = "English"
+label = "English"
 [languages.nn]
 weight = 2
-languageName = "Nynorsk"
+label = "Nynorsk"
 -- content/sect/doc1.md --
 ---
 title: doc1
@@ -80,8 +83,8 @@ Doc2
 	b := Test(t, files)
 
 	b.AssertFileContent("public/sitemap.xml", "<loc>https://example.com/en/sitemap.xml</loc>", "<loc>https://example.com/nn/sitemap.xml</loc>")
-	b.AssertFileContent("public/en/sitemap.xml", " <loc>https://example.com/sect/doc1/</loc>", "doc2")
-	b.AssertFileContent("public/nn/sitemap.xml", " <loc>https://example.com/nn/sect/doc2/</loc>")
+	b.AssertFileContent("public/en/sitemap.xml", " <loc>https://example.com/sect/doc1/</loc>", "doc2", `hreflang="en"`, `hreflang="nn"`)
+	b.AssertFileContent("public/nn/sitemap.xml", " <loc>https://example.com/nn/sect/doc2/</loc>", `hreflang="en"`, `hreflang="nn"`)
 }
 
 // https://github.com/gohugoio/hugo/issues/5910
@@ -136,7 +139,7 @@ disableKinds = ["term", "taxonomy"]
 [languages]
 [languages.en]
 weight = 1
-languageName = "English"
+label = "English"
 [languages.nn]
 weight = 2
 -- layouts/list.xml --
@@ -157,7 +160,7 @@ func TestSitemapAndContentBundleNamedSitemap(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['home','rss','section','taxonomy','term']
--- layouts/_default/single.html --
+-- layouts/single.html --
 layouts/_default/single.html
 -- layouts/sitemap/single.html --
 layouts/sitemap/single.html

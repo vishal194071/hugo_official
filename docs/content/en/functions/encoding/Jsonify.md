@@ -1,6 +1,6 @@
 ---
 title: encoding.Jsonify
-description: Encodes the given object to JSON.
+description: Returns the given object encoded to JSON.
 categories: []
 keywords: []
 params:
@@ -8,8 +8,9 @@ params:
     aliases: [jsonify]
     returnType: template.HTML
     signatures: ['encoding.Jsonify [OPTIONS] INPUT']
-aliases: [/functions/jsonify]
 ---
+
+## Usage
 
 To customize the printing of the JSON, pass an options map as the first
 argument. Supported options are "prefix" and "indent". Each JSON element in
@@ -24,11 +25,13 @@ more copies of _indent_ according to the indentation nesting.
 
 ## Options
 
-indent
+The `encoding.Jsonify` function accepts an options map.
+
+`indent`
 : (`string`) Indentation to use. Default is "".
 
-prefix
+`prefix`
 : (`string`) Indentation prefix. Default is "".
 
-noHTMLEscape
+`noHTMLEscape`
 : (`bool`) Whether to disable escaping of problematic HTML characters inside JSON quoted strings. The default behavior is to escape `&`, `<`, and `>` to `\u0026`, `\u003c`, and `\u003e` to avoid certain safety problems that can arise when embedding JSON in HTML. Default is `false`.

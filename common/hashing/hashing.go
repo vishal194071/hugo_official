@@ -18,11 +18,13 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"io"
+	"reflect"
 	"strconv"
 	"sync"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/gohugoio/hashstructure"
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/identity"
 )
 
@@ -36,6 +38,34 @@ func XXHashFromReader(r io.Reader) (uint64, int64, error) {
 		return 0, 0, err
 	}
 	return h.Sum64(), size, nil
+}
+
+type Hasher interface {
+	io.StringWriter
+	io.Writer
+	io.ReaderFrom
+	Sum64() uint64
+}
+
+type HashCloser interface {
+	Hasher
+	io.Closer
+}
+
+// XxHasher returns a Hasher that uses xxHash.
+// Remember to call Close when done.
+func XxHasher() HashCloser {
+	h := getXxHashReadFrom()
+	return struct {
+		Hasher
+		io.Closer
+	}{
+		Hasher: h,
+		Closer: hugio.CloserFunc(func() error {
+			putXxHashReadFrom(h)
+			return nil
+		}),
+	}
 }
 
 // XxHashFromReaderHexEncoded calculates the xxHash for the given reader
@@ -58,11 +88,13 @@ func XXHashFromString(s string) (uint64, error) {
 	return h.Sum64(), nil
 }
 
-// XxHashFromStringHexEncoded calculates the xxHash for the given string
+// XxHashFromStringHexEncoded calculates the xxHash for the given strings
 // and returns the hash as a hex encoded string.
-func XxHashFromStringHexEncoded(f string) string {
+func XxHashFromStringHexEncoded(s ...string) string {
 	h := xxhash.New()
-	h.WriteString(f)
+	for _, f := range s {
+		h.WriteString(f)
+	}
 	hash := h.Sum(nil)
 	return hex.EncodeToString(hash)
 }
@@ -71,6 +103,16 @@ func XxHashFromStringHexEncoded(f string) string {
 func MD5FromStringHexEncoded(f string) string {
 	h := md5.New()
 	h.Write([]byte(f))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// MD5FromReaderHexEncoded returns the MD5 hash of the given reader.
+func MD5FromReaderHexEncoded(r io.Reader) string {
+	h := md5.New()
+	_, err := io.Copy(h, r)
+	if err != nil {
+		return ""
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -93,9 +135,36 @@ func HashStringHex(vs ...any) string {
 var hashOptsPool = sync.Pool{
 	New: func() any {
 		return &hashstructure.HashOptions{
-			Hasher: xxhash.New(),
+			Hasher:     xxhash.New(),
+			UnwrapFunc: unwrapForHashing,
 		}
 	},
+}
+
+// hashstructure only sees exported struct fields, so rewrite known identity types before hashing,
+// e.g. a Resource or Page nested in an options map hashes by its Key.
+func unwrapForHashing(v reflect.Value) (reflect.Value, error) {
+	if v.Kind() != reflect.Struct {
+		return v, nil
+	}
+	var in any
+	if v.CanAddr() {
+		// The common case; pointer receiver methods on a struct
+		// reached through a pointer.
+		in = v.Addr().Interface()
+	} else {
+		in = v.Interface()
+	}
+	switch t := in.(type) {
+	case hashstructure.Hashable:
+		// Let hashstructure handle it.
+		return v, nil
+	case keyer:
+		return reflect.ValueOf(t.Key()), nil
+	case identity.IdentityProvider:
+		return reflect.ValueOf(t.GetIdentity()), nil
+	}
+	return v, nil
 }
 
 func getHashOpts() *hashstructure.HashOptions {
@@ -114,15 +183,10 @@ func putHashOpts(opts *hashstructure.HashOptions) {
 func HashUint64(vs ...any) uint64 {
 	var o any
 	if len(vs) == 1 {
-		o = toHashable(vs[0])
+		o = vs[0]
 	} else {
-		elements := make([]any, len(vs))
-		for i, e := range vs {
-			elements[i] = toHashable(e)
-		}
-		o = elements
+		o = vs
 	}
-
 	hash, err := Hash(o)
 	if err != nil {
 		panic(err)
@@ -143,19 +207,6 @@ func Hash(vs ...any) (uint64, error) {
 
 type keyer interface {
 	Key() string
-}
-
-// For structs, hashstructure.Hash only works on the exported fields,
-// so rewrite the input slice for known identity types.
-func toHashable(v any) any {
-	switch t := v.(type) {
-	case keyer:
-		return t.Key()
-	case identity.IdentityProvider:
-		return t.GetIdentity()
-	default:
-		return v
-	}
 }
 
 type xxhashReadFrom struct {

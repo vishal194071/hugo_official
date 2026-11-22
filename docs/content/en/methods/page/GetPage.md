@@ -7,20 +7,17 @@ params:
   functions_and_methods:
     returnType: page.Page
     signatures: [PAGE.GetPage PATH]
-aliases: [/functions/getpage]
 ---
 
-The `GetPage` method is also available on a `Site` object. See&nbsp;[details].
-
-[details]: /methods/site/getpage/
+The `GetPage` method is also available on a `Site` object. See [details][].
 
 When using the `GetPage` method on the `Page` object, specify a path relative to the current directory or relative to the `content` directory.
 
-If Hugo cannot resolve the path to a page, the method returns nil. If the path is ambiguous, Hugo throws an error and fails the build.
+If Hugo cannot resolve the path to a page, the method returns `nil`. If the path is ambiguous, Hugo throws an error and fails the build.
 
 Consider this content structure:
 
-```text
+```tree
 content/
 ├── works/
 │   ├── paintings/
@@ -62,3 +59,5 @@ The examples below depict the result of rendering `works/paintings/the-mona-lisa
   {{ .Title }} → David
 {{ end }}
 ```
+
+[details]: /methods/site/getpage/

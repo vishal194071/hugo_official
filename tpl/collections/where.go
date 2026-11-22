@@ -20,14 +20,16 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/hreflect"
 	"github.com/gohugoio/hugo/common/hstrings"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/compare"
+	"github.com/gohugoio/hugo/resources/page"
 )
 
 // Where returns a filtered subset of collection c.
 func (ns *Namespace) Where(ctx context.Context, c, key any, args ...any) (any, error) {
-	seqv, isNil := indirect(reflect.ValueOf(c))
+	seqv, isNil := hreflect.Indirect(reflect.ValueOf(c))
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value of type " + reflect.ValueOf(c).Type().String())
 	}
@@ -56,12 +58,12 @@ func (ns *Namespace) Where(ctx context.Context, c, key any, args ...any) (any, e
 }
 
 func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error) {
-	v, vIsNil := indirect(v)
+	v, vIsNil := hreflect.Indirect(v)
 	if !v.IsValid() {
 		vIsNil = true
 	}
 
-	mv, mvIsNil := indirect(mv)
+	mv, mvIsNil := hreflect.Indirect(mv)
 	if !mv.IsValid() {
 		mvIsNil = true
 	}
@@ -85,31 +87,34 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 		return false, nil
 	}
 
+	switch op {
+	case "", "=", "==", "eq", "!=", "<>", "ne":
+		if eq, ok := tryEq(v, mv); ok {
+			if op == "!=" || op == "<>" || op == "ne" {
+				return !eq, nil
+			}
+			return eq, nil
+		}
+	}
+
 	var ivp, imvp *int64
-	var fvp, fmvp *float64
 	var svp, smvp *string
 	var slv, slmv any
+	var nv, nmv any
 	var ima []int64
-	var fma []float64
 	var sma []string
 
-	if mv.Kind() == v.Kind() {
+	if c, ok := hreflect.CompareNumbers(v, mv); ok {
+		// Feed the result through the int64 comparisons below.
+		iv, imv := int64(c), int64(0)
+		ivp, imvp = &iv, &imv
+	} else if mv.Kind() == v.Kind() {
 		switch v.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			iv := v.Int()
-			ivp = &iv
-			imv := mv.Int()
-			imvp = &imv
 		case reflect.String:
 			sv := v.String()
 			svp = &sv
 			smv := mv.String()
 			smvp = &smv
-		case reflect.Float64:
-			fv := v.Float()
-			fvp = &fv
-			fmv := mv.Float()
-			fmvp = &fmv
 		case reflect.Struct:
 			if hreflect.IsTime(v.Type()) {
 				iv := ns.toTimeUnix(v)
@@ -121,17 +126,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			slv = v.Interface()
 			slmv = mv.Interface()
 		}
-	} else if isNumber(v.Kind()) && isNumber(mv.Kind()) {
-		fv, err := toFloat(v)
-		if err != nil {
-			return false, err
-		}
-		fvp = &fv
-		fmv, err := toFloat(mv)
-		if err != nil {
-			return false, err
-		}
-		fmvp = &fmv
 	} else {
 		if mv.Kind() != reflect.Array && mv.Kind() != reflect.Slice {
 			return false, nil
@@ -144,43 +138,27 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return false, nil
 		}
 
-		if v.Kind() != reflect.Interface && mv.Type().Elem().Kind() != reflect.Interface && mv.Type().Elem() != v.Type() && v.Kind() != reflect.Array && v.Kind() != reflect.Slice {
-			return false, nil
-		}
-		switch v.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			iv := v.Int()
-			ivp = &iv
-			for i := range mv.Len() {
-				if anInt, err := toInt(mv.Index(i)); err == nil {
-					ima = append(ima, anInt)
-				}
-			}
-		case reflect.String:
+		switch {
+		case hreflect.IsNumber(v.Kind()):
+			nv = v.Interface()
+			nmv = mv.Interface()
+		case v.Kind() == reflect.String:
 			sv := v.String()
 			svp = &sv
 			for i := range mv.Len() {
-				if aString, err := toString(mv.Index(i)); err == nil {
+				if aString, err := hreflect.ToStringE(mv.Index(i)); err == nil {
 					sma = append(sma, aString)
 				}
 			}
-		case reflect.Float64:
-			fv := v.Float()
-			fvp = &fv
+		case hreflect.IsTime(v.Type()):
+			iv := ns.toTimeUnix(v)
+			ivp = &iv
 			for i := range mv.Len() {
-				if aFloat, err := toFloat(mv.Index(i)); err == nil {
-					fma = append(fma, aFloat)
+				if t, ok := hreflect.AsTime(mv.Index(i), ns.loc); ok {
+					ima = append(ima, t.Unix())
 				}
 			}
-		case reflect.Struct:
-			if hreflect.IsTime(v.Type()) {
-				iv := ns.toTimeUnix(v)
-				ivp = &iv
-				for i := range mv.Len() {
-					ima = append(ima, ns.toTimeUnix(mv.Index(i)))
-				}
-			}
-		case reflect.Array, reflect.Slice:
+		case v.Kind() == reflect.Array, v.Kind() == reflect.Slice:
 			slv = v.Interface()
 			slmv = mv.Interface()
 		}
@@ -193,8 +171,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp == *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp == *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp == *fmvp, nil
 		}
 	case "!=", "<>", "ne":
 		switch {
@@ -202,8 +178,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp != *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp != *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp != *fmvp, nil
 		}
 	case ">=", "ge":
 		switch {
@@ -211,8 +185,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp >= *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp >= *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp >= *fmvp, nil
 		}
 	case ">", "gt":
 		switch {
@@ -220,8 +192,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp > *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp > *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp > *fmvp, nil
 		}
 	case "<=", "le":
 		switch {
@@ -229,8 +199,6 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp <= *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp <= *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp <= *fmvp, nil
 		}
 	case "<", "lt":
 		switch {
@@ -238,16 +206,14 @@ func (ns *Namespace) checkCondition(v, mv reflect.Value, op string) (bool, error
 			return *ivp < *imvp, nil
 		case svp != nil && smvp != nil:
 			return *svp < *smvp, nil
-		case fvp != nil && fmvp != nil:
-			return *fvp < *fmvp, nil
 		}
 	case "in", "not in":
 		var r bool
 		switch {
+		case nv != nil:
+			r, _ = ns.In(nmv, nv)
 		case ivp != nil && len(ima) > 0:
 			r, _ = ns.In(ima, *ivp)
-		case fvp != nil && len(fma) > 0:
-			r, _ = ns.In(fma, *fvp)
 		case svp != nil:
 			if len(sma) > 0 {
 				r, _ = ns.In(sma, *svp)
@@ -299,32 +265,24 @@ func evaluateSubElem(ctx, obj reflect.Value, elemName string) (reflect.Value, er
 	}
 
 	typ := obj.Type()
-	obj, isNil := indirect(obj)
-
-	if obj.Kind() == reflect.Interface {
-		// If obj is an interface, we need to inspect the value it contains
-		// to see the full set of methods and fields.
-		// Indirect returns the value that it points to, which is what's needed
-		// below to be able to reflect on its fields.
-		obj = reflect.Indirect(obj.Elem())
-	}
+	obj, isNil := hreflect.Indirect(obj)
 
 	// first, check whether obj has a method. In this case, obj is
 	// a struct or its pointer. If obj is a struct,
 	// to check all T and *T method, use obj pointer type Value
 	objPtr := obj
-	if objPtr.Kind() != reflect.Interface && objPtr.CanAddr() {
+	if !hreflect.IsInterfaceOrPointer(objPtr.Kind()) && objPtr.CanAddr() {
 		objPtr = objPtr.Addr()
 	}
 
-	index := hreflect.GetMethodIndexByName(objPtr.Type(), elemName)
-	if index != -1 {
-		var args []reflect.Value
-		mt := objPtr.Type().Method(index)
+	mt := hreflect.GetMethodByNameForType(objPtr.Type(), elemName)
+	if mt.Func.IsValid() {
+		// Receiver is the first argument.
+		args := []reflect.Value{objPtr}
 		num := mt.Type.NumIn()
 		maxNumIn := 1
 		if num > 1 && hreflect.IsContextType(mt.Type.In(1)) {
-			args = []reflect.Value{ctx}
+			args = append(args, ctx)
 			maxNumIn = 2
 		}
 
@@ -342,7 +300,7 @@ func evaluateSubElem(ctx, obj reflect.Value, elemName string) (reflect.Value, er
 		case mt.Type.NumOut() == 2 && !mt.Type.Out(1).Implements(errorType):
 			return zero, fmt.Errorf("%s is a method of type %s returning two values but the second value is not an error type", elemName, typ)
 		}
-		res := objPtr.Method(mt.Index).Call(args)
+		res := mt.Func.Call(args)
 		if len(res) == 2 && !res[1].IsNil() {
 			return zero, fmt.Errorf("error at calling a method %s of type %s: %s", elemName, typ, res[1].Interface().(error))
 		}
@@ -355,6 +313,7 @@ func evaluateSubElem(ctx, obj reflect.Value, elemName string) (reflect.Value, er
 	if isNil {
 		return zero, fmt.Errorf("can't evaluate a nil pointer of type %s by a struct field or map key name %s", typ, elemName)
 	}
+	obj = reflect.Indirect(obj)
 	switch obj.Kind() {
 	case reflect.Struct:
 		ft, ok := obj.Type().FieldByName(elemName)
@@ -395,17 +354,224 @@ func parseWhereArgs(args ...any) (mv reflect.Value, op string, err error) {
 	return
 }
 
+// elemResolver resolves a sub-element from a reflect.Value.
+// Built once before the loop to avoid repeated type checks and reflect.ValueOf allocations.
+type elemResolver func(reflect.Value) (reflect.Value, error)
+
+// newElemResolver returns a resolver optimized for the given element type and path.
+// Returns nil if optimization isn't possible, in which case the caller should
+// fall back to evaluateSubElem.
+func (ns *Namespace) newElemResolver(ctxv reflect.Value, elemType reflect.Type, path []string) elemResolver {
+	if elemType.Kind() == reflect.Interface {
+		if len(path) != 1 {
+			return nil
+		}
+		return ns.newInterfaceMethodResolver(ctxv, elemType, path[0])
+	}
+
+	baseType := elemType
+	isPtr := baseType.Kind() == reflect.Pointer
+	if isPtr {
+		baseType = baseType.Elem()
+	}
+
+	if baseType == reflect.TypeFor[hmaps.Params]() {
+		return func(v reflect.Value) (reflect.Value, error) {
+			if isPtr {
+				if v.IsNil() {
+					return zero, nil
+				}
+				v = v.Elem()
+			}
+			params := v.Interface().(hmaps.Params)
+			return reflect.ValueOf(params.GetNested(path...)), nil
+		}
+	}
+
+	if len(path) != 1 {
+		return nil
+	}
+	name := path[0]
+
+	// Check for method first, matching evaluateSubElem order.
+	ptrType := baseType
+	if !hreflect.IsInterfaceOrPointer(ptrType.Kind()) {
+		ptrType = reflect.PointerTo(baseType)
+	}
+	mt := hreflect.GetMethodByNameForType(ptrType, name)
+	if mt.Func.IsValid() {
+		return ns.newMethodResolver(ctxv, elemType, mt)
+	}
+
+	switch baseType.Kind() {
+	case reflect.Map:
+		if baseType.Key().Kind() == reflect.String {
+			kv := reflect.ValueOf(name)
+			return func(v reflect.Value) (reflect.Value, error) {
+				if isPtr {
+					if v.IsNil() {
+						return zero, nil
+					}
+					v = v.Elem()
+				}
+				return v.MapIndex(kv), nil
+			}
+		}
+	case reflect.Struct:
+		ft, ok := baseType.FieldByName(name)
+		if ok {
+			if ft.PkgPath != "" && !ft.Anonymous {
+				return func(v reflect.Value) (reflect.Value, error) {
+					return zero, fmt.Errorf("%s is an unexported field of struct type %s", name, elemType)
+				}
+			}
+			idx := ft.Index
+			return func(v reflect.Value) (reflect.Value, error) {
+				if isPtr {
+					if v.IsNil() {
+						return zero, nil
+					}
+					v = v.Elem()
+				}
+				return v.FieldByIndex(idx), nil
+			}
+		}
+	}
+
+	return nil
+}
+
+func (ns *Namespace) newMethodResolver(ctxv reflect.Value, elemType reflect.Type, mt reflect.Method) elemResolver {
+	if mt.PkgPath != "" {
+		return func(v reflect.Value) (reflect.Value, error) {
+			return zero, fmt.Errorf("%s is an unexported method of type %s", mt.Name, elemType)
+		}
+	}
+
+	numIn := mt.Type.NumIn()
+	maxNumIn := 1
+	needsCtx := numIn > 1 && hreflect.IsContextType(mt.Type.In(1))
+	if needsCtx {
+		maxNumIn = 2
+	}
+
+	switch {
+	case mt.Type.NumIn() > maxNumIn:
+		return nil
+	case mt.Type.NumOut() == 0:
+		return nil
+	case mt.Type.NumOut() > 2:
+		return nil
+	case mt.Type.NumOut() == 1 && mt.Type.Out(0).Implements(errorType):
+		return nil
+	case mt.Type.NumOut() == 2 && !mt.Type.Out(1).Implements(errorType):
+		return nil
+	}
+
+	fn := mt.Func
+	hasErrOut := mt.Type.NumOut() == 2
+	isPtr := elemType.Kind() == reflect.Pointer
+
+	var callArgs []reflect.Value
+	if needsCtx {
+		callArgs = make([]reflect.Value, 2)
+		callArgs[1] = ctxv
+	} else {
+		callArgs = make([]reflect.Value, 1)
+	}
+
+	return func(v reflect.Value) (reflect.Value, error) {
+		if isPtr && v.IsNil() {
+			return zero, nil
+		}
+		recv := v
+		if !isPtr && !hreflect.IsInterfaceOrPointer(recv.Kind()) && recv.CanAddr() {
+			recv = recv.Addr()
+		}
+		callArgs[0] = recv
+		res := fn.Call(callArgs)
+		if hasErrOut && !res[1].IsNil() {
+			return zero, res[1].Interface().(error)
+		}
+		return res[0], nil
+	}
+}
+
+// newInterfaceMethodResolver returns a method resolver or nil if not possible, in which the caller should fall back to evaluateSubElem.
+func (ns *Namespace) newInterfaceMethodResolver(ctxv reflect.Value, ifaceType reflect.Type, name string) elemResolver {
+	mt, ok := ifaceType.MethodByName(name)
+	if !ok {
+		return nil
+	}
+
+	// For interface methods, Type does not include the receiver.
+	mType := mt.Type
+	numIn := mType.NumIn()
+	maxNumIn := 0
+	needsCtx := numIn > 0 && hreflect.IsContextType(mType.In(0))
+	if needsCtx {
+		maxNumIn = 1
+	}
+
+	switch {
+	case mType.NumIn() > maxNumIn:
+		return nil
+	case mType.NumOut() == 0:
+		return nil
+	case mType.NumOut() > 2:
+		return nil
+	case mType.NumOut() == 1 && mType.Out(0).Implements(errorType):
+		return nil
+	case mType.NumOut() == 2 && !mType.Out(1).Implements(errorType):
+		return nil
+	}
+
+	index := mt.Index
+	hasErrOut := mType.NumOut() == 2
+
+	var callArgs []reflect.Value
+	if needsCtx {
+		callArgs = []reflect.Value{ctxv}
+	}
+
+	return func(v reflect.Value) (reflect.Value, error) {
+		if v.IsNil() {
+			return zero, nil
+		}
+		res := v.Method(index).Call(callArgs)
+		if hasErrOut && !res[1].IsNil() {
+			return zero, res[1].Interface().(error)
+		}
+		return res[0], nil
+	}
+}
+
 // checkWhereArray handles the where-matching logic when the seqv value is an
 // Array or Slice.
 func (ns *Namespace) checkWhereArray(ctxv, seqv, kv, mv reflect.Value, path []string, op string) (any, error) {
 	rv := reflect.MakeSlice(seqv.Type(), 0, 0)
 
+	var resolve elemResolver
+	if kv.Kind() == reflect.String && len(path) > 0 {
+		resolve = ns.newElemResolver(ctxv, seqv.Type().Elem(), path)
+	}
+
+	if kv.Kind() == reflect.String && len(path) == 2 && strings.EqualFold(path[0], "params") {
+		deprecateReservedParam(seqv, kv.String(), path[1])
+	}
+
 	for i := range seqv.Len() {
 		var vvv reflect.Value
 		rvv := seqv.Index(i)
 
-		if kv.Kind() == reflect.String {
-			if params, ok := rvv.Interface().(maps.Params); ok {
+		if resolve != nil {
+			var err error
+			vvv, err = resolve(rvv)
+			if err != nil {
+				return nil, err
+			}
+		} else if kv.Kind() == reflect.String {
+			if params, ok := rvv.Interface().(hmaps.Params); ok {
 				vvv = reflect.ValueOf(params.GetNested(path...))
 			} else {
 				vvv = rvv
@@ -417,8 +583,7 @@ func (ns *Namespace) checkWhereArray(ctxv, seqv, kv, mv reflect.Value, path []st
 					}
 
 					if i < len(path)-1 && vvv.IsValid() {
-						if params, ok := vvv.Interface().(maps.Params); ok {
-							// The current path element is the map itself, .Params.
+						if params, ok := vvv.Interface().(hmaps.Params); ok {
 							vvv = reflect.ValueOf(params.GetNested(path[i+1:]...))
 							break
 						}
@@ -426,7 +591,7 @@ func (ns *Namespace) checkWhereArray(ctxv, seqv, kv, mv reflect.Value, path []st
 				}
 			}
 		} else {
-			vv, _ := indirect(rvv)
+			vv, _ := hreflect.Indirect(rvv)
 			if vv.Kind() == reflect.Map && kv.Type().AssignableTo(vv.Type().Key()) {
 				vvv = vv.MapIndex(kv)
 			}
@@ -464,7 +629,7 @@ func (ns *Namespace) checkWhereMap(ctxv, seqv, kv, mv reflect.Value, path []stri
 				}
 			}
 		case reflect.Interface:
-			elemvv, isNil := indirect(elemv)
+			elemvv, isNil := hreflect.Indirect(elemv)
 			if isNil {
 				continue
 			}
@@ -488,50 +653,23 @@ func (ns *Namespace) checkWhereMap(ctxv, seqv, kv, mv reflect.Value, path []stri
 	return rv.Interface(), nil
 }
 
-// toFloat returns the float value if possible.
-func toFloat(v reflect.Value) (float64, error) {
-	switch v.Kind() {
-	case reflect.Float32, reflect.Float64:
-		return v.Float(), nil
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Convert(reflect.TypeOf(float64(0))).Float(), nil
-	case reflect.Interface:
-		return toFloat(v.Elem())
-	}
-	return -1, errors.New("unable to convert value to float")
-}
-
-// toInt returns the int value if possible, -1 if not.
-// TODO(bep) consolidate all these reflect funcs.
-func toInt(v reflect.Value) (int64, error) {
-	switch v.Kind() {
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int(), nil
-	case reflect.Interface:
-		return toInt(v.Elem())
-	}
-	return -1, errors.New("unable to convert value to int")
-}
-
-func toUint(v reflect.Value) (uint64, error) {
-	switch v.Kind() {
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return v.Uint(), nil
-	case reflect.Interface:
-		return toUint(v.Elem())
-	}
-	return 0, errors.New("unable to convert value to uint")
-}
-
 // toString returns the string value if possible, "" if not.
-func toString(v reflect.Value) (string, error) {
-	switch v.Kind() {
-	case reflect.String:
-		return v.String(), nil
-	case reflect.Interface:
-		return toString(v.Elem())
+
+// tryEq returns the equality of v and mv via the compare.Eqer interface
+// if either side implements it. The second return value reports whether
+// such a comparison was possible.
+func tryEq(v, mv reflect.Value) (bool, bool) {
+	if !v.CanInterface() || !mv.CanInterface() {
+		return false, false
 	}
-	return "", errors.New("unable to convert value to string")
+	vi, mvi := v.Interface(), mv.Interface()
+	if e, ok := vi.(compare.Eqer); ok {
+		return e.Eq(mvi), true
+	}
+	if e, ok := mvi.(compare.Eqer); ok {
+		return e.Eq(vi), true
+	}
+	return false, false
 }
 
 func (ns *Namespace) toTimeUnix(v reflect.Value) int64 {
@@ -540,4 +678,20 @@ func (ns *Namespace) toTimeUnix(v reflect.Value) int64 {
 		panic("coding error: argument must be time.Time type reflect Value")
 	}
 	return t.Unix()
+}
+
+// deprecateReservedParam logs a deprecation if key, e.g. Params.title,
+// gets a reserved front matter field from the Params of a page in seqv.
+func deprecateReservedParam(seqv reflect.Value, key, paramKey string) {
+	seq := func(yield func(any) bool) {
+		for i := range seqv.Len() {
+			v := seqv.Index(i)
+			if !v.CanInterface() || !yield(v.Interface()) {
+				return
+			}
+		}
+	}
+	if p, method, ok := page.FindReservedParam(paramKey, seq); ok {
+		page.DeprecateReservedParam(p.Language().Logger(), fmt.Sprintf("where with %q", key), paramKey, fmt.Sprintf("where with %q", method))
+	}
 }

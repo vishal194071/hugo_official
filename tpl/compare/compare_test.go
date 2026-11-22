@@ -22,7 +22,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/common/version"
 	"github.com/gohugoio/hugo/htesting/hqt"
 	"github.com/spf13/cast"
 )
@@ -207,6 +207,11 @@ func doTestCompare(t *testing.T, tp tstCompareType, funcUnderTest func(a, b any)
 		{uint32(4), uint16(3), 1},
 		{uint64(4), 4, 0},
 		{4, uint64(4), 0},
+		{uint64(4), 5, -1},
+		{5, uint64(4), 1},
+		{uint64(5), uint64(4), 1},
+		{uint64(4), uint64(5), -1},
+		{uint64(5), uint64(5), 0},
 		{uint64(math.MaxUint32), uint32(math.MaxUint32), 0},
 		{uint64(math.MaxUint16), int(math.MaxUint16), 0},
 		{int16(4), int(5), -1},
@@ -216,6 +221,23 @@ func doTestCompare(t *testing.T, tp tstCompareType, funcUnderTest func(a, b any)
 		{0.0, 1.23, -1},
 		{1.1, 1.1, 0},
 		{float32(1.0), float64(1.0), 0},
+		{1, 1.0, 0},
+		{1.0, 1, 0},
+		{0, 0.0, 0},
+		{-1, -1.0, 0},
+		{int64(3), float64(3), 0},
+		{uint(4), 4.0, 0},
+		{1, float32(1.0), 0},
+		{float32(1.0), 1, 0},
+		{1, 1.5, -1},
+		{1.5, 1, 1},
+		{2, 1.5, 1},
+		{int64(1<<53 + 1), float64(1 << 53), 1},
+		{float64(1 << 53), int64(1<<53 + 1), -1},
+		{int64(1<<53 + 1), uint64(1<<53 + 1), 0},
+		{-1, uint64(math.MaxUint64), -1},
+		{uint64(math.MaxUint64), -1, 1},
+		{uint64(math.MaxUint64), uint8(1), 1},
 		{1.23, 0.0, 1},
 		{"5", "5", 0},
 		{"8", "5", 1},
@@ -233,17 +255,17 @@ func doTestCompare(t *testing.T, tp tstCompareType, funcUnderTest func(a, b any)
 		{tstEqerType1("a"), tstEqerType2("a"), 0},
 		{tstEqerType2("a"), tstEqerType1("a"), 0},
 		{tstEqerType2("a"), tstEqerType1("b"), -1},
-		{hugo.MustParseVersion("0.32.1").Version(), hugo.MustParseVersion("0.32").Version(), 1},
-		{hugo.MustParseVersion("0.35").Version(), hugo.MustParseVersion("0.32").Version(), 1},
-		{hugo.MustParseVersion("0.36").Version(), hugo.MustParseVersion("0.36").Version(), 0},
-		{hugo.MustParseVersion("0.32").Version(), hugo.MustParseVersion("0.36").Version(), -1},
-		{hugo.MustParseVersion("0.32").Version(), "0.36", -1},
-		{"0.36", hugo.MustParseVersion("0.32").Version(), 1},
-		{"0.36", hugo.MustParseVersion("0.36").Version(), 0},
-		{"0.37", hugo.MustParseVersion("0.37-DEV").Version(), 1},
-		{"0.37-DEV", hugo.MustParseVersion("0.37").Version(), -1},
-		{"0.36", hugo.MustParseVersion("0.37-DEV").Version(), -1},
-		{"0.37-DEV", hugo.MustParseVersion("0.37-DEV").Version(), 0},
+		{version.MustParseVersion("0.32.1").Version(), version.MustParseVersion("0.32").Version(), 1},
+		{version.MustParseVersion("0.35").Version(), version.MustParseVersion("0.32").Version(), 1},
+		{version.MustParseVersion("0.36").Version(), version.MustParseVersion("0.36").Version(), 0},
+		{version.MustParseVersion("0.32").Version(), version.MustParseVersion("0.36").Version(), -1},
+		{version.MustParseVersion("0.32").Version(), "0.36", -1},
+		{"0.36", version.MustParseVersion("0.32").Version(), 1},
+		{"0.36", version.MustParseVersion("0.36").Version(), 0},
+		{"0.37", version.MustParseVersion("0.37-DEV").Version(), 1},
+		{"0.37-DEV", version.MustParseVersion("0.37").Version(), -1},
+		{"0.36", version.MustParseVersion("0.37-DEV").Version(), -1},
+		{"0.37-DEV", version.MustParseVersion("0.37-DEV").Version(), 0},
 		// https://github.com/gohugoio/hugo/issues/5905
 		{nil, nil, 0},
 		{testT.NonEmptyInterfaceNil, nil, 0},
@@ -282,6 +304,7 @@ func TestEqualExtend(t *testing.T) {
 	c := qt.New(t)
 
 	ns := New(time.UTC, false)
+	one := 1
 
 	for _, test := range []struct {
 		first  any
@@ -291,6 +314,31 @@ func TestEqualExtend(t *testing.T) {
 		{1, []any{1, 2}, true},
 		{1, []any{2, 1}, true},
 		{1, []any{2, 3}, false},
+		{1, []any{2, 1.0}, true},
+		{1.0, []any{2, 1}, true},
+		{1, []any{1.5}, false},
+		{uint64(math.MaxUint64), []any{-1}, false},
+		{-1, []any{uint64(math.MaxUint64)}, false},
+		{float64(9007199254740992), []any{int64(9007199254740993)}, false},
+		{int64(9007199254740993), []any{float64(9007199254740992)}, false},
+		{float64(9007199254740992), []any{int64(9007199254740992)}, true},
+		{int64(9007199254740992), []any{float64(9007199254740992)}, true},
+		{float32(16777216), []any{int64(16777217)}, false},
+		{int64(16777217), []any{float32(16777216)}, false},
+		{float64(3.14), []any{float32(3.14)}, false},
+		{float32(3.14), []any{float64(3.14)}, false},
+		{float64(0.5), []any{float32(0.5)}, true},
+		{float32(0.5), []any{float64(0.5)}, true},
+		{stringType("a"), []any{"b", "a"}, true},
+		{[]int{1, 2}, []any{[]int{1, 2}}, true},
+		{[]int{1, 2}, []any{[]int{2, 1}}, false},
+		{map[string]any{"a": []int{1}}, []any{map[string]any{"a": []int{1}}}, true},
+		{struct{ V any }{[]int{1}}, []any{struct{ V any }{[]int{1}}}, true},
+		{&T{}, []any{&T{}}, true},
+		{T{}, []any{&T{}}, false},
+		{&T{}, []any{T{}}, false},
+		{1, []any{&one}, false},
+		{&one, []any{1}, false},
 		{tstEqerType1("a"), []any{tstEqerType1("a"), tstEqerType1("b")}, true},
 		{tstEqerType1("a"), []any{tstEqerType1("b"), tstEqerType1("a")}, true},
 		{tstEqerType1("a"), []any{tstEqerType1("b"), tstEqerType1("c")}, false},

@@ -7,8 +7,7 @@ params:
   functions_and_methods:
     aliases: [trim]
     returnType: string
-    signatures: [strings.Trim INPUT CUTSET]
-aliases: [/functions/trim]
+    signatures: [strings.Trim STRING CUTSET]
 ---
 
 ```go-html-template

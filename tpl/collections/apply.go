@@ -34,7 +34,7 @@ func (ns *Namespace) Apply(ctx context.Context, c any, fname string, args ...any
 	}
 
 	seqv := reflect.ValueOf(c)
-	seqv, isNil := indirect(seqv)
+	seqv, isNil := hreflect.Indirect(seqv)
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value")
 	}
@@ -64,6 +64,8 @@ func (ns *Namespace) Apply(ctx context.Context, c any, fname string, args ...any
 	}
 }
 
+var typeOfReflectValue = reflect.TypeFor[reflect.Value]()
+
 func applyFnToThis(ctx context.Context, fn, this reflect.Value, args ...any) (reflect.Value, error) {
 	num := fn.Type().NumIn()
 	if num > 0 && hreflect.IsContextType(fn.Type().In(0)) {
@@ -91,7 +93,11 @@ func applyFnToThis(ctx context.Context, fn, this reflect.Value, args ...any) (re
 	}*/
 
 	for i := range num {
-		// AssignableTo reports whether xt is assignable to type targ.
+		// Go's built-in template funcs (e.g. len) use reflect.Value as argument type.
+		if fn.Type().In(i) == typeOfReflectValue && n[i].Type() != typeOfReflectValue {
+			n[i] = reflect.ValueOf(n[i])
+		}
+
 		if xt, targ := n[i].Type(), fn.Type().In(i); !xt.AssignableTo(targ) {
 			return reflect.ValueOf(nil), errors.New("called apply using " + xt.String() + " as type " + targ.String())
 		}
@@ -134,29 +140,4 @@ func (ns *Namespace) lookupFunc(ctx context.Context, fname string) (reflect.Valu
 		return reflect.Value{}, false
 	}
 	return m, true
-}
-
-// indirect is borrowed from the Go stdlib: 'text/template/exec.go'
-func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
-	for ; v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface; v = v.Elem() {
-		if v.IsNil() {
-			return v, true
-		}
-		if v.Kind() == reflect.Interface && v.NumMethod() > 0 {
-			break
-		}
-	}
-	return v, false
-}
-
-func indirectInterface(v reflect.Value) (rv reflect.Value, isNil bool) {
-	for ; v.Kind() == reflect.Interface; v = v.Elem() {
-		if v.IsNil() {
-			return v, true
-		}
-		if v.Kind() == reflect.Interface && v.NumMethod() > 0 {
-			break
-		}
-	}
-	return v, false
 }

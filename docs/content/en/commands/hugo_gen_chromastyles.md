@@ -11,7 +11,7 @@ Generate CSS stylesheet for the Chroma code highlighter
 
 Generate CSS stylesheet for the Chroma code highlighter for a given style. This stylesheet is needed if markup.highlight.noClasses is disabled in config.
 
-See https://xyproto.github.io/splash/docs/all.html for a preview of the available styles
+See https://gohugo.io/quick-reference/syntax-highlighting-styles/ for a preview of the available styles.
 
 ```
 hugo gen chromastyles [flags] [args]
@@ -20,11 +20,17 @@ hugo gen chromastyles [flags] [args]
 ### Options
 
 ```
+      --classDark string                class name used by --modeSelector for dark styles (default "dark")
+      --classLight string               class name used by --modeSelector for light styles (default "light")
   -h, --help                            help for chromastyles
       --highlightStyle string           foreground and background colors for highlighted lines, e.g. --highlightStyle "#fff000 bg:#000fff"
       --lineNumbersInlineStyle string   foreground and background colors for inline line numbers, e.g. --lineNumbersInlineStyle "#fff000 bg:#000fff"
       --lineNumbersTableStyle string    foreground and background colors for table line numbers, e.g. --lineNumbersTableStyle "#fff000 bg:#000fff"
-      --style string                    highlighter style (see https://xyproto.github.io/splash/docs/) (default "friendly")
+      --mode string                     style mode ("light", "dark")
+      --modeSelector                    scope selectors under a top level mode class, e.g. ".dark .chroma"
+      --omitClassComments               omit CSS class comment prefixes in the generated CSS
+      --omitEmpty                       omit empty CSS rules (deprecated, no longer needed)
+      --style string                    highlighter style (default "friendly")
 ```
 
 ### Options inherited from parent commands
@@ -47,4 +53,3 @@ hugo gen chromastyles [flags] [args]
 ### SEE ALSO
 
 * [hugo gen](/commands/hugo_gen/)	 - Generate documentation and syntax highlighting styles
-

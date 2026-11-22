@@ -15,17 +15,25 @@ package hugolib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"iter"
+	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
+	"github.com/bep/helpers/maphelpers"
 	"github.com/bep/logg"
+	"github.com/gohugoio/go-radix"
 	"github.com/gohugoio/hugo/cache/dynacache"
 	"github.com/gohugoio/hugo/config/allconfig"
-	"github.com/gohugoio/hugo/hugofs/glob"
+	"github.com/gohugoio/hugo/hugofs/hglob"
 	"github.com/gohugoio/hugo/hugolib/doctree"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 	"github.com/gohugoio/hugo/resources"
 
 	"github.com/fsnotify/fsnotify"
@@ -33,9 +41,12 @@ import (
 	"github.com/gohugoio/hugo/output"
 	"github.com/gohugoio/hugo/parser/metadecoders"
 
-	"github.com/gohugoio/hugo/common/hugo"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hsync"
+	"github.com/gohugoio/hugo/common/htime"
+	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/common/para"
+	"github.com/gohugoio/hugo/common/terminal"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/hugofs"
 
@@ -44,18 +55,24 @@ import (
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/deps"
 	"github.com/gohugoio/hugo/helpers"
-	"github.com/gohugoio/hugo/lazy"
 
 	"github.com/gohugoio/hugo/resources/page"
 )
 
 // HugoSites represents the sites to build. Each site represents a language.
 type HugoSites struct {
+	// The current sites slice.
+	// When rendering, this slice will be shifted out.
 	Sites []*Site
+
+	// All sites for all versions and roles.
+	sitesVersionsRoles    [][][]*Site
+	sitesVersionsRolesMap map[sitesmatrix.Vector]*Site
+	sitesLanguages        []*Site // sample set with all languages.
 
 	Configs *allconfig.Configs
 
-	hugoInfo hugo.HugoInfo
+	hugoInfo page.HugoInfo
 
 	// Render output formats for all sites.
 	renderFormats output.Formats
@@ -74,19 +91,29 @@ type HugoSites struct {
 	// Cache for page listings.
 	cachePages *dynacache.Partition[string, page.Pages]
 	// Cache for content sources.
-	cacheContentSource *dynacache.Partition[string, *resources.StaleValue[[]byte]]
+	cacheContentSource *dynacache.Partition[uint64, *resources.StaleValue[[]byte]]
 
 	// Before Hugo 0.122.0 we managed all translations in a map using a translationKey
 	// that could be overridden in front matter.
 	// Now the different page dimensions (e.g. language) are built-in to the page trees above.
 	// But we sill need to support the overridden translationKey, but that should
 	// be relatively rare and low volume.
-	translationKeyPages *maps.SliceCache[page.Page]
+	translationKeyPages *hmaps.SliceCache[page.Page]
 
-	pageTrees *pageTrees
+	pageTrees                    *pageTrees
+	previousPageTreesWalkContext *doctree.WalkContext[contentNode]                    // Set for rebuilds only.
+	previousSeenTerms            *maphelpers.ConcurrentMap[term, sitesmatrix.Vectors] // Set for rebuilds only.
 
-	printUnusedTemplatesInit sync.Once
-	printPathWarningsInit    sync.Once
+	printUnusedTemplatesInit            sync.Once
+	printPathWarningsInit               sync.Once
+	printSiteSitesDeprecationInit       sync.Once
+	printSiteDataDeprecationInit        sync.Once
+	printSiteAllPagesDeprecationInit    sync.Once
+	printSiteBuildDraftsDeprecationInit sync.Once
+	printSiteLanguagesDeprecationInit   sync.Once
+
+	// Logged deprecations of reserved front matter fields passed to .Param, keyed by field.
+	pageParamDeprecations sync.Map
 
 	// File change events with filename stored in this map will be skipped.
 	skipRebuildForFilenamesMu sync.Mutex
@@ -98,10 +125,122 @@ type HugoSites struct {
 	numWorkersSites int
 	numWorkers      int
 
+	*progressReporter
 	*fatalErrorHandler
 	*buildCounters
-	// Tracks invocations of the Build method.
-	buildCounter atomic.Uint64
+}
+
+// hugoSitesSitesProvider is a wrapper that implements page.SitesProvider.
+// This avoids naming conflict with HugoSites.Sites field.
+type hugoSitesSitesProvider struct {
+	h *HugoSites
+}
+
+func (sp hugoSitesSitesProvider) Sites() page.Sites {
+	return slices.Collect(sp.h.allSitesInterface(nil))
+}
+
+func (sp hugoSitesSitesProvider) Data() map[string]any {
+	return sp.h.Data()
+}
+
+type progressReporter struct {
+	mu                  sync.Mutex
+	t                   time.Time
+	progress            float64
+	queue               []func() (state terminal.ProgressState, progress float64)
+	state               terminal.ProgressState
+	renderProgressStart float64
+	numPagesToRender    atomic.Uint64
+}
+
+func (p *progressReporter) Start() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.t = htime.Now()
+}
+
+// allSites will range over all sites in the order of the sitesVersionsRoles matrix.
+// If include is not nil, it will be used to filter the sites.
+func (h *HugoSites) allSites(include func(s *Site) bool) iter.Seq[*Site] {
+	if include == nil {
+		include = func(s *Site) bool {
+			return true
+		}
+	}
+	return func(yield func(s *Site) bool) {
+		for _, v := range h.sitesVersionsRoles {
+			for _, r := range v {
+				for _, s := range r {
+					if !include(s) {
+						continue
+					}
+					if !yield(s) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+// allSitesInterface is the same as allSites but returns page.Site, which is used in some places where we don't want to expose the full *Site type.
+// If include is not nil, it will be used to filter the sites.
+func (h *HugoSites) allSitesInterface(include func(s page.Site) bool) iter.Seq[page.Site] {
+	if include == nil {
+		include = func(s page.Site) bool {
+			return true
+		}
+	}
+	return func(yield func(s page.Site) bool) {
+		for _, v := range h.sitesVersionsRoles {
+			for _, r := range v {
+				for _, s := range r {
+					if !include(s) {
+						continue
+					}
+					// Site() returns a wrapped version of the site that only exposes the page.Site interface.
+					if !yield(s.Site()) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+// allSiteLanguages will range over the first site in each language that's not skipped.
+func (h *HugoSites) allSiteLanguages(include func(s *Site) bool) iter.Seq[*Site] {
+	return func(yield func(s *Site) bool) {
+	LOOP:
+		for _, v := range h.sitesVersionsRoles {
+			for _, r := range v {
+				for _, s := range r {
+					if include != nil && !include(s) {
+						continue LOOP
+					}
+					if !yield(r[0]) {
+						return
+					}
+					continue LOOP
+				}
+			}
+		}
+	}
+}
+
+func (h *HugoSites) getFirstTaxonomyConfig(s string) (v viewName) {
+	for _, ss := range h.sitesLanguages {
+		if v = ss.pageMap.cfg.getTaxonomyConfig(s); !v.IsZero() {
+			return
+		}
+	}
+	return
+}
+
+// returns one of the sites with the language of the given vector.
+func (h *HugoSites) languageSiteForSiteVector(v sitesmatrix.Vector) *Site {
+	return h.sitesLanguages[v.Language()]
 }
 
 // ShouldSkipFileChangeEvent allows skipping filesystem event early before
@@ -117,21 +256,23 @@ func (h *HugoSites) Close() error {
 }
 
 func (h *HugoSites) isRebuild() bool {
-	return h.buildCounter.Load() > 0
+	return h.BuildState.IsRebuild()
 }
 
-func (h *HugoSites) resolveSite(lang string) *Site {
-	if lang == "" {
-		lang = h.Conf.DefaultContentLanguage()
-	}
-
-	for _, s := range h.Sites {
-		if s.Lang() == lang {
-			return s
+func (h *HugoSites) resolveFirstSite(matrix sitesmatrix.VectorStore) *Site {
+	var s *Site
+	var ok bool
+	matrix.ForEachVector(func(v sitesmatrix.Vector) bool {
+		if s, ok = h.sitesVersionsRolesMap[v]; ok {
+			return false
 		}
+		return true
+	})
+	if s == nil {
+		panic(fmt.Sprintf("no site found for matrix %s", matrix))
 	}
 
-	return nil
+	return s
 }
 
 type buildCounters struct {
@@ -169,6 +310,16 @@ func (f *fatalErrorHandler) FatalError(err error) {
 	f.err = err
 }
 
+// Stop stops the fatal error handler without setting an error.
+func (f *fatalErrorHandler) Stop() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.done {
+		f.done = true
+		close(f.donec)
+	}
+}
+
 func (f *fatalErrorHandler) getErr() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -181,14 +332,14 @@ func (f *fatalErrorHandler) Done() <-chan bool {
 
 type hugoSitesInit struct {
 	// Loads the data from all of the /data folders.
-	data *lazy.Init
+	data hsync.FuncResetter
 
 	// Loads the Git info and CODEOWNERS for all the pages if enabled.
-	gitInfo *lazy.Init
+	gitInfo hsync.FuncResetter
 }
 
 func (h *HugoSites) Data() map[string]any {
-	if _, err := h.init.data.Do(context.Background()); err != nil {
+	if err := h.init.data.Do(context.Background()); err != nil {
 		h.SendError(fmt.Errorf("failed to load data: %w", err))
 		return nil
 	}
@@ -231,7 +382,7 @@ func (h *HugoSites) RegularPages() page.Pages {
 }
 
 func (h *HugoSites) gitInfoForPage(p page.Page) (*source.GitInfo, error) {
-	if _, err := h.init.gitInfo.Do(context.Background()); err != nil {
+	if err := h.init.gitInfo.Do(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -243,7 +394,7 @@ func (h *HugoSites) gitInfoForPage(p page.Page) (*source.GitInfo, error) {
 }
 
 func (h *HugoSites) codeownersForPage(p page.Page) ([]string, error) {
-	if _, err := h.init.gitInfo.Do(context.Background()); err != nil {
+	if err := h.init.gitInfo.Do(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -254,42 +405,120 @@ func (h *HugoSites) codeownersForPage(p page.Page) ([]string, error) {
 	return h.codeownerInfo.forPage(p), nil
 }
 
-func (h *HugoSites) pickOneAndLogTheRest(errors []error) error {
-	if len(errors) == 0 {
+func (h *HugoSites) reportProgress(f func() (state terminal.ProgressState, progress float64)) {
+	h.progressReporter.mu.Lock()
+	defer h.progressReporter.mu.Unlock()
+
+	if h.progressReporter.t.IsZero() {
+		// Not started yet, queue it up and return.
+		h.progressReporter.queue = append(h.progressReporter.queue, f)
+		return
+	}
+
+	handleOne := func(skip func(state terminal.ProgressState, progress float64) bool, handle func() (state terminal.ProgressState, progress float64)) {
+		state, progress := handle()
+		if skip != nil && skip(state, progress) {
+			return
+		}
+
+		if h.progressReporter.progress > 0 && h.progressReporter.state == state && progress <= h.progressReporter.progress {
+			// Only report progress forward.
+			return
+		}
+
+		h.progressReporter.state = state
+		h.progressReporter.progress = progress
+		terminal.ReportProgress(h.Log.StdOut(), state, h.progressReporter.progress, "")
+	}
+
+	// Drain queue first.
+	skip := func(state terminal.ProgressState, progress float64) bool {
+		// Skip qued up intermediate states if we already are in normal state.
+		return h.progressReporter.state == terminal.ProgressNormal && state == terminal.ProgressIntermediate
+	}
+	for _, ff := range h.progressReporter.queue {
+		handleOne(skip, ff)
+	}
+	h.progressReporter.queue = nil
+
+	handleOne(nil, f)
+}
+
+// reportBuildEnd reports done, idle (when watching or running) or error.
+// Fast builds are only reported when entering or leaving the error state.
+func (h *HugoSites) reportBuildEnd(err error) {
+	pr := h.progressReporter
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+
+	pr.queue = nil
+
+	if pr.t.IsZero() && (err == nil && pr.state != terminal.ProgressError || !terminal.PrintANSIColors(os.Stdout)) {
+		return
+	}
+
+	state := terminal.ProgressDone
+	if h.Conf.Watching() || h.Conf.Running() {
+		state = terminal.ProgressHidden
+	}
+	var msg string
+	if err != nil {
+		state = terminal.ProgressError
+		msg = err.Error()
+	}
+
+	pr.state, pr.progress, pr.renderProgressStart = state, 0, 0
+	terminal.ReportProgress(h.Log.StdOut(), state, 1.0, msg)
+}
+
+func (h *HugoSites) onPageRender() {
+	pagesRendered := h.buildCounters.pageRenderCounter.Add(1)
+	numPagesToRender := h.progressReporter.numPagesToRender.Load()
+	n := numPagesToRender / 30
+	if n == 0 {
+		n = 1
+	}
+	if pagesRendered%n == 0 {
+		h.reportProgress(func() (terminal.ProgressState, float64) {
+			pr := h.progressReporter
+			if pr.renderProgressStart == 0.0 && pr.state == terminal.ProgressNormal {
+				pr.renderProgressStart = pr.progress
+			}
+			pagesProgress := pr.renderProgressStart + float64(pagesRendered)/float64(numPagesToRender)*(1.0-pr.renderProgressStart)
+			return terminal.ProgressNormal, pagesProgress
+		})
+	}
+}
+
+func (h *HugoSites) filterAndJoinErrors(errs []error) error {
+	if len(errs) == 0 {
 		return nil
 	}
 
-	var i int
-
-	for j, err := range errors {
-		// If this is in server mode, we want to return an error to the client
-		// with a file context, if possible.
-		if herrors.UnwrapFileError(err) != nil {
-			i = j
-			break
-		}
-	}
-
-	// Log the rest, but add a threshold to avoid flooding the log.
-	const errLogThreshold = 5
-
-	for j, err := range errors {
-		if j == i || err == nil {
+	seen := map[string]bool{}
+	var n int
+	for _, err := range errs {
+		if err == nil {
 			continue
 		}
-
-		if j >= errLogThreshold {
-			break
+		errMsg := herrors.Cause(err).Error() // We don't need to see many "Could not resolve "@alpinejs/persists""
+		if !seen[errMsg] {
+			seen[errMsg] = true
+			errs[n] = err
+			n++
 		}
+	}
+	errs = errs[:n]
 
-		h.Log.Errorln(err)
+	for i, err := range errs {
+		errs[i] = herrors.ImproveRenderErr(err)
 	}
 
-	return errors[i]
-}
-
-func (h *HugoSites) isMultilingual() bool {
-	return len(h.Sites) > 1
+	const limit = 10
+	if len(errs) > limit {
+		errs = errs[:limit]
+	}
+	return errors.Join(errs...)
 }
 
 // TODO(bep) consolidate
@@ -347,9 +576,15 @@ func (h *HugoSites) GetContentPage(filename string) page.Page {
 
 func (h *HugoSites) loadGitInfo() error {
 	if h.Configs.Base.EnableGitInfo {
-		gi, err := newGitInfo(h.Deps)
+		cfg := gitInfoConfig{
+			Deps:         h.Deps,
+			Modules:      h.Configs.Modules,
+			GitInfoCache: h.Configs.FileCaches.ModuleGitInfoCache(),
+			Logger:       h.Log,
+		}
+		gi, err := newGitInfo(cfg)
 		if err != nil {
-			h.Log.Errorln("Failed to read Git log:", err)
+			return err
 		} else {
 			h.gitInfo = gi
 		}
@@ -365,7 +600,7 @@ func (h *HugoSites) loadGitInfo() error {
 }
 
 // Reset resets the sites and template caches etc., making it ready for a full rebuild.
-func (h *HugoSites) reset(config *BuildCfg) {
+func (h *HugoSites) reset() {
 	h.fatalErrorHandler = &fatalErrorHandler{
 		h:     h,
 		donec: make(chan bool),
@@ -375,31 +610,28 @@ func (h *HugoSites) reset(config *BuildCfg) {
 // resetLogs resets the log counters etc. Used to do a new build on the same sites.
 func (h *HugoSites) resetLogs() {
 	h.Log.Reset()
+	loggers.Log().Reset()
+
+	// TODO(bep) Double-check this; I'm pretty sure there is only one logger.
 	for _, s := range h.Sites {
 		s.Deps.Log.Reset()
 	}
 }
 
-func (h *HugoSites) withSite(fn func(s *Site) error) error {
-	for _, s := range h.Sites {
-		if err := fn(s); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (h *HugoSites) withPage(fn func(s string, p *pageState) bool) {
-	h.withSite(func(s *Site) error {
-		w := &doctree.NodeShiftTreeWalker[contentNodeI]{
+	for s := range h.allSites(nil) {
+		w := &doctree.NodeShiftTreeWalker[contentNode]{
 			Tree:     s.pageMap.treePages,
 			LockType: doctree.LockTypeRead,
-			Handle: func(s string, n contentNodeI, match doctree.DimensionFlag) (bool, error) {
-				return fn(s, n.(*pageState)), nil
+			Handle: func(s string, n contentNode) (radix.WalkFlag, error) {
+				if fn(s, n.(*pageState)) {
+					return radix.WalkStop, nil
+				}
+				return radix.WalkContinue, nil
 			},
 		}
-		return w.Walk(context.Background())
-	})
+		_ = w.Walk(context.Background())
+	}
 }
 
 // BuildCfg holds build options used to, as an example, skip the render step.
@@ -420,7 +652,7 @@ type BuildCfg struct {
 	RecentlyTouched *types.EvictingQueue[string]
 
 	// Can be set to build only with a sub set of the content source.
-	ContentInclusionFilter *glob.FilenameFilter
+	ContentInclusionFilter *hglob.FilenameFilter
 
 	// Set when the buildlock is already acquired (e.g. the archetype content builder).
 	NoBuildLock bool
@@ -448,7 +680,7 @@ func (cfg *BuildCfg) shouldRender(infol logg.LevelLogger, p *pageState) bool {
 
 	fastRenderMode := p.s.Conf.FastRenderMode()
 
-	if !fastRenderMode || p.s.h.buildCounter.Load() == 0 {
+	if !fastRenderMode || !p.s.h.BuildState.IsRebuild() {
 		return shouldRender
 	}
 
@@ -488,7 +720,8 @@ func (s *Site) preparePagesForRender(isRenderingSite bool, idx int) error {
 		return nil
 	}
 
-	return s.pageMap.forEeachPageIncludingBundledPages(nil,
+	return s.pageMap.forEeachPageIncludingBundledPages(
+		nil,
 		func(p *pageState) (bool, error) {
 			return false, initPage(p)
 		},
@@ -502,7 +735,7 @@ func (h *HugoSites) loadData() error {
 			Fs:         h.PathSpec.BaseFs.Data.Fs,
 			IgnoreFile: h.SourceSpec.IgnoreFile,
 			PathParser: h.Conf.PathParser(),
-			WalkFn: func(path string, fi hugofs.FileMetaInfo) error {
+			WalkFn: func(ctx context.Context, path string, fi hugofs.FileMetaInfo) error {
 				if fi.IsDir() {
 					return nil
 				}
@@ -512,7 +745,8 @@ func (h *HugoSites) loadData() error {
 				}
 				return h.handleDataFile(source.NewFileInfo(fi))
 			},
-		})
+		},
+	)
 
 	if err := w.Walk(); err != nil {
 		return err
@@ -532,9 +766,9 @@ func (h *HugoSites) handleDataFile(r *source.File) error {
 	// Crawl in data tree to insert data
 	current = h.data
 	dataPath := r.FileInfo().Meta().PathInfo.Unnormalized().Dir()[1:]
-	keyParts := strings.Split(dataPath, "/")
+	keyParts := strings.SplitSeq(dataPath, "/")
 
-	for _, key := range keyParts {
+	for key := range keyParts {
 		if key != "" {
 			if _, ok := current[key]; !ok {
 				current[key] = make(map[string]any)
@@ -604,12 +838,10 @@ func (h *HugoSites) errWithFileContext(err error, f *source.File) error {
 }
 
 func (h *HugoSites) readData(f *source.File) (any, error) {
-	file, err := f.FileInfo().Meta().Open()
+	content, err := f.FileInfo().Meta().ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("readData: failed to open data file: %w", err)
+		return nil, fmt.Errorf("readData: failed to read data file: %w", err)
 	}
-	defer file.Close()
-	content := helpers.ReaderToBytes(file)
 
 	format := metadecoders.FormatFromString(f.Ext())
 	return metadecoders.Default.Unmarshal(content, format)

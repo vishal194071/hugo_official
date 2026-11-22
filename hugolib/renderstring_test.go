@@ -1,4 +1,4 @@
-// Copyright 2024 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,15 +16,16 @@ package hugolib
 import (
 	"testing"
 
-	"github.com/bep/logg"
 	qt "github.com/frankban/quicktest"
-	"github.com/gohugoio/hugo/common/loggers"
 )
 
 func TestRenderString(t *testing.T) {
-	b := newTestSitesBuilder(t)
+	t.Parallel()
 
-	b.WithTemplates("index.html", `
+	files := `
+-- hugo.toml --
+baseURL = "http://example.com/"
+-- layouts/home.html --
 {{ $p := site.GetPage "p1.md" }}
 {{ $optBlock := dict "display" "block" }}
 {{ $optOrg := dict "markup" "org" }}
@@ -32,17 +33,14 @@ RSTART:{{ "**Bold Markdown**" | $p.RenderString }}:REND
 RSTART:{{  "**Bold Block Markdown**" | $p.RenderString  $optBlock }}:REND
 RSTART:{{  "/italic org mode/" | $p.RenderString  $optOrg }}:REND
 RSTART:{{ "## Header2" | $p.RenderString }}:REND
-
-
-`, "_default/_markup/render-heading.html", "Hook Heading: {{ .Level }}")
-
-	b.WithContent("p1.md", `---
+-- layouts/_markup/render-heading.html --
+Hook Heading: {{ .Level }}
+-- content/p1.md --
+---
 title: "p1"
 ---
-`,
-	)
-
-	b.Build(BuildCfg{})
+`
+	b := Test(t, files)
 
 	b.AssertFileContent("public/index.html", `
 RSTART:<strong>Bold Markdown</strong>:REND
@@ -54,18 +52,21 @@ RSTART:Hook Heading: 2:REND
 
 // https://github.com/gohugoio/hugo/issues/6882
 func TestRenderStringOnListPage(t *testing.T) {
-	renderStringTempl := `
-{{ .RenderString "**Hello**" }}
-`
-	b := newTestSitesBuilder(t)
-	b.WithContent("mysection/p1.md", `FOO`)
-	b.WithTemplates(
-		"index.html", renderStringTempl,
-		"_default/list.html", renderStringTempl,
-		"_default/single.html", renderStringTempl,
-	)
+	t.Parallel()
 
-	b.Build(BuildCfg{})
+	files := `
+-- hugo.toml --
+baseURL = "http://example.com/"
+-- layouts/home.html --
+{{ .RenderString "**Hello**" }}
+-- layouts/list.html --
+{{ .RenderString "**Hello**" }}
+-- layouts/single.html --
+{{ .RenderString "**Hello**" }}
+-- content/mysection/p1.md --
+FOO
+`
+	b := Test(t, files)
 
 	for _, filename := range []string{
 		"index.html",
@@ -81,20 +82,23 @@ func TestRenderStringOnListPage(t *testing.T) {
 // Issue 9433
 func TestRenderStringOnPageNotBackedByAFile(t *testing.T) {
 	t.Parallel()
-	logger := loggers.NewDefault()
-	b := newTestSitesBuilder(t).WithLogger(logger).WithConfigFile("toml", `
-disableKinds = ["page", "section", "taxonomy", "term"]	
-`)
-	b.WithTemplates("index.html", `{{ .RenderString "**Hello**" }}`).WithContent("p1.md", "")
-	b.BuildE(BuildCfg{})
-	b.Assert(logger.LoggCount(logg.LevelWarn), qt.Equals, 0)
+
+	files := `
+-- hugo.toml --
+disableKinds = ["page", "section", "taxonomy", "term"]
+-- layouts/home.html --
+{{ .RenderString "**Hello**" }}
+-- content/p1.md --
+`
+	b, err := TestE(t, files) // Removed WithLogger(logger)
+	b.Assert(err, qt.IsNil)
 }
 
 func TestRenderStringWithShortcode(t *testing.T) {
 	t.Parallel()
 
 	filesTemplate := `
--- config.toml --
+-- hugo.toml --
 title = "Hugo Rocks!"
 enableInlineShortcodes = true
 -- content/p1/index.md --
@@ -102,18 +106,18 @@ enableInlineShortcodes = true
 title: "P1"
 ---
 ## First
--- layouts/shortcodes/mark1.md --
+-- layouts/_shortcodes/mark1.md --
 {{ .Inner }}
--- layouts/shortcodes/mark2.md --
+-- layouts/_shortcodes/mark2.md --
 1. Item Mark2 1
 1. Item Mark2 2
    1. Item Mark2 2-1
 1. Item Mark2 3
--- layouts/shortcodes/myhthml.html --
+-- layouts/_shortcodes/myhthml.html --
 Title: {{ .Page.Title }}
 TableOfContents: {{ .Page.TableOfContents }}
 Page Type: {{ printf "%T" .Page }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .RenderString "Markdown: {{% mark2 %}}|HTML: {{< myhthml >}}|Inline: {{< foo.inline >}}{{ site.Title }}{{< /foo.inline >}}|" }}
 HasShortcode: mark2:{{ .HasShortcode "mark2" }}:true
 HasShortcode: foo:{{ .HasShortcode "foo" }}:false
@@ -121,12 +125,7 @@ HasShortcode: foo:{{ .HasShortcode "foo" }}:false
 `
 
 	t.Run("Basic", func(t *testing.T) {
-		b := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: filesTemplate,
-			},
-		).Build()
+		b := Test(t, filesTemplate)
 
 		b.AssertFileContent("public/p1/index.html",
 			"<p>Markdown: 1. Item Mark2 1</p>\n<ol>\n<li>Item Mark2 2\n<ol>\n<li>Item Mark2 2-1</li>\n</ol>\n</li>\n<li>Item Mark2 3|",
@@ -141,15 +140,9 @@ Page Type: *hugolib.pageForShortcode`,
 	})
 
 	t.Run("Edit shortcode", func(t *testing.T) {
-		b := NewIntegrationTestBuilder(
-			IntegrationTestConfig{
-				T:           t,
-				TxtarString: filesTemplate,
-				Running:     true,
-			},
-		).Build()
+		b := TestRunning(t, filesTemplate)
 
-		b.EditFiles("layouts/shortcodes/myhthml.html", "Edit shortcode").Build()
+		b.EditFiles("layouts/_shortcodes/myhthml.html", "Edit shortcode").Build()
 
 		b.AssertFileContent("public/p1/index.html",
 			`Edit shortcode`,
@@ -162,10 +155,10 @@ func TestRenderStringWithShortcodeInPageWithNoContentFile(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
--- layouts/shortcodes/myshort.html --
+-- hugo.toml --
+-- layouts/_shortcodes/myshort.html --
 Page Kind: {{ .Page.Kind }}
--- layouts/index.html --
+-- layouts/home.html --
 Short: {{ .RenderString "{{< myshort >}}" }}
 Has myshort: {{ .HasShortcode "myshort" }}
 Has other: {{ .HasShortcode "other" }}
@@ -186,7 +179,7 @@ func TestRenderStringWithShortcodeIssue10654(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 timeout = '300ms'
 -- content/p1.md --
 ---
@@ -200,11 +193,11 @@ title: "P1"
      {{ not a shortcode
 {{< /noop >}}
 }
--- layouts/shortcodes/noop.html --
+-- layouts/_shortcodes/noop.html --
 {{ .Inner | $.Page.RenderString }}
--- layouts/shortcodes/toc.html --
+-- layouts/_shortcodes/toc.html --
 {{ .Page.TableOfContents }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 

@@ -9,27 +9,27 @@ params:
     signatures: [PAGE.IsTranslated]
 ---
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 defaultContentLanguage = 'en'
 
 [languages.en]
 contentDir = 'content/en'
-languageCode = 'en-US'
-languageName = 'English'
+label = 'English'
+locale = 'en-US'
 weight = 1
 
 [languages.de]
 contentDir = 'content/de'
-languageCode = 'de-DE'
-languageName = 'Deutsch'
+label = 'Deutsch'
+locale = 'de-DE'
 weight = 2
 {{< /code-toggle >}}
 
 And this content:
 
-```text
+```tree
 content/
 ├── de/
 │   ├── books/

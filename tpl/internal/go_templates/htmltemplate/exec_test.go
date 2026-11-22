@@ -5,7 +5,6 @@
 // Tests for template execution, copied from text/template.
 
 //go:build !windows
-// +build !windows
 
 package template
 

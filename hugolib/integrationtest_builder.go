@@ -2,10 +2,10 @@ package hugolib
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"math/rand"
 	"os"
@@ -18,13 +18,15 @@ import (
 	"testing"
 
 	"github.com/bep/logg"
+	"github.com/yuin/goldmark/util"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hexec"
+	"github.com/gohugoio/hugo/common/himage"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/loggers"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/allconfig"
@@ -33,8 +35,11 @@ import (
 	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugofs"
+	"github.com/gohugoio/hugo/hugofs/hglob"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
+	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/media"
 	"github.com/spf13/afero"
-	"github.com/spf13/cast"
 	"golang.org/x/text/unicode/norm"
 	"golang.org/x/tools/txtar"
 )
@@ -84,10 +89,34 @@ func TestOptWarn() TestOpt {
 	}
 }
 
+// TestOptSkipRender will skip the render phase in integration tests.
+func TestOptSkipRender() TestOpt {
+	return func(c *IntegrationTestConfig) {
+		c.BuildCfg = BuildCfg{
+			SkipRender: true,
+		}
+	}
+}
+
 // TestOptOsFs will enable the real file system in integration tests.
 func TestOptOsFs() TestOpt {
 	return func(c *IntegrationTestConfig) {
 		c.NeedsOsFS = true
+	}
+}
+
+// TestOptWithNpmInstall will enable npm install in integration tests.
+func TestOptWithNpmInstall() TestOpt {
+	return func(c *IntegrationTestConfig) {
+		c.NeedsNpmInstall = true
+	}
+}
+
+// TestOptWithNpmInstallGlobal enables global npm package installation in integration tests.
+// This mutates the host environment and is therefore restricted to real CI.
+func TestOptWithNpmInstallGlobal(packages ...string) TestOpt {
+	return func(c *IntegrationTestConfig) {
+		c.NeedsNpmGlobalInstall = packages
 	}
 }
 
@@ -155,6 +184,12 @@ func NewIntegrationTestBuilder(conf IntegrationTestConfig) *IntegrationTestBuild
 
 	data := txtar.Parse([]byte(conf.TxtarString))
 
+	if conf.FileContentPrefix != "" {
+		for i, f := range data.Files {
+			data.Files[i].Data = append([]byte(conf.FileContentPrefix), f.Data...)
+		}
+	}
+
 	if conf.NFDFormOnDarwin {
 		for i, f := range data.Files {
 			data.Files[i].Name = norm.NFD.String(f.Name)
@@ -202,11 +237,12 @@ type IntegrationTestBuilder struct {
 
 	Cfg IntegrationTestConfig
 
-	changedFiles []string
-	createdFiles []string
-	removedFiles []string
-	renamedFiles []string
-	renamedDirs  []string
+	changedFiles     []string
+	createdFiles     []string
+	removedFiles     []string
+	renamedFiles     []string
+	atomicSavedFiles []string
+	renamedDirs      []string
 
 	buildCount   int
 	GCCount      int
@@ -215,6 +251,82 @@ type IntegrationTestBuilder struct {
 	lastBuildLog string
 
 	builderInit sync.Once
+}
+
+type IntegrationTestSiteHelper struct {
+	*qt.C
+	b *IntegrationTestBuilder
+	S *Site
+}
+
+type IntegrationTestPageHelper struct {
+	*qt.C
+	b *IntegrationTestBuilder
+	p *pageState
+}
+
+func (s *IntegrationTestPageHelper) siteIntsToMap(matrix, complements sitesmatrix.VectorStore) map[string]map[string][]string {
+	dconf := s.p.s.Conf.ConfiguredDimensions()
+	intSetsToMap := func(intSets sitesmatrix.VectorStore) map[string][]string {
+		var languages, versions, roles []string
+
+		keys1, keys2, keys3 := intSets.KeysSorted()
+
+		for _, v := range keys1 {
+			languages = append(languages, dconf.ConfiguredLanguages.ResolveName(v))
+		}
+		for _, v := range keys2 {
+			versions = append(versions, dconf.ConfiguredVersions.ResolveName(v))
+		}
+		for _, v := range keys3 {
+			roles = append(roles, dconf.ConfiguredRoles.ResolveName(v))
+		}
+
+		return map[string][]string{
+			"languages": languages,
+			"versions":  versions,
+			"roles":     roles,
+		}
+	}
+
+	return map[string]map[string][]string{
+		"matrix":      intSetsToMap(matrix),
+		"complements": intSetsToMap(complements),
+	}
+}
+
+func (s *IntegrationTestPageHelper) MatrixFromPageConfig() map[string]map[string][]string {
+	pc := s.p.m.pageConfigSource
+	return s.siteIntsToMap(pc.SitesMatrix, pc.SitesComplements)
+}
+
+func (s *IntegrationTestPageHelper) MatrixFromFile() map[string]map[string][]string {
+	if s.p.m.f == nil {
+		return nil
+	}
+	m := s.p.m.f.FileInfo().Meta()
+	return s.siteIntsToMap(m.SitesMatrix, m.SitesComplements)
+}
+
+func (s *IntegrationTestSiteHelper) PageHelper(path string) *IntegrationTestPageHelper {
+	p, err := s.S.GetPage(path)
+	s.Assert(err, qt.IsNil)
+	s.Assert(p, qt.Not(qt.IsNil), qt.Commentf("Page not found: %s", path))
+	ps, ok := p.(*pageState)
+	s.Assert(ok, qt.IsTrue, qt.Commentf("Expected pageState, got %T", p))
+	return &IntegrationTestPageHelper{
+		C: s.C,
+		b: s.b,
+		p: ps,
+	}
+}
+
+func (s *IntegrationTestSiteHelper) DimensionNames() types.Strings3 {
+	return types.Strings3{
+		s.S.Language().Name(),
+		s.S.Version().Name(),
+		s.S.Role().Name(),
+	}
 }
 
 type lockingBuffer struct {
@@ -248,8 +360,28 @@ func (b *lockingBuffer) Write(p []byte) (n int, err error) {
 	return
 }
 
+// SiteHelper returns a helper for the given language, version and role.
+// Note that a blank value for an argument will use the default value for that dimension.
+func (s *IntegrationTestBuilder) SiteHelper(language, version, role string) *IntegrationTestSiteHelper {
+	s.Helper()
+	if s.H == nil {
+		s.Fatal("SiteHelper: no sites available")
+	}
+	v := s.H.Conf.ConfiguredDimensions().ResolveVector(types.Strings3{language, version, role})
+	site, found := s.H.sitesVersionsRolesMap[v]
+	if !found {
+		s.Fatalf("SiteHelper: no site found for vector %v", v)
+	}
+
+	return &IntegrationTestSiteHelper{
+		C: s.C,
+		b: s,
+		S: site,
+	}
+}
+
 // AssertLogContains asserts that the last build log contains the given strings.
-// Each string can be negated with a "! " prefix.
+// Each string can be negated with a hglob.NegationPrefix prefix.
 func (s *IntegrationTestBuilder) AssertLogContains(els ...string) {
 	s.Helper()
 	for _, el := range els {
@@ -264,7 +396,7 @@ func (s *IntegrationTestBuilder) AssertLogContains(els ...string) {
 }
 
 // AssertLogMatches asserts that the last build log matches the given regular expressions.
-// The regular expressions can be negated with a "! " prefix.
+// The regular expressions can be negated with a hglob.NegationPrefix prefix.
 func (s *IntegrationTestBuilder) AssertLogMatches(expression string) {
 	s.Helper()
 	var negate bool
@@ -276,16 +408,6 @@ func (s *IntegrationTestBuilder) AssertLogMatches(expression string) {
 	}
 
 	s.Assert(re.MatchString(s.lastBuildLog), checker, qt.Commentf(s.lastBuildLog))
-}
-
-func (s *IntegrationTestBuilder) AssertBuildCountData(count int) {
-	s.Helper()
-	s.Assert(s.H.init.data.InitCount(), qt.Equals, count)
-}
-
-func (s *IntegrationTestBuilder) AssertBuildCountGitInfo(count int) {
-	s.Helper()
-	s.Assert(s.H.init.gitInfo.InitCount(), qt.Equals, count)
 }
 
 func (s *IntegrationTestBuilder) AssertFileCount(dirname string, expected int) {
@@ -307,11 +429,21 @@ func (s *IntegrationTestBuilder) AssertFileCount(dirname string, expected int) {
 
 func (s *IntegrationTestBuilder) negate(match string) (string, bool) {
 	var negate bool
-	if strings.HasPrefix(match, "! ") {
+	if strings.HasPrefix(match, hglob.NegationPrefix) {
 		negate = true
-		match = strings.TrimPrefix(match, "! ")
+		match = strings.TrimPrefix(match, hglob.NegationPrefix)
 	}
 	return match, negate
+}
+
+// AssertFileContentStartsWith asserts that the content of the given file starts with s.
+func (s *IntegrationTestBuilder) AssertFileContentStartsWith(filename, prefix string) {
+	s.Helper()
+	content := strings.TrimSpace(s.FileContent(filename))
+	cm := qt.Commentf("File: %s Expect:\n%s Got:\n%s\nWith Space Visuals:\n%s", filename, prefix, content, util.VisualizeSpaces([]byte(content)))
+	var negate bool
+	prefix, negate = s.negate(prefix)
+	s.Assert(strings.HasPrefix(content, prefix), qt.Equals, !negate, cm)
 }
 
 func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...string) {
@@ -319,9 +451,9 @@ func (s *IntegrationTestBuilder) AssertFileContent(filename string, matches ...s
 	content := strings.TrimSpace(s.FileContent(filename))
 
 	for _, m := range matches {
-		cm := qt.Commentf("File: %s Match %s\nContent:\n%s", filename, m, content)
-		lines := strings.Split(m, "\n")
-		for _, match := range lines {
+		cm := qt.Commentf("File: %s Expect:\n%s Got:\n%s\nWith Space Visuals:\n%s", filename, m, content, util.VisualizeSpaces([]byte(content)))
+		lines := strings.SplitSeq(m, "\n")
+		for match := range lines {
 			match = strings.TrimSpace(match)
 			if match == "" || strings.HasPrefix(match, "#") {
 				continue
@@ -354,11 +486,83 @@ func (s *IntegrationTestBuilder) AssertFileContentExact(filename string, matches
 
 func (s *IntegrationTestBuilder) AssertNoRenderShortcodesArtifacts() {
 	s.Helper()
-	for _, p := range s.H.Pages() {
-		content, err := p.Content(context.Background())
+	s.AssertStringPublished("! __hugo_ctx")
+}
+
+func (s *IntegrationTestBuilder) AssertStringPublished(match string) {
+	s.Helper()
+	var negate bool
+	match, negate = s.negate(match)
+	afero.Walk(s.fs.PublishDir, "", func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		ext := strings.TrimPrefix(filepath.Ext(path), ".")
+		if !s.H.Conf.GetConfigSection("mediaTypes").(media.Types).IsTextSuffix(ext) {
+			return nil
+		}
+		content, err := afero.ReadFile(s.fs.PublishDir, path)
 		s.Assert(err, qt.IsNil)
-		comment := qt.Commentf("Page: %s\n%s", p.Path(), content)
-		s.Assert(strings.Contains(cast.ToString(content), "__hugo_ctx"), qt.IsFalse, comment)
+		comment := qt.Commentf("File: %s\n%s", path, string(content))
+		s.Assert(strings.Contains(string(content), match), qt.Equals, !negate, comment)
+		return nil
+	})
+}
+
+type IntegrationTestImageHelper struct {
+	*qt.C
+	b *IntegrationTestBuilder
+
+	img        image.Image
+	formatName string
+	congig     image.Config
+}
+
+func (h *IntegrationTestImageHelper) AssertFormat(formatName string) *IntegrationTestImageHelper {
+	h.Assert(h.formatName, qt.Equals, formatName, qt.Commentf("Expected format %q, got %q", formatName, h.formatName))
+	return h
+}
+
+func (h *IntegrationTestImageHelper) AssertFrameDurations(expect []int) *IntegrationTestImageHelper {
+	anim, ok := h.img.(himage.AnimatedImage)
+	h.Assert(ok, qt.IsTrue, qt.Commentf("Image is not animated"))
+	h.Assert(anim.GetFrameDurations(), qt.DeepEquals, expect, qt.Commentf("Frame durations do not match"))
+	return h
+}
+
+func (h *IntegrationTestImageHelper) AssertLoopCount(expect int) *IntegrationTestImageHelper {
+	anim, ok := h.img.(himage.AnimatedImage)
+	h.Assert(ok, qt.IsTrue, qt.Commentf("Image is not animated"))
+	h.Assert(anim.GetLoopCount(), qt.Equals, expect, qt.Commentf("Loop count does not match"))
+	return h
+}
+
+func (h *IntegrationTestImageHelper) AssertIsAnimated(b bool) *IntegrationTestImageHelper {
+	_, ok := h.img.(himage.AnimatedImage)
+	if b {
+		h.Assert(ok, qt.IsTrue, qt.Commentf("Image is not animated"))
+		return h
+	}
+	h.Assert(ok, qt.IsFalse, qt.Commentf("Image is animated"))
+	return h
+}
+
+func (s *IntegrationTestBuilder) ImageHelper(filename string) *IntegrationTestImageHelper {
+	filename = filepath.Clean(filename)
+	fs := s.fs.WorkingDirReadOnly
+	b, err := afero.ReadFile(fs, filename)
+	s.Assert(err, qt.IsNil)
+	conf, format, err := s.H.ResourceSpec.Imaging.Codec.DecodeConfig(0, bytes.NewReader(b))
+	s.Assert(err, qt.IsNil)
+	img, err := s.H.ResourceSpec.Imaging.Codec.Decode(bytes.NewReader(b))
+	s.Assert(err, qt.IsNil)
+
+	return &IntegrationTestImageHelper{
+		C:          s.C,
+		b:          s,
+		img:        img,
+		formatName: format,
+		congig:     conf,
 	}
 }
 
@@ -369,19 +573,24 @@ func (s *IntegrationTestBuilder) AssertPublishDir(matches ...string) {
 func (s *IntegrationTestBuilder) AssertFs(fs afero.Fs, matches ...string) {
 	s.Helper()
 	var buff bytes.Buffer
-	s.Assert(s.printAndCheckFs(fs, "", &buff), qt.IsNil)
+	if err := s.printAndCheckFs(fs, "", &buff); err != nil {
+		// E.g. public not created, treat that as an empty dir.
+		if !errors.Is(err, os.ErrNotExist) {
+			s.Fatal(err)
+		}
+	}
 	printFsLines := strings.Split(buff.String(), "\n")
 	sort.Strings(printFsLines)
-	content := strings.TrimSpace((strings.Join(printFsLines, "\n")))
+	content := strings.TrimSpace(strings.Join(printFsLines, "\n"))
 	for _, m := range matches {
 		cm := qt.Commentf("Match: %q\nIn:\n%s", m, content)
-		lines := strings.Split(m, "\n")
-		for _, match := range lines {
+		lines := strings.SplitSeq(m, "\n")
+		for match := range lines {
 			match = strings.TrimSpace(match)
 			var negate bool
-			if strings.HasPrefix(match, "! ") {
+			if strings.HasPrefix(match, hglob.NegationPrefix) {
 				negate = true
-				match = strings.TrimPrefix(match, "! ")
+				match = strings.TrimPrefix(match, hglob.NegationPrefix)
 			}
 			if negate {
 				s.Assert(content, qt.Not(qt.Contains), match, cm)
@@ -399,13 +608,15 @@ func (s *IntegrationTestBuilder) printAndCheckFs(fs afero.Fs, path string, w io.
 
 	return afero.Walk(fs, path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("error: path %q: %s", path, err)
+			return err
 		}
 		path = filepath.ToSlash(path)
 		if path == "" {
 			path = "."
 		}
+		var size int64
 		if !info.IsDir() {
+			size = info.Size()
 			f, err := fs.Open(path)
 			if err != nil {
 				return fmt.Errorf("error: path %q: %s", path, err)
@@ -415,7 +626,7 @@ func (s *IntegrationTestBuilder) printAndCheckFs(fs afero.Fs, path string, w io.
 			var buf [1]byte
 			io.ReadFull(f, buf[:])
 		}
-		fmt.Fprintln(w, path, info.IsDir())
+		fmt.Fprintf(w, "%06d %s %t\n", size, path, info.IsDir())
 		return nil
 	})
 }
@@ -425,16 +636,13 @@ func (s *IntegrationTestBuilder) AssertFileExists(filename string, b bool) {
 	if !b {
 		checker = qt.IsNotNil
 	}
+
 	_, err := s.fs.WorkingDirReadOnly.Stat(filename)
-	if !herrors.IsNotExist(err) {
+	if err != nil && !herrors.IsNotExist(err) {
 		s.Assert(err, qt.IsNil)
+		return
 	}
 	s.Assert(err, checker)
-}
-
-func (s *IntegrationTestBuilder) AssertIsFileError(err error) herrors.FileError {
-	s.Assert(err, qt.ErrorAs, new(herrors.FileError))
-	return herrors.UnwrapFileError(err)
 }
 
 func (s *IntegrationTestBuilder) AssertRenderCountContent(count int) {
@@ -456,13 +664,17 @@ func (s *IntegrationTestBuilder) AssertRenderCountPageBetween(from, to int) {
 func (s *IntegrationTestBuilder) Build() *IntegrationTestBuilder {
 	s.Helper()
 	_, err := s.BuildE()
+
+	if err != nil && strings.Contains(err.Error(), "error(s)") {
+		err = fmt.Errorf("%w: %s", err, s.lastBuildLog)
+	}
+
 	if s.Cfg.Verbose || err != nil {
-		fmt.Println(s.lastBuildLog)
 		if s.H != nil && err == nil {
-			for _, s := range s.H.Sites {
+			for s := range s.H.allSites(nil) {
 				m := s.pageMap
 				var buff bytes.Buffer
-				fmt.Fprintf(&buff, "PageMap for site %q\n\n", s.Language().Lang)
+				fmt.Fprintf(&buff, "======= PageMap for site %q  =======\n\n", s.resolveDimensionNames())
 				m.debugPrint("", 999, &buff)
 				fmt.Println(buff.String())
 			}
@@ -550,6 +762,14 @@ func (s *IntegrationTestBuilder) EditFileReplaceAll(filename, old, new string) *
 	})
 }
 
+// EditFileAtomicReplaceAll edits a file and simulates an editor atomic save by
+// emitting a fsnotify.Remove event for an existing path (see changeEvents).
+func (s *IntegrationTestBuilder) EditFileAtomicReplaceAll(filename, old, new string) *IntegrationTestBuilder {
+	return s.EditFileAtomicReplaceFunc(filename, func(s string) string {
+		return strings.ReplaceAll(s, old, new)
+	})
+}
+
 func (s *IntegrationTestBuilder) EditFileReplaceFunc(filename string, replacementFunc func(s string) string) *IntegrationTestBuilder {
 	absFilename := s.absFilename(filename)
 	b, err := afero.ReadFile(s.fs.Source, absFilename)
@@ -557,6 +777,26 @@ func (s *IntegrationTestBuilder) EditFileReplaceFunc(filename string, replacemen
 	s.changedFiles = append(s.changedFiles, absFilename)
 	oldContent := string(b)
 	s.writeSource(absFilename, replacementFunc(oldContent))
+	return s
+}
+
+func (s *IntegrationTestBuilder) EditFileAtomicReplaceFunc(filename string, replacementFunc func(s string) string) *IntegrationTestBuilder {
+	absFilename := s.absFilename(filename)
+	b, err := afero.ReadFile(s.fs.Source, absFilename)
+	s.Assert(err, qt.IsNil)
+	s.atomicSavedFiles = append(s.atomicSavedFiles, absFilename)
+	oldContent := string(b)
+	s.writeSource(absFilename, replacementFunc(oldContent))
+	return s
+}
+
+func (s *IntegrationTestBuilder) EditFileAppend(filename, contnt string) *IntegrationTestBuilder {
+	absFilename := s.absFilename(filename)
+	b, err := afero.ReadFile(s.fs.Source, absFilename)
+	s.Assert(err, qt.IsNil)
+	s.changedFiles = append(s.changedFiles, absFilename)
+	oldContent := string(b)
+	s.writeSource(absFilename, oldContent+contnt)
 	return s
 }
 
@@ -580,12 +820,30 @@ func (s *IntegrationTestBuilder) AddFiles(filenameContent ...string) *Integratio
 	return s
 }
 
+func (s *IntegrationTestBuilder) CreateDirs(dirnames ...string) *IntegrationTestBuilder {
+	for _, dirname := range dirnames {
+		absDir := s.absFilename(filepath.FromSlash(dirname))
+		s.Assert(s.fs.Source.MkdirAll(absDir, 0o777), qt.IsNil)
+		s.createdFiles = append(s.createdFiles, absDir)
+	}
+	return s
+}
+
 func (s *IntegrationTestBuilder) RemoveFiles(filenames ...string) *IntegrationTestBuilder {
 	for _, filename := range filenames {
 		absFilename := s.absFilename(filename)
 		s.removedFiles = append(s.removedFiles, absFilename)
 		s.Assert(s.fs.Source.Remove(absFilename), qt.IsNil)
 
+	}
+
+	return s
+}
+
+func (s *IntegrationTestBuilder) RemovePublishDir() *IntegrationTestBuilder {
+	s.Helper()
+	if err := s.fs.PublishDir.RemoveAll(""); err != nil && !herrors.IsNotExist(err) {
+		s.Fatalf("Failed to remove publish dir: %s", err)
 	}
 
 	return s
@@ -678,12 +936,13 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 		}
 
 		if s.Cfg.Running {
-			flags.Set("internal", maps.Params{
-				"running": s.Cfg.Running,
-				"watch":   s.Cfg.Running,
+			flags.Set("internal", hmaps.Params{
+				"running":        s.Cfg.Running,
+				"watch":          s.Cfg.Running,
+				"fastRenderMode": s.Cfg.FastRenderMode,
 			})
 		} else if s.Cfg.Watching {
-			flags.Set("internal", maps.Params{
+			flags.Set("internal", hmaps.Params{
 				"watch": s.Cfg.Watching,
 			})
 		}
@@ -693,10 +952,15 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 		}
 
 		var w io.Writer
-		if s.Cfg.LogLevel == logg.LevelTrace {
-			w = os.Stdout
+		if s.Cfg.Verbose || s.Cfg.LogLevel == logg.LevelTrace {
+			w = io.MultiWriter(os.Stdout, &s.logBuff)
 		} else {
 			w = &s.logBuff
+		}
+
+		var logHookLast func(e *logg.Entry) error
+		if s.Cfg.PanicOnWarning {
+			logHookLast = loggers.PanicOnWarningHook
 		}
 
 		logger := loggers.New(
@@ -705,6 +969,7 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 				StdErr:        w,
 				Level:         s.Cfg.LogLevel,
 				DistinctLevel: logg.LevelWarn,
+				HandlerPost:   logHookLast,
 			},
 		)
 
@@ -726,7 +991,11 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 
 		s.Assert(err, qt.IsNil)
 
-		depsCfg := deps.DepsCfg{Configs: res, Fs: fs, LogLevel: logger.Level(), StdErr: logger.StdErr()}
+		// changes received from Hugo in watch mode.
+		// In the full setup, this channel is created in the commands package.
+		changesFromBuild := make(chan []identity.Identity, 10)
+
+		depsCfg := deps.DepsCfg{Configs: res, Fs: fs, LogLevel: logger.Level(), StdErr: logger.StdErr(), ChangesFromBuild: changesFromBuild, IsIntegrationTest: true, TestCfg: deps.TestConfig{WarpcMemory: s.Cfg.WarpcMemory}}
 		sites, err := NewHugoSites(depsCfg)
 		if err != nil {
 			initErr = err
@@ -737,21 +1006,49 @@ func (s *IntegrationTestBuilder) initBuilder() error {
 			return
 		}
 
+		go func() {
+			for id := range changesFromBuild {
+				whatChanged := &WhatChanged{}
+				for _, v := range id {
+					whatChanged.Add(v)
+				}
+				bcfg := s.Cfg.BuildCfg
+				bcfg.WhatChanged = whatChanged
+				if err := s.build(bcfg); err != nil {
+					s.Fatalf("Build failed after change: %s", err)
+				}
+			}
+		}()
+
 		s.H = sites
 		s.fs = fs
 
-		if s.Cfg.NeedsNpmInstall {
-			wd, _ := os.Getwd()
-			s.Assert(os.Chdir(s.Cfg.WorkingDir), qt.IsNil)
-			s.C.Cleanup(func() { os.Chdir(wd) })
+		if s.Cfg.NeedsNpmInstall || len(s.Cfg.NeedsNpmGlobalInstall) > 0 {
 			sc := security.DefaultConfig
 			sc.Exec.Allow, err = security.NewWhitelist("npm")
 			s.Assert(err, qt.IsNil)
 			ex := hexec.New(sc, s.Cfg.WorkingDir, loggers.NewDefault())
-			command, err := ex.New("npm", "install")
-			s.Assert(err, qt.IsNil)
-			s.Assert(command.Run(), qt.IsNil)
 
+			if len(s.Cfg.NeedsNpmGlobalInstall) > 0 {
+				if !htesting.IsRealCI() && !htesting.IsGitHubAction() {
+					panic("NeedsNpmGlobalInstall is restricted to real CI because it performs global npm installs")
+				}
+				for _, pkg := range s.Cfg.NeedsNpmGlobalInstall {
+					command, err := ex.New("npm", "install", "-g", pkg)
+					s.Assert(err, qt.IsNil)
+					s.Assert(command.Run(), qt.IsNil)
+
+				}
+				s.C.Cleanup(func() {
+					for _, pkg := range s.Cfg.NeedsNpmGlobalInstall {
+						ex.New("npm", "uninstall", "-g", pkg)
+					}
+				})
+			} else {
+				command, err := ex.New("npm", "install", hexec.WithDir(s.Cfg.WorkingDir))
+				s.Assert(err, qt.IsNil)
+				s.Assert(command.Run(), qt.IsNil)
+			}
 		}
 	})
 
@@ -774,6 +1071,7 @@ func (s *IntegrationTestBuilder) reset() {
 	s.createdFiles = nil
 	s.removedFiles = nil
 	s.renamedFiles = nil
+	s.atomicSavedFiles = nil
 }
 
 func (s *IntegrationTestBuilder) build(cfg BuildCfg) error {
@@ -819,6 +1117,15 @@ func (s *IntegrationTestBuilder) changeEvents() []fsnotify.Event {
 		events = append(events, fsnotify.Event{
 			Name: v,
 			Op:   fsnotify.Rename,
+		})
+	}
+
+	for _, v := range s.atomicSavedFiles {
+		events = append(events, fsnotify.Event{
+			Name: v,
+			// The watcher was watching the inode that got replaced by the rename,
+			// so we get a Remove for a file that's still on disk.
+			Op: fsnotify.Remove,
 		})
 	}
 
@@ -881,23 +1188,7 @@ func (s *IntegrationTestBuilder) readFileFromFs(t testing.TB, fs afero.Fs, filen
 	t.Helper()
 	filename = filepath.Clean(filename)
 	b, err := afero.ReadFile(fs, filename)
-	if err != nil {
-		// Print some debug info
-		hadSlash := strings.HasPrefix(filename, helpers.FilePathSeparator)
-		start := 0
-		if hadSlash {
-			start = 1
-		}
-		end := start + 1
-
-		parts := strings.Split(filename, helpers.FilePathSeparator)
-		if parts[start] == "work" {
-			end++
-		}
-
-		s.Assert(err, qt.IsNil)
-
-	}
+	s.Assert(err, qt.IsNil)
 	return string(b)
 }
 
@@ -925,6 +1216,9 @@ type IntegrationTestConfig struct {
 	// - filenames with a .png or .jpg extension will be treated as binary and base64 decoded.
 	TxtarString string
 
+	// Prefix to add to all file contents, e.g. BOM.
+	FileContentPrefix string
+
 	// COnfig to use as the base. We will also read the config from the txtar.
 	BaseCfg config.Provider
 
@@ -934,16 +1228,23 @@ type IntegrationTestConfig struct {
 	// Whether to simulate server mode.
 	Running bool
 
+	// Whether to simulate the server's fast render mode.
+	// Only used when Running is set.
+	FastRenderMode bool
+
 	// Watch for changes.
 	// This is (currently) always set to true when Running is set.
 	// Note that the CLI for the server does allow for --watch=false, but that is not used in these test.
 	Watching bool
 
-	// Will print the log buffer after the build
+	// Enable verbose logging.
 	Verbose bool
 
 	// The log level to use.
 	LogLevel logg.Level
+
+	// Whether to panic on warnings.
+	PanicOnWarning bool
 
 	// Whether it needs the real file system (e.g. for js.Build tests).
 	NeedsOsFS bool
@@ -957,6 +1258,10 @@ type IntegrationTestConfig struct {
 	// Whether to run npm install before Build.
 	NeedsNpmInstall bool
 
+	// Global npm packages to install before Build. This is used for testing the npm integration in the Hugo Pipes.
+	// Only used on CI.
+	NeedsNpmGlobalInstall []string
+
 	// Whether to normalize the Unicode filenames to NFD on Darwin.
 	NFDFormOnDarwin bool
 
@@ -965,4 +1270,8 @@ type IntegrationTestConfig struct {
 
 	// The config to pass to Build.
 	BuildCfg BuildCfg
+
+	// WarpcMemory, if set, overrides the memory limit in MiB for the WASM based
+	// image processors (WebP and AVIF). Used to provoke memory allocation failures.
+	WarpcMemory int
 }

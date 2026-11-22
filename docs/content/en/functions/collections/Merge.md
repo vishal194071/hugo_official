@@ -1,14 +1,13 @@
 ---
 title: collections.Merge
-description: Returns the result of merging two or more maps.
+description: Returns a map by combining two or more given maps.
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [merge]
-    returnType: any
+    returnType: map[string]any
     signatures: [collections.Merge MAP MAP...]
-aliases: [/functions/merge]
 ---
 
 Returns the result of merging two or more maps from left to right. If a key already exists, `merge` updates its value. If a key is absent, `merge` inserts the value under the new key.
@@ -23,7 +22,7 @@ The following examples use these map definitions:
 {{ $m3 := dict "x" "baz" "y" "wobble" "z" (dict "a" "huey") }}
 ```
 
-Example 1
+This example merges `$m1`, `$m2`, and `$m3`, in that order:
 
 ```go-html-template
 {{ $merged := merge $m1 $m2 $m3 }}
@@ -33,7 +32,7 @@ Example 1
 {{ $merged.z.a }} → huey
 ```
 
-Example 2
+This example merges `$m3`, `$m2`, and `$m1`, in that order:
 
 ```go-html-template
 {{ $merged := merge $m3 $m2 $m1 }}
@@ -43,7 +42,7 @@ Example 2
 {{ $merged.z.a }} → huey
 ```
 
-Example 3
+This example merges `$m2`, `$m3`, and `$m1`, in that order:
 
 ```go-html-template
 {{ $merged := merge $m2 $m3 $m1 }}
@@ -53,7 +52,7 @@ Example 3
 {{ $merged.z.a }} → huey
 ```
 
-Example 4
+This example merges `$m1`, `$m3`, and `$m2`, in that order:
 
 ```go-html-template
 {{ $merged := merge $m1 $m3 $m2 }}
@@ -63,5 +62,7 @@ Example 4
 {{ $merged.z.a }} → huey
 ```
 
-> [!note]
-> Regardless of depth, merging only applies to maps. For slices, use [append](/functions/collections/append).
+> [!NOTE]
+> Regardless of depth, merging only applies to maps. For slices, use the [`collections.Append`][] function.
+
+[`collections.Append`]: /functions/collections/append/

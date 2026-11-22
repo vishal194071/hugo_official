@@ -3,7 +3,6 @@
 // license that can be found in the LICENSE file.
 
 //go:build !windows
-// +build !windows
 
 package template
 
@@ -18,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unsafe"
 )
 
 var debug = flag.Bool("debug", false, "show the errors produced by the tests")
@@ -45,7 +45,8 @@ type T struct {
 	SIEmpty []int
 	SB      []bool
 	// Arrays
-	AI [3]int
+	AI  [3]int
+	PAI *[3]int // pointer to array
 	// Maps
 	MSI      map[string]int
 	MSIone   map[string]int // one element, for deterministic output
@@ -74,10 +75,12 @@ type T struct {
 	Str fmt.Stringer
 	Err error
 	// Pointers
-	PI  *int
-	PS  *string
-	PSI *[]int
-	NIL *int
+	PI       *int
+	PS       *string
+	PSI      *[]int
+	NIL      *int
+	UPI      unsafe.Pointer
+	EmptyUPI unsafe.Pointer
 	// Function (not method)
 	BinaryFunc             func(string, string) string
 	VariadicFunc           func(...string) string
@@ -142,6 +145,7 @@ var tVal = &T{
 	SI:     []int{3, 4, 5},
 	SICap:  make([]int, 5, 10),
 	AI:     [3]int{3, 4, 5},
+	PAI:    &[3]int{3, 4, 5},
 	SB:     []bool{true, false},
 	MSI:    map[string]int{"one": 1, "two": 2, "three": 3},
 	MSIone: map[string]int{"one": 1},
@@ -169,6 +173,7 @@ var tVal = &T{
 	PI:                        newInt(23),
 	PS:                        newString("a string"),
 	PSI:                       newIntSlice(21, 22, 23),
+	UPI:                       newUnsafePointer(23),
 	BinaryFunc:                func(a, b string) string { return fmt.Sprintf("[%s=%s]", a, b) },
 	VariadicFunc:              func(s ...string) string { return fmt.Sprint("<", strings.Join(s, "+"), ">") },
 	VariadicFuncInt:           func(a int, s ...string) string { return fmt.Sprint(a, "=<", strings.Join(s, "+"), ">") },
@@ -193,6 +198,10 @@ var iVal I = tVal
 // Helpers for creation.
 func newInt(n int) *int {
 	return &n
+}
+
+func newUnsafePointer(n int) unsafe.Pointer {
+	return unsafe.Pointer(&n)
 }
 
 func newString(s string) *string {
@@ -327,16 +336,12 @@ var execTests = []execTest{
 	{"$.U.V", "{{$.U.V}}", "v", tVal, true},
 	{"declare in action", "{{$x := $.U.V}}{{$x}}", "v", tVal, true},
 	{"simple assignment", "{{$x := 2}}{{$x = 3}}{{$x}}", "3", tVal, true},
-	{
-		"nested assignment",
+	{"nested assignment",
 		"{{$x := 2}}{{if true}}{{$x = 3}}{{end}}{{$x}}",
-		"3", tVal, true,
-	},
-	{
-		"nested assignment changes the last declaration",
+		"3", tVal, true},
+	{"nested assignment changes the last declaration",
 		"{{$x := 1}}{{if true}}{{$x := 2}}{{if true}}{{$x = 3}}{{end}}{{end}}{{$x}}",
-		"1", tVal, true,
-	},
+		"1", tVal, true},
 
 	// Type with String method.
 	{"V{6666}.String()", "-{{.V0}}-", "-<6666>-", tVal, true},
@@ -383,21 +388,15 @@ var execTests = []execTest{
 	{".Method3(nil constant)", "-{{.Method3 nil}}-", "-Method3: <nil>-", tVal, true},
 	{".Method3(nil value)", "-{{.Method3 .MXI.unset}}-", "-Method3: <nil>-", tVal, true},
 	{"method on var", "{{if $x := .}}-{{$x.Method2 .U16 $x.X}}{{end}}-", "-Method2: 16 x-", tVal, true},
-	{
-		"method on chained var",
+	{"method on chained var",
 		"{{range .MSIone}}{{if $.U.TrueFalse $.True}}{{$.U.TrueFalse $.True}}{{else}}WRONG{{end}}{{end}}",
-		"true", tVal, true,
-	},
-	{
-		"chained method",
+		"true", tVal, true},
+	{"chained method",
 		"{{range .MSIone}}{{if $.GetU.TrueFalse $.True}}{{$.U.TrueFalse $.True}}{{else}}WRONG{{end}}{{end}}",
-		"true", tVal, true,
-	},
-	{
-		"chained method on variable",
+		"true", tVal, true},
+	{"chained method on variable",
 		"{{with $x := .}}{{with .SI}}{{$.GetU.TrueFalse $.True}}{{end}}{{end}}",
-		"true", tVal, true,
-	},
+		"true", tVal, true},
 	{".NilOKFunc not nil", "{{call .NilOKFunc .PI}}", "false", tVal, true},
 	{".NilOKFunc nil", "{{call .NilOKFunc nil}}", "true", tVal, true},
 	{"method on nil value from slice", "-{{range .}}{{.Method1 1234}}{{end}}-", "-1234-", tSliceOfNil, true},
@@ -456,6 +455,10 @@ var execTests = []execTest{
 	{"if 0.0", "{{if .FloatZero}}NON-ZERO{{else}}ZERO{{end}}", "ZERO", tVal, true},
 	{"if 1.5i", "{{if 1.5i}}NON-ZERO{{else}}ZERO{{end}}", "NON-ZERO", tVal, true},
 	{"if 0.0i", "{{if .ComplexZero}}NON-ZERO{{else}}ZERO{{end}}", "ZERO", tVal, true},
+	{"if nonNilPointer", "{{if .PI}}NON-ZERO{{else}}ZERO{{end}}", "NON-ZERO", tVal, true},
+	{"if nilPointer", "{{if .NIL}}NON-ZERO{{else}}ZERO{{end}}", "ZERO", tVal, true},
+	{"if UPI", "{{if .UPI}}NON-ZERO{{else}}ZERO{{end}}", "NON-ZERO", tVal, true},
+	{"if EmptyUPI", "{{if .EmptyUPI}}NON-ZERO{{else}}ZERO{{end}}", "ZERO", tVal, true},
 	{"if emptystring", "{{if ``}}NON-EMPTY{{else}}EMPTY{{end}}", "EMPTY", tVal, true},
 	{"if string", "{{if `notempty`}}NON-EMPTY{{else}}EMPTY{{end}}", "NON-EMPTY", tVal, true},
 	{"if emptyslice", "{{if .SIEmpty}}NON-EMPTY{{else}}EMPTY{{end}}", "EMPTY", tVal, true},
@@ -486,14 +489,10 @@ var execTests = []execTest{
 	{"printf lots", `{{printf "%d %s %g %s" 127 "hello" 7-3i .Method0}}`, "127 hello (7-3i) M0", tVal, true},
 
 	// HTML.
-	{
-		"html", `{{html "<script>alert(\"XSS\");</script>"}}`,
-		"&lt;script&gt;alert(&#34;XSS&#34;);&lt;/script&gt;", nil, true,
-	},
-	{
-		"html pipeline", `{{printf "<script>alert(\"XSS\");</script>" | html}}`,
-		"&lt;script&gt;alert(&#34;XSS&#34;);&lt;/script&gt;", nil, true,
-	},
+	{"html", `{{html "<script>alert(\"XSS\");</script>"}}`,
+		"&lt;script&gt;alert(&#34;XSS&#34;);&lt;/script&gt;", nil, true},
+	{"html pipeline", `{{printf "<script>alert(\"XSS\");</script>" | html}}`,
+		"&lt;script&gt;alert(&#34;XSS&#34;);&lt;/script&gt;", nil, true},
 	{"html", `{{html .PS}}`, "a string", tVal, true},
 	{"html typed nil", `{{html .NIL}}`, "&lt;nil&gt;", tVal, true},
 	{"html untyped nil", `{{html .Empty0}}`, "&lt;no value&gt;", tVal, true},
@@ -561,6 +560,9 @@ var execTests = []execTest{
 	{"array[:]", "{{slice .AI}}", "[3 4 5]", tVal, true},
 	{"array[1:]", "{{slice .AI 1}}", "[4 5]", tVal, true},
 	{"array[1:2]", "{{slice .AI 1 2}}", "[4]", tVal, true},
+	{"pointer to array[:]", "{{slice .PAI}}", "[3 4 5]", tVal, true},
+	{"pointer to array[1:]", "{{slice .PAI 1}}", "[4 5]", tVal, true},
+	{"pointer to array[1:2]", "{{slice .PAI 1 2}}", "[4]", tVal, true},
 	{"string[:]", "{{slice .S}}", "xyz", tVal, true},
 	{"string[0:1]", "{{slice .S 0 1}}", "x", tVal, true},
 	{"string[1:]", "{{slice .S 1}}", "yz", tVal, true},
@@ -925,9 +927,8 @@ var delimPairs = []string{
 
 func TestDelims(t *testing.T) {
 	const hello = "Hello, world"
-	value := struct{ Str string }{hello}
+	var value = struct{ Str string }{hello}
 	for i := 0; i < len(delimPairs); i += 2 {
-		text := ".Str"
 		left := delimPairs[i+0]
 		trueLeft := left
 		right := delimPairs[i+1]
@@ -938,17 +939,23 @@ func TestDelims(t *testing.T) {
 		if right == "" { // default case
 			trueRight = "}}"
 		}
-		text = trueLeft + text + trueRight
-		// Now add a comment
-		text += trueLeft + "/*comment*/" + trueRight
-		// Now add  an action containing a string.
-		text += trueLeft + `"` + trueLeft + `"` + trueRight
+		action := trueLeft + ".Str" + trueRight
+		// A comment, which is not preserved in the parse tree.
+		comment := trueLeft + "/*comment*/" + trueRight
+		// An action containing a string that looks like the left delimiter.
+		strAction := trueLeft + `"` + trueLeft + `"` + trueRight
+		text := action + comment + strAction
 		// At this point text looks like `{{.Str}}{{/*comment*/}}{{"{{"}}`.
 		tmpl, err := New("delims").Delims(left, right).Parse(text)
 		if err != nil {
 			t.Fatalf("delim %q text %q parse err %s", left, text, err)
 		}
-		b := new(strings.Builder)
+		// The parse tree's String form should roundtrip back to the input,
+		// using the custom delimiters, modulo the dropped comment.
+		if got, want := tmpl.Root.String(), action+strAction; got != want {
+			t.Errorf("delim %q: String() = %q, want %q", left, got, want)
+		}
+		var b = new(strings.Builder)
 		err = tmpl.Execute(b, value)
 		if err != nil {
 			t.Fatalf("delim %q exec err %s", left, err)
@@ -1020,8 +1027,7 @@ func TestExecError_CustomError(t *testing.T) {
 	var b bytes.Buffer
 	err := tmpl.Execute(&b, nil)
 
-	var e *CustomError
-	if !errors.As(err, &e) {
+	if _, ok := errors.AsType[*CustomError](err); !ok {
 		t.Fatalf("expected custom error; got %s", err)
 	}
 }
@@ -1071,7 +1077,7 @@ const treeTemplate = `
 `
 
 func TestTree(t *testing.T) {
-	tree := &Tree{
+	var tree = &Tree{
 		1,
 		&Tree{
 			2, &Tree{
@@ -1324,7 +1330,7 @@ var cmpTests = []cmpTest{
 
 func TestComparison(t *testing.T) {
 	b := new(strings.Builder)
-	cmpStruct := struct {
+	var cmpStruct = struct {
 		Uthree, Ufour    uint
 		NegOne, Three    int
 		Ptr, NilPtr      *int
@@ -1507,6 +1513,44 @@ func TestBadFuncNames(t *testing.T) {
 	}
 	for _, name := range names {
 		testBadFuncName(name, t)
+	}
+}
+
+func TestIsTrue(t *testing.T) {
+	var nil_ptr *int
+	var nil_chan chan int
+	tests := []struct {
+		v    any
+		want bool
+	}{
+		{1, true},
+		{0, false},
+		{uint8(1), true},
+		{uint8(0), false},
+		{float64(1.0), true},
+		{float64(0.0), false},
+		{complex64(1.0), true},
+		{complex64(0.0), false},
+		{true, true},
+		{false, false},
+		{[2]int{1, 2}, true},
+		{[0]int{}, false},
+		{[]byte("abc"), true},
+		{[]byte(""), false},
+		{map[string]int{"a": 1, "b": 2}, true},
+		{map[string]int{}, false},
+		{make(chan int), true},
+		{nil_chan, false},
+		//{new(int), true}, // Commented out for Hugo. We have a slightly different view on ... the truth.
+		{nil_ptr, false},
+		{unsafe.Pointer(new(int)), true},
+		{unsafe.Pointer(nil_ptr), false},
+	}
+	for _, test_case := range tests {
+		got, _ := IsTrue(test_case.v)
+		if got != test_case.want {
+			t.Fatalf("expect result %v, got %v", test_case.want, got)
+		}
 	}
 }
 
@@ -1799,13 +1843,12 @@ func TestFunctionCheckDuringCall(t *testing.T) {
 		input   string
 		data    any
 		wantErr string
-	}{
-		{
-			name:    "call nothing",
-			input:   `{{call}}`,
-			data:    tVal,
-			wantErr: "wrong number of args for call: want at least 1 got 0",
-		},
+	}{{
+		name:    "call nothing",
+		input:   `{{call}}`,
+		data:    tVal,
+		wantErr: "wrong number of args for call: want at least 1 got 0",
+	},
 		{
 			name:    "call non-function",
 			input:   "{{call .True}}",

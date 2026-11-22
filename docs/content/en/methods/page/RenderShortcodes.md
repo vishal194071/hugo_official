@@ -1,6 +1,6 @@
 ---
 title: RenderShortcodes
-description: Renders all shortcodes in the content of the given page, preserving the surrounding markup.
+description: Returns the content of the given page with all shortcodes rendered, preserving the surrounding markup.
 categories: []
 keywords: []
 params:
@@ -27,7 +27,7 @@ For example:
 
 Then call the shortcode in your Markdown:
 
-```text {file="content/about.md"}
+```md {file="content/about.md"}
 {{%/* include "/snippets/services" */%}}
 {{%/* include "/snippets/values" */%}}
 {{%/* include "/snippets/leadership" */%}}
@@ -48,7 +48,7 @@ Use the latter for the "include" shortcode described above.
 
 To understand what is returned by the `RenderShortcodes` method, consider this content file
 
-```text {file="content/about.md"}
+```md {file="content/about.md"}
 +++
 title = 'About'
 date = 2023-10-07T12:28:33-07:00

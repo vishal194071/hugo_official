@@ -122,6 +122,12 @@ func newMarkdown(pcfg converter.ProviderConfig) goldmark.Markdown {
 		)
 	}
 
+	if cfg.Extensions.Passthrough.Enable {
+		tocRendererOptions = append(tocRendererOptions,
+			renderer.WithNodeRenderers(util.Prioritized(&tocPassthroughRenderer{}, 90)),
+		)
+	}
+
 	var (
 		extensions = []goldmark.Extender{
 			hugocontext.New(pcfg.Logger),
@@ -176,8 +182,18 @@ func newMarkdown(pcfg converter.ProviderConfig) goldmark.Markdown {
 		extensions = append(extensions, extension.DefinitionList)
 	}
 
-	if cfg.Extensions.Footnote {
-		extensions = append(extensions, extension.Footnote)
+	if cfg.Extensions.Footnote.Enable {
+		opts := []extension.FootnoteOption{}
+		opts = append(opts, extension.WithFootnoteBacklinkHTML(cfg.Extensions.Footnote.BacklinkHTML))
+		if cfg.Extensions.Footnote.EnableAutoIDPrefix {
+			opts = append(opts,
+				extension.WithFootnoteIDPrefixFunction(func(n ast.Node) []byte {
+					documentID := n.OwnerDocument().Meta()["documentID"].(string)
+					return []byte("h" + documentID)
+				}))
+		}
+		f := extension.NewFootnote(opts...)
+		extensions = append(extensions, f)
 	}
 
 	if cfg.Extensions.CJK.Enable {
@@ -262,6 +278,7 @@ func (c *goldmarkConverter) Parse(ctx converter.RenderContext) (converter.Result
 		reader,
 		parser.WithContext(pctx),
 	)
+	doc.OwnerDocument().AddMeta("documentID", c.ctx.DocumentID)
 
 	return parserResult{
 		doc: doc,

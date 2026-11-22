@@ -3,14 +3,13 @@ title: Related content
 description: List related content in "See Also" sections.
 categories: []
 keywords: []
-aliases: [/content/related/,/related/,/content-management/related/]
 ---
 
-Hugo uses a set of factors to identify a page's related content based on front matter parameters. This can be tuned to the desired set of indices and parameters or left to Hugo's default [related content configuration](/configuration/related-content/).
+Hugo uses a set of factors to identify a page's related content based on front matter parameters. This can be tuned to the desired set of indices and parameters.
 
 ## List related content
 
-To list up to 5 related pages (which share the same _date_ or _keyword_ parameters) is as simple as including something similar to this partial in your template:
+To list up to 5 related pages (which share the same `date` or `keyword` parameters), include something similar to this _partial_ template:
 
 ```go-html-template {file="layouts/_partials/related.html" copy=true}
 {{ with site.RegularPages.Related . | first 5 }}
@@ -25,16 +24,16 @@ To list up to 5 related pages (which share the same _date_ or _keyword_ paramete
 
 The `Related` method takes one argument which may be a `Page` or an options map. The options map has these options:
 
-indices
+`indices`
 : (`slice`) The indices to search within.
 
-document
+`document`
 : (`page`) The page for which to find related content. Required when specifying an options map.
 
-namedSlices
-: (`slice`) The keywords to search for, expressed as a slice of `KeyValues` using the [`keyVals`] function.
+`namedSlices`
+: (`slice`) The keywords to search for, expressed as a slice of `KeyValues` using the [`keyVals`][] function.
 
-fragments
+`fragments`
 : (`slice`) A list of special keywords that is used for indices configured as type "fragments". This will match the [fragment](g) identifiers of the documents.
 
 A fictional example using all of the above options:
@@ -49,8 +48,8 @@ A fictional example using all of the above options:
 }}
 ```
 
-> [!note]
-> We improved and simplified this feature in Hugo 0.111.0. Before this we had 3 different methods: `Related`, `RelatedTo` and `RelatedIndices`. Now we have only one method: `Related`. The old methods are still available but deprecated. Also see [this blog article](https://regisphilibert.com/blog/2018/04/hugo-optmized-relashionships-with-related-content/) for a great explanation of more advanced usage of this feature.
+> [!NOTE]
+> We improved and simplified this feature in Hugo 0.111.0. Before this we had 3 different methods: `Related`, `RelatedTo` and `RelatedIndices`. Now we have only one method: `Related`. The old methods are still available but deprecated. Also see [this blog article][] for a great explanation of more advanced usage of this feature.
 
 ## Index content headings
 
@@ -62,8 +61,8 @@ threshold    = 20
 includeNewer = true
 toLower      = false
 [[related.indices]]
-name        = "fragmentrefs"
-type        = "fragments"
+name        = 'fragmentrefs'
+type        = 'fragments'
 applyFilter = true
 weight      = 80
 {{< /code-toggle >}}
@@ -97,6 +96,8 @@ weight      = 80
 
 ## Configuration
 
-See [configure related content](/configuration/related-content/).
+See [configure related content][].
 
 [`keyVals`]: /functions/collections/keyvals/
+[configure related content]: /configuration/related-content/
+[this blog article]: https://regisphilibert.com/blog/2018/04/hugo-optmized-relashionships-with-related-content/

@@ -17,9 +17,10 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
-	"sync"
 
+	"github.com/bep/helpers/maphelpers"
 	"github.com/gohugoio/hugo/compare"
 )
 
@@ -54,46 +55,37 @@ func EqualAny(a string, b ...string) bool {
 	return slices.Contains(b, a)
 }
 
-// regexpCache represents a cache of regexp objects protected by a mutex.
-type regexpCache struct {
-	mu sync.RWMutex
-	re map[string]*regexp.Regexp
-}
-
-func (rc *regexpCache) getOrCompileRegexp(pattern string) (re *regexp.Regexp, err error) {
-	var ok bool
-
-	if re, ok = rc.get(pattern); !ok {
-		re, err = regexp.Compile(pattern)
-		if err != nil {
-			return nil, err
-		}
-		rc.set(pattern, re)
-	}
-
-	return re, nil
-}
-
-func (rc *regexpCache) get(key string) (re *regexp.Regexp, ok bool) {
-	rc.mu.RLock()
-	re, ok = rc.re[key]
-	rc.mu.RUnlock()
-	return
-}
-
-func (rc *regexpCache) set(key string, re *regexp.Regexp) {
-	rc.mu.Lock()
-	rc.re[key] = re
-	rc.mu.Unlock()
-}
-
-var reCache = regexpCache{re: make(map[string]*regexp.Regexp)}
+var reCache = *maphelpers.NewConcurrentMap[string, *regexp.Regexp]()
 
 // GetOrCompileRegexp retrieves a regexp object from the cache based upon the pattern.
 // If the pattern is not found in the cache, the pattern is compiled and added to
 // the cache.
 func GetOrCompileRegexp(pattern string) (re *regexp.Regexp, err error) {
-	return reCache.getOrCompileRegexp(pattern)
+	return reCache.GetOrCreate(
+		pattern,
+		func() (*regexp.Regexp, error) {
+			return regexp.Compile(pattern)
+		},
+	)
+}
+
+// HasAnyPrefix checks if the string s has any of the prefixes given.
+func HasAnyPrefix(s string, prefixes ...string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func HasUppercase(s string) bool {
+	for _, r := range s {
+		if 'A' <= r && r <= 'Z' {
+			return true
+		}
+	}
+	return false
 }
 
 // InSlice checks if a string is an element of a slice of strings
@@ -128,7 +120,66 @@ func ToString(v any) (string, bool) {
 	return "", false
 }
 
-type (
-	Strings2 [2]string
-	Strings3 [3]string
-)
+// UniqueStrings returns a new slice with any duplicates removed.
+func UniqueStrings(s []string) []string {
+	unique := make([]string, 0, len(s))
+	for i, val := range s {
+		var seen bool
+		for j := range i {
+			if s[j] == val {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			unique = append(unique, val)
+		}
+	}
+	return unique
+}
+
+// UniqueStringsReuse returns a slice with any duplicates removed.
+// It will modify the input slice.
+func UniqueStringsReuse(s []string) []string {
+	result := s[:0]
+	for i, val := range s {
+		var seen bool
+
+		for j := range i {
+			if s[j] == val {
+				seen = true
+				break
+			}
+		}
+
+		if !seen {
+			result = append(result, val)
+		}
+	}
+	return result
+}
+
+// UniqueStringsSorted returns a sorted slice with any duplicates removed.
+// It will modify the input slice.
+func UniqueStringsSorted(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	ss := sort.StringSlice(s)
+	ss.Sort()
+	i := 0
+	for j := 1; j < len(s); j++ {
+		if !ss.Less(i, j) {
+			continue
+		}
+		i++
+		s[i] = s[j]
+	}
+
+	return s[:i+1]
+}
+
+// Matcher is an interface for matching strings.
+type Matcher interface {
+	Match(s string) bool
+}

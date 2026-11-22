@@ -113,28 +113,28 @@ func TestImageTransformBasic(t *testing.T) {
 	assertWidthHeight(resizedAndRotated, 125, 200)
 
 	assertWidthHeight(resized, 300, 200)
-	c.Assert(resized.RelPermalink(), qt.Equals, "/a/sunset_hu_d2115125d9324a79.jpg")
+	c.Assert(resized.RelPermalink(), qt.Equals, "/a/sunset_hu_f4f15cdbaaca3b2d.jpg")
 
 	fitted, err := resized.Fit("50x50")
 	c.Assert(err, qt.IsNil)
-	c.Assert(fitted.RelPermalink(), qt.Equals, "/a/sunset_hu_c2c98e06123b048e.jpg")
+	c.Assert(fitted.RelPermalink(), qt.Equals, "/a/sunset_hu_c9781e950a09210.jpg")
 	assertWidthHeight(fitted, 50, 33)
 
 	// Check the MD5 key threshold
 	fittedAgain, _ := fitted.Fit("10x20")
 	fittedAgain, err = fittedAgain.Fit("10x20")
 	c.Assert(err, qt.IsNil)
-	c.Assert(fittedAgain.RelPermalink(), qt.Equals, "/a/sunset_hu_dc9e89c10109de72.jpg")
+	c.Assert(fittedAgain.RelPermalink(), qt.Equals, "/a/sunset_hu_78c1665fdce5ec4d.jpg")
 	assertWidthHeight(fittedAgain, 10, 7)
 
 	filled, err := image.Fill("200x100 bottomLeft")
 	c.Assert(err, qt.IsNil)
-	c.Assert(filled.RelPermalink(), qt.Equals, "/a/sunset_hu_b9f6d350738928fe.jpg")
+	c.Assert(filled.RelPermalink(), qt.Equals, "/a/sunset_hu_b3e01daae854e587.jpg")
 	assertWidthHeight(filled, 200, 100)
 
 	smart, err := image.Fill("200x100 smart")
 	c.Assert(err, qt.IsNil)
-	c.Assert(smart.RelPermalink(), qt.Equals, "/a/sunset_hu_6fd390e7b0d26f0b.jpg")
+	c.Assert(smart.RelPermalink(), qt.Equals, "/a/sunset_hu_68598cde516f4179.jpg")
 	assertWidthHeight(smart, 200, 100)
 
 	// Check cache
@@ -144,12 +144,12 @@ func TestImageTransformBasic(t *testing.T) {
 
 	cropped, err := image.Crop("300x300 topRight")
 	c.Assert(err, qt.IsNil)
-	c.Assert(cropped.RelPermalink(), qt.Equals, "/a/sunset_hu_3df036e11f4ddd43.jpg")
+	c.Assert(cropped.RelPermalink(), qt.Equals, "/a/sunset_hu_9016246670a22728.jpg")
 	assertWidthHeight(cropped, 300, 300)
 
 	smartcropped, err := image.Crop("200x200 smart")
 	c.Assert(err, qt.IsNil)
-	c.Assert(smartcropped.RelPermalink(), qt.Equals, "/a/sunset_hu_12e2d26de89b464b.jpg")
+	c.Assert(smartcropped.RelPermalink(), qt.Equals, "/a/sunset_hu_5a29f30d38eb4aea.jpg")
 	assertWidthHeight(smartcropped, 200, 200)
 
 	// Check cache
@@ -216,7 +216,7 @@ func TestImageTransformFormat(t *testing.T) {
 
 	imagePng, err := image.Resize("450x png")
 	c.Assert(err, qt.IsNil)
-	c.Assert(imagePng.RelPermalink(), qt.Equals, "/a/sunset_hu_e8b9444dcf2e75ef.png")
+	c.Assert(imagePng.RelPermalink(), qt.Equals, "/a/sunset_hu_ae7e4a663628f945.png")
 	c.Assert(imagePng.ResourceType(), qt.Equals, "image")
 	assertExtWidthHeight(imagePng, ".png", 450, 281)
 	c.Assert(imagePng.Name(), qt.Equals, "sunset.jpg")
@@ -224,7 +224,7 @@ func TestImageTransformFormat(t *testing.T) {
 
 	imageGif, err := image.Resize("225x gif")
 	c.Assert(err, qt.IsNil)
-	c.Assert(imageGif.RelPermalink(), qt.Equals, "/a/sunset_hu_f80842d4c3789345.gif")
+	c.Assert(imageGif.RelPermalink(), qt.Equals, "/a/sunset_hu_6d1f23c09eddc748.gif")
 	c.Assert(imageGif.ResourceType(), qt.Equals, "image")
 	assertExtWidthHeight(imageGif, ".gif", 225, 141)
 	c.Assert(imageGif.Name(), qt.Equals, "sunset.jpg")
@@ -247,7 +247,7 @@ func TestImagePermalinkPublishOrder(t *testing.T) {
 			}()
 
 			check1 := func(img images.ImageResource) {
-				resizedLink := "/a/sunset_hu_3910bca82e28c9d6.jpg"
+				resizedLink := "/a/sunset_hu_3a097ae28aebc166.jpg"
 				c.Assert(img.RelPermalink(), qt.Equals, resizedLink)
 				assertImageFile(c, spec.PublishFs, resizedLink, 100, 50)
 			}
@@ -288,12 +288,12 @@ func TestImageBugs(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(resized, qt.Not(qt.IsNil))
 		c.Assert(resized.Width(), qt.Equals, 200)
-		c.Assert(resized.RelPermalink(), qt.Equals, "/a/1234567890qwertyuiopasdfghjklzxcvbnm5to6eeeeee7via8eleph_hu_951d3980b18c52a9.jpg")
+		c.Assert(resized.RelPermalink(), qt.Equals, "/a/1234567890qwertyuiopasdfghjklzxcvbnm5to6eeeeee7via8eleph_hu_a6f31c42e1afef07.jpg")
 		resized, err = resized.Resize("100x")
 		c.Assert(err, qt.IsNil)
 		c.Assert(resized, qt.Not(qt.IsNil))
 		c.Assert(resized.Width(), qt.Equals, 100)
-		c.Assert(resized.RelPermalink(), qt.Equals, "/a/1234567890qwertyuiopasdfghjklzxcvbnm5to6eeeeee7via8eleph_hu_1daa203572ecd6ec.jpg")
+		c.Assert(resized.RelPermalink(), qt.Equals, "/a/1234567890qwertyuiopasdfghjklzxcvbnm5to6eeeeee7via8eleph_hu_14e106419fe28039.jpg")
 	})
 
 	// Issue #6137
@@ -386,12 +386,12 @@ func TestImageResize8BitPNG(t *testing.T) {
 	c.Assert(image.MediaType().Type, qt.Equals, "image/png")
 	c.Assert(image.RelPermalink(), qt.Equals, "/a/gohugoio.png")
 	c.Assert(image.ResourceType(), qt.Equals, "image")
-	c.Assert(image.Exif(), qt.IsNotNil)
+	c.Assert(image.Meta(), qt.IsNotNil)
 
 	resized, err := image.Resize("800x")
 	c.Assert(err, qt.IsNil)
 	c.Assert(resized.MediaType().Type, qt.Equals, "image/png")
-	c.Assert(resized.RelPermalink(), qt.Equals, "/a/gohugoio_hu_fe2b762e9cac406c.png")
+	c.Assert(resized.RelPermalink(), qt.Equals, "/a/gohugoio_hu_3ddd57bfb01f7376.png")
 	c.Assert(resized.Width(), qt.Equals, 800)
 }
 
@@ -414,14 +414,17 @@ func TestSVGImageContent(t *testing.T) {
 	c.Assert(content.(string), qt.Contains, `<svg height="100" width="100">`)
 }
 
-func TestImageExif(t *testing.T) {
+func TestImageMeta(t *testing.T) {
 	c := qt.New(t)
 	fs := afero.NewMemMapFs()
-	spec := newTestResourceSpec(specDescriptor{fs: fs, c: c})
+	meta := map[string]any{
+		"fields": []string{"*{Date,Lens,GPS}*"},
+	}
+	spec := newTestResourceSpec(specDescriptor{fs: fs, c: c, imagingMeta: meta})
 	image := fetchResourceForSpec(spec, c, "sunset.jpg").(images.ImageResource)
 
-	getAndCheckExif := func(c *qt.C, image images.ImageResource) {
-		x := image.Exif()
+	getAndCheckMeta := func(c *qt.C, image images.ImageResource) {
+		x := image.Meta()
 		c.Assert(x, qt.Not(qt.IsNil))
 
 		c.Assert(x.Date.Format("2006-01-02"), qt.Equals, "2017-10-27")
@@ -430,21 +433,21 @@ func TestImageExif(t *testing.T) {
 		c.Assert(x.Lat, qt.Equals, float64(36.59744166666667))
 		c.Assert(x.Long, qt.Equals, float64(-4.50846))
 
-		v, found := x.Tags["LensModel"]
+		v, found := x.Exif["LensModel"]
 		c.Assert(found, qt.Equals, true)
 		lensModel, ok := v.(string)
 		c.Assert(ok, qt.Equals, true)
 		c.Assert(lensModel, qt.Equals, "smc PENTAX-DA* 16-50mm F2.8 ED AL [IF] SDM")
 		resized, _ := image.Resize("300x200")
-		x2 := resized.Exif()
+		x2 := resized.Meta()
 
 		c.Assert(x2, eq, x)
 	}
 
-	getAndCheckExif(c, image)
+	getAndCheckMeta(c, image)
 	image = fetchResourceForSpec(spec, c, "sunset.jpg").(images.ImageResource)
 	// This will read from file cache.
-	getAndCheckExif(c, image)
+	getAndCheckMeta(c, image)
 }
 
 func TestImageColorsLuminance(t *testing.T) {
@@ -465,60 +468,61 @@ func TestImageColorsLuminance(t *testing.T) {
 	}
 }
 
-func BenchmarkImageExif(b *testing.B) {
-	getImages := func(c *qt.C, b *testing.B, fs afero.Fs) []images.ImageResource {
-		spec := newTestResourceSpec(specDescriptor{fs: fs, c: c})
-		imgs := make([]images.ImageResource, b.N)
-		for i := 0; i < b.N; i++ {
-			imgs[i] = fetchResourceForSpec(spec, c, "sunset.jpg", strconv.Itoa(i)).(images.ImageResource)
+func BenchmarkImageMeta(b *testing.B) {
+	getImage := func(i int, c *qt.C, fs afero.Fs) images.ImageResource {
+		meta := map[string]any{
+			"fields": []string{"*{Date,Lens,GPS}*"},
 		}
-		return imgs
+		spec := newTestResourceSpec(specDescriptor{fs: fs, c: c, imagingMeta: meta})
+		return fetchResourceForSpec(spec, c, "sunset.jpg", strconv.Itoa(i)).(images.ImageResource)
 	}
 
-	getAndCheckExif := func(c *qt.C, image images.ImageResource) {
-		x := image.Exif()
+	getAndCheckMeta := func(c *qt.C, image images.ImageResource) {
+		x := image.Meta()
 		c.Assert(x, qt.Not(qt.IsNil))
 		c.Assert(x.Long, qt.Equals, float64(-4.50846))
 	}
 
 	b.Run("Cold cache", func(b *testing.B) {
-		b.StopTimer()
 		c := qt.New(b)
-		images := getImages(c, b, afero.NewMemMapFs())
-
-		b.StartTimer()
-		for i := 0; i < b.N; i++ {
-			getAndCheckExif(c, images[i])
+		fs := afero.NewMemMapFs()
+		for i := 0; b.Loop(); i++ {
+			b.StopTimer()
+			image := getImage(i, c, fs)
+			b.StartTimer()
+			getAndCheckMeta(c, image)
 		}
 	})
 
 	b.Run("Cold cache, 10", func(b *testing.B) {
-		b.StopTimer()
 		c := qt.New(b)
-		images := getImages(c, b, afero.NewMemMapFs())
-
-		b.StartTimer()
-		for i := 0; i < b.N; i++ {
+		fs := afero.NewMemMapFs()
+		for i := 0; b.Loop(); i++ {
+			b.StopTimer()
+			image := getImage(i, c, fs)
+			b.StartTimer()
 			for range 10 {
-				getAndCheckExif(c, images[i])
+				getAndCheckMeta(c, image)
 			}
 		}
 	})
 
 	b.Run("Warm cache", func(b *testing.B) {
-		b.StopTimer()
 		c := qt.New(b)
 		fs := afero.NewMemMapFs()
-		images := getImages(c, b, fs)
+		// Prime the cache
 		for i := 0; i < b.N; i++ {
-			getAndCheckExif(c, images[i])
+			image := getImage(i, c, fs)
+			getAndCheckMeta(c, image)
 		}
 
-		images = getImages(c, b, fs)
-
-		b.StartTimer()
+		// Start the real benchmark,
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			getAndCheckExif(c, images[i])
+			b.StopTimer()
+			image := getImage(i, c, fs)
+			b.StartTimer()
+			getAndCheckMeta(c, image)
 		}
 	})
 }

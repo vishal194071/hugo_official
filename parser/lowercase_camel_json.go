@@ -27,6 +27,7 @@ import (
 var (
 	keyMatchRegex       = regexp.MustCompile(`\"(\w+)\":`)
 	nullEnableBoolRegex = regexp.MustCompile(`\"(enable\w+)\":null`)
+	nullLineNosRegex    = regexp.MustCompile(`\"(lineNos)\":null`)
 )
 
 type NullBoolJSONMarshaller struct {
@@ -38,7 +39,9 @@ func (c NullBoolJSONMarshaller) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return nullEnableBoolRegex.ReplaceAll(b, []byte(`"$1": false`)), nil
+	b = nullEnableBoolRegex.ReplaceAll(b, []byte(`"$1": false`))
+	b = nullLineNosRegex.ReplaceAll(b, []byte(`"$1": false`))
+	return b, nil
 }
 
 // Code adapted from https://gist.github.com/piersy/b9934790a8892db1a603820c0c23e4a7
@@ -104,26 +107,33 @@ func (c ReplacingJSONMarshaller) MarshalJSON() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		var removeZeroVAlues func(m map[string]any)
-		removeZeroVAlues = func(m map[string]any) {
+		var removeZeroValues func(m map[string]any)
+		removeZeroValues = func(m map[string]any) {
 			for k, v := range m {
 				if !hreflect.IsMap(v) && !hreflect.IsTruthful(v) {
 					delete(m, k)
 				} else {
 					switch vv := v.(type) {
 					case map[string]any:
-						removeZeroVAlues(vv)
+						if len(vv) == 0 {
+							// Keep intentionally empty map.
+							continue
+						}
+						removeZeroValues(vv)
+						if len(vv) == 0 {
+							delete(m, k)
+						}
 					case []any:
 						for _, vvv := range vv {
 							if m, ok := vvv.(map[string]any); ok {
-								removeZeroVAlues(m)
+								removeZeroValues(m)
 							}
 						}
 					}
 				}
 			}
 		}
-		removeZeroVAlues(m)
+		removeZeroValues(m)
 		converted, err = json.Marshal(m)
 
 	}

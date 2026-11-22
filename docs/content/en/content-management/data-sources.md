@@ -3,7 +3,6 @@ title: Data sources
 description: Use local and remote data sources to augment or create content.
 categories: []
 keywords: []
-aliases: [/extras/datafiles/,/extras/datadrivencontent/,/doc/datafiles/,/templates/data-templates/]
 ---
 
 Hugo can access and [unmarshal](g) local and remote data sources including CSV, JSON, TOML, YAML, and XML. Use this data to augment existing content or to create new content.
@@ -14,42 +13,42 @@ A data source might be a file in the `data` directory, a [global resource](g), a
 
 The `data` directory in the root of your project may contain one or more data files, in either a flat or nested tree. Hugo merges the data files to create a single data structure, accessible with the `Data` method on a `Site` object.
 
-Hugo also merges data directories from themes and modules into this single data structure, where the `data` directory in the root of your project takes precedence.
+Hugo also merges the `data` directories of themes and modules into this single data structure, where the `data` directory in the root of your project takes precedence.
 
-> [!note]
+> [!NOTE]
 > Hugo reads the combined data structure into memory and keeps it there for the entire build. For data that is infrequently accessed, use global or page resources instead.
 
 Theme and module authors may wish to namespace their data files to prevent collisions. For example:
 
-```text
+```tree
 project/
 └── data/
     └── mytheme/
         └── foo.json
 ```
 
-> [!note]
+> [!NOTE]
 > Do not place CSV files in the `data` directory. Access CSV files as page, global, or remote resources.
 
-See the documentation for the [`Data`] method on a `Site` object for details and examples.
+See the documentation for the [`Data`][] method on a `Site` object for details and examples.
 
 ## Global resources
 
 Use the `resources.Get` and `transform.Unmarshal` functions to access data files that exist as global resources.
 
-See the [`transform.Unmarshal`](/functions/transform/unmarshal/#global-resource) documentation for details and examples.
+See the [`transform.Unmarshal`][global-resource] documentation for details and examples.
 
 ## Page resources
 
 Use the `Resources.Get` method on a `Page` object combined with the `transform.Unmarshal` function to access data files that exist as page resources.
 
-See the [`transform.Unmarshal`](/functions/transform/unmarshal/#page-resource) documentation for details and examples.
+See the [`transform.Unmarshal`][page-resource] documentation for details and examples.
 
 ## Remote resources
 
 Use the `resources.GetRemote` and `transform.Unmarshal` functions to access remote data.
 
-See the [`transform.Unmarshal`](/functions/transform/unmarshal/#remote-resource) documentation for details and examples.
+See the [`transform.Unmarshal`][remote-resource] documentation for details and examples.
 
 ## Augment existing content
 
@@ -61,7 +60,7 @@ Use data sources to augment existing content. For example, create a shortcode to
 "Felix","cat","Malicious","7"
 ```
 
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 {{</* csv-to-table "pets.csv" */>}}
 ```
 
@@ -105,7 +104,10 @@ Felix|cat|Malicious|7
 
 ## Create new content
 
-Use [content adapters] to create new content.
+Use [content adapters][] to create new content.
 
 [`Data`]: /methods/site/data/
 [content adapters]: /content-management/content-adapters/
+[global-resource]: /functions/transform/unmarshal/#global-resource
+[page-resource]: /functions/transform/unmarshal/#page-resource
+[remote-resource]: /functions/transform/unmarshal/#remote-resource

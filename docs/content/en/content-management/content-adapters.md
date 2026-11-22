@@ -1,11 +1,9 @@
 ---
 title: Content adapters
-description: Create content adapters to dynamically add content when building your site.
+description: Create content adapters to dynamically add content when building your project.
 categories: []
 keywords: []
 ---
-
-{{< new-in 0.126.0 />}}
 
 ## Overview
 
@@ -13,7 +11,7 @@ A content adapter is a template that dynamically creates pages when building a s
 
 Unlike templates that reside in the `layouts` directory, content adapters reside in the `content` directory, no more than one per directory per language. When a content adapter creates a page, the page's [logical path](g) will be relative to the content adapter.
 
-```text
+```tree
 content/
 ├── articles/
 │   ├── _index.md
@@ -27,104 +25,110 @@ content/
     └── _index.md
 ```
 
-Each content adapter is named `_content.gotmpl` and uses the same [syntax] as templates in the `layouts` directory. You can use any of the [template functions] within a content adapter, as well as the methods described below.
+Each content adapter is named `_content.gotmpl` and uses the same [syntax][] as templates in the `layouts` directory. You can use any of the [template functions][] within a content adapter, as well as the methods described below.
 
 ## Methods
 
 Use these methods within a content adapter.
 
-### AddPage
+`AddPage`
+: Adds a page to the site.
 
-Adds a page to the site.
-
-```go-html-template {file="content/books/_content.gotmpl"}
-{{ $content := dict
-  "mediaType" "text/markdown"
-  "value" "The _Hunchback of Notre Dame_ was written by Victor Hugo."
-}}
-{{ $page := dict
-  "content" $content
-  "kind" "page"
-  "path" "the-hunchback-of-notre-dame"
-  "title" "The Hunchback of Notre Dame"
-}}
-{{ .AddPage $page }}
-```
-
-### AddResource
-
-Adds a page resource to the site.
-
-```go-html-template {file="content/books/_content.gotmpl"}
-{{ with resources.Get "images/a.jpg" }}
+  ```go-html-template {file="content/books/_content.gotmpl"}
   {{ $content := dict
-    "mediaType" .MediaType.Type
-    "value" .
+    "mediaType" "text/markdown"
+    "value" "The _Hunchback of Notre Dame_ was written by Victor Hugo."
   }}
-  {{ $resource := dict
+  {{ $page := dict
     "content" $content
-    "path" "the-hunchback-of-notre-dame/cover.jpg"
+    "kind" "page"
+    "path" "the-hunchback-of-notre-dame"
+    "title" "The Hunchback of Notre Dame"
   }}
-  {{ $.AddResource $resource }}
-{{ end }}
-```
+  {{ .AddPage $page }}
+  ```
 
-Then retrieve the new page resource with something like:
+`AddResource`
+: Adds a page resource to the site.
 
-```go-html-template {file="layouts/page.html"}
-{{ with .Resources.Get "cover.jpg" }}
-  <img src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}" alt="">
-{{ end }}
-```
+  ```go-html-template {file="content/books/_content.gotmpl"}
+  {{ with resources.Get "images/a.jpg" }}
+    {{ $content := dict
+      "mediaType" .MediaType.Type
+      "value" .
+    }}
+    {{ $resource := dict
+      "content" $content
+      "path" "the-hunchback-of-notre-dame/cover.jpg"
+    }}
+    {{ $.AddResource $resource }}
+  {{ end }}
+  ```
 
-### Site
+  Then retrieve the new page resource with something like:
 
-Returns the `Site` to which the pages will be added.
+  ```go-html-template {file="layouts/page.html"}
+  {{ with .Resources.Get "cover.jpg" }}
+    <img src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}" alt="">
+  {{ end }}
+  ```
 
-```go-html-template {file="content/books/_content.gotmpl"}
-{{ .Site.Title }}
-```
+`Site`
+: (`Site`) Returns the site to which the pages will be added.
 
-> [!note]
-> Note that the `Site` returned isn't fully built when invoked from the content adapters; if you try to call methods that depends on pages, e.g. `.Site.Pages`, you will get an error saying "this method cannot be called before the site is fully initialized".
+  ```go-html-template {file="content/books/_content.gotmpl"}
+  {{ .Site.Title }}
+  ```
 
-### Store
+  > [!NOTE]
+  > The `Site` object is not fully initialized while Hugo executes a content adapter.
+  > Methods that depend on built pages, such as `Site.Pages`, are unavailable at this stage and return an error.
 
-Returns a persistent "scratch pad" to store and manipulate data. The main use case for this is to transfer values between executions when [EnableAllLanguages](#enablealllanguages) is set. See [examples](/methods/page/store/).
+`Store`
+: (`maps.Scratch`) Returns a persistent data structure for storing and manipulating keyed values. The main use case for this is to transfer values between executions when [EnableAllLanguages](#enablealllanguages) is set. See [examples][].
 
-```go-html-template {file="content/books/_content.gotmpl"}
-{{ .Store.Set "key" "value" }}
-{{ .Store.Get "key" }}
-```
+  ```go-html-template {file="content/books/_content.gotmpl"}
+  {{ .Store.Set "key" "value" }}
+  {{ .Store.Get "key" }}
+  ```
 
-### EnableAllLanguages
+`EnableAllLanguages`
+: By default, Hugo executes the content adapter only once for the first matching site in the [sites matrix](g). Use this method to expand execution to all languages while maintaining the current role and version.
 
-By default, Hugo executes the content adapter for the language defined by the `_content.gotmpl` file. Use this method to activate the content adapter for all languages.
+  For more fine-grained control, define a `sites.matrix` in front matter or in a content mount.
 
-```go-html-template {file="content/books/_content.gotmpl"}
-{{ .EnableAllLanguages }}
-{{ $content := dict
-  "mediaType" "text/markdown"
-  "value" "The _Hunchback of Notre Dame_ was written by Victor Hugo."
-}}
-{{ $page := dict
-  "content" $content
-  "kind" "page"
-  "path" "the-hunchback-of-notre-dame"
-  "title" "The Hunchback of Notre Dame"
-}}
-{{ .AddPage $page }}
-```
+  ```go-html-template {file="content/books/_content.gotmpl"}
+  {{ .EnableAllLanguages }}
+  {{ $content := dict
+    "mediaType" "text/markdown"
+    "value" "The _Hunchback of Notre Dame_ was written by Victor Hugo."
+  }}
+  {{ $page := dict
+    "content" $content
+    "kind" "page"
+    "path" "the-hunchback-of-notre-dame"
+    "title" "The Hunchback of Notre Dame"
+  }}
+  {{ .AddPage $page }}
+  ```
+
+`EnableAllDimensions`
+: By default, Hugo executes the content adapter only once for the first matching site in the [sites matrix](g). Use this method to expand execution to every possible combination of language, version, and role.
+
+  For more fine-grained control, define a `sites.matrix` in front matter or in a content mount.
 
 ## Page map
 
-Set any [front matter field] in the map passed to the [`AddPage`](#addpage) method, excluding `markup`. Instead of setting the `markup` field, specify the `content.mediaType` as described below.
+Set any [front matter field][] in the map passed to the [`AddPage`](#addpage) method, with these exceptions:
+
+- Instead of setting the `markup` field, specify the `content.mediaType` as described below.
+- Instead of setting taxonomy keys such as `tags` and `categories` at the top level, place them inside the `params` map.
 
 This table describes the fields most commonly passed to the `AddPage` method.
 
 Key|Description|Required
 :--|:--|:-:
-`content.mediaType`|The content [media type]. Default is `text/markdown`. See [content formats] for examples.|&nbsp;
+`content.mediaType`|The content [media type][]. Default is `text/markdown`. See [content formats][] for examples.|&nbsp;
 `content.value`|The content value as a string.|&nbsp;
 `dates.date`|The page creation date as a `time.Time` value.|&nbsp;
 `dates.expiryDate`|The page expiry date as a `time.Time` value.|&nbsp;
@@ -134,7 +138,7 @@ Key|Description|Required
 `path`|The page's [logical path](g) relative to the content adapter. Do not include a leading slash or file extension.|:heavy_check_mark:
 `title`|The page title.|&nbsp;
 
-> [!note]
+> [!NOTE]
 > While `path` is the only required field, we recommend setting `title` as well.
 >
 > When setting the `path`, Hugo transforms the given string to a logical path. For example, setting `path` to `A B C` produces a logical path of `/section/a-b-c`.
@@ -145,14 +149,14 @@ Construct the map passed to the [`AddResource`](#addresource) method using the f
 
 Key|Description|Required
 :--|:--|:-:
-`content.mediaType`|The content [media type].|:heavy_check_mark:
+`content.mediaType`|The content [media type][].|:heavy_check_mark:
 `content.value`|The content value as a string or resource.|:heavy_check_mark:
 `name`|The resource name.|&nbsp;
 `params`|A map of resource parameters.|&nbsp;
 `path`|The resources's [logical path](g) relative to the content adapter. Do not include a leading slash.|:heavy_check_mark:
 `title`|The resource title.|&nbsp;
 
-> [!note]
+> [!NOTE]
 > When `content.value` is a string, Hugo generates a new resource with a publication path relative to the page. However, if `content.value` is already a resource, Hugo directly uses its value and publishes it relative to the site root. This latter method is more efficient.
 >
 > When setting the `path`, Hugo transforms the given string to a logical path. For example, setting `path` to `A B C/cover.jpg` produces a logical path of `/section/a-b-c/cover.jpg`.
@@ -164,7 +168,7 @@ Create pages from remote data, where each page represents a book review.
 Step 1
 : Create the content structure.
 
-  ```text
+  ```tree
   content/
   └── books/
       ├── _content.gotmpl  <-- content adapter
@@ -265,16 +269,16 @@ Step 4
   {{ end }}
   ```
 
-## Multilingual sites
+## Multilingual projects
 
-With multilingual sites you can:
+With multilingual projects you can:
 
 1. Create one content adapter for all languages using the [`EnableAllLanguages`](#enablealllanguages) method as described above.
 1. Create content adapters unique to each language. See the examples below.
 
 ### Translations by file name
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 [languages.en]
@@ -286,7 +290,7 @@ weight = 2
 
 Include a language designator in the content adapter's file name.
 
-```text
+```tree
 content/
 └── books/
     ├── _content.de.gotmpl
@@ -295,9 +299,9 @@ content/
     └── _index.en.md
 ```
 
-### Translations by content directory
+### Translations by directory
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 [languages.en]
@@ -311,7 +315,7 @@ weight = 2
 
 Create a single content adapter in each directory:
 
-```text
+```tree
 content/
 ├── de/
 │   └── books/
@@ -327,7 +331,7 @@ content/
 
 Two or more pages collide when they have the same publication path. Due to concurrency, the content of the published page is indeterminate. Consider this example:
 
-```text
+```tree
 content/
 └── books/
     ├── _content.gotmpl  <-- content adapter
@@ -337,9 +341,10 @@ content/
 
 If the content adapter also creates `books/the-hunchback-of-notre-dame`, the content of the published page is indeterminate. You can not define the processing order.
 
-To detect page collisions, use the `--printPathWarnings` flag when building your site.
+To detect page collisions, use the `--printPathWarnings` flag when building your project.
 
 [content formats]: /content-management/formats/#classification
+[examples]: /methods/page/store/
 [front matter field]: /content-management/front-matter/#fields
 [media type]: https://en.wikipedia.org/wiki/Media_type
 [syntax]: /templates/introduction/

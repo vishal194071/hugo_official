@@ -2,8 +2,8 @@
 # Twitter:      https://twitter.com/gohugoio
 # Website:      https://gohugo.io/
 
-ARG GO_VERSION="1.25"
-ARG ALPINE_VERSION="3.22"
+ARG GO_VERSION="1.27"
+ARG ALPINE_VERSION="3.24"
 ARG DART_SASS_VERSION="1.79.3"
 
 FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
@@ -13,20 +13,13 @@ FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS gorun
 
 FROM gobuild AS build
 
-RUN apk add clang lld
-
 # Set up cross-compilation helpers
 COPY --from=xx / /
 
-ARG TARGETPLATFORM
-RUN xx-apk add musl-dev gcc g++
-
-# Optionally set HUGO_BUILD_TAGS to "none" or "withdeploy" when building like so:
+# Optionally set HUGO_BUILD_TAGS to "withdeploy" when building like so:
 # docker build --build-arg HUGO_BUILD_TAGS=withdeploy .
-#
-# We build the extended version by default.
-ARG HUGO_BUILD_TAGS="extended"
-ENV CGO_ENABLED=1
+ARG HUGO_BUILD_TAGS=""
+ENV CGO_ENABLED=0
 ENV GOPROXY=https://proxy.golang.org
 ENV GOCACHE=/root/.cache/go-build
 ENV GOMODCACHE=/go/pkg/mod
@@ -59,13 +52,15 @@ FROM gorun AS final
 
 COPY --from=build /usr/bin/hugo /usr/bin/hugo
 
-# libc6-compat  are required for extended libraries (libsass, libwebp).
+# libc6-compat is required by the glibc built Dart Sass binary.
 RUN apk add --no-cache \
     libc6-compat \
     git \
     runuser \
     nodejs \
-    npm
+    npm \
+    openssh-client \
+    tar
 
 RUN mkdir -p /var/hugo/bin /cache && \
     addgroup -Sg 1000 hugo && \

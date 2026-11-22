@@ -23,7 +23,7 @@ func TestExecuteAsTemplateMultipleLanguages(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = "http://example.com/blog"
 defaultContentLanguage = "fr"
 defaultContentLanguageInSubdir = true
@@ -31,25 +31,25 @@ defaultContentLanguageInSubdir = true
 [Languages.en]
 weight = 10
 title = "In English"
-languageName = "English"
+label = "English"
 [Languages.fr]
 weight = 20
 title = "Le Français"
-languageName = "Français"
+label = "Français"
 -- i18n/en.toml --
 [hello]
 other = "Hello"
 -- i18n/fr.toml --
 [hello]
 other = "Bonjour"
--- layouts/index.fr.html --
+-- layouts/home.fr.html --
 Lang: {{ site.Language.Lang }}
 {{ $templ := "{{T \"hello\"}}" | resources.FromString "f1.html" }}
 {{ $helloResource := $templ | resources.ExecuteAsTemplate (print "f%s.html" .Lang) . }}
 Hello1: {{T "hello"}}
 Hello2: {{ $helloResource.Content }}
 LangURL: {{ relLangURL "foo" }}
--- layouts/index.html --
+-- layouts/home.html --
 Lang: {{ site.Language.Lang }}
 {{ $templ := "{{T \"hello\"}}" | resources.FromString "f1.html" }}
 {{ $helloResource := $templ | resources.ExecuteAsTemplate (print "f%s.html" .Lang) . }}

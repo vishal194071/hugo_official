@@ -29,7 +29,8 @@ func init() {
 		if d.Conf.Language() == nil {
 			panic("Language must be set")
 		}
-		ctx := New(langs.GetTimeFormatter(d.Conf.Language()), langs.GetLocation(d.Conf.Language()), d)
+		lang := d.Conf.Language().(*langs.Language)
+		ctx := New(langs.GetTimeFormatter(lang), langs.GetLocation(lang), d)
 
 		ns := &internal.TemplateFuncsNamespace{
 			Name: name,
@@ -56,18 +57,6 @@ func init() {
 			},
 		}
 
-		ns.AddMethodMapping(ctx.Format,
-			[]string{"dateFormat"},
-			[][2]string{
-				{`dateFormat: {{ dateFormat "Monday, Jan 2, 2006" "2015-01-21" }}`, `dateFormat: Wednesday, Jan 21, 2015`},
-			},
-		)
-
-		ns.AddMethodMapping(ctx.Now,
-			[]string{"now"},
-			[][2]string{},
-		)
-
 		ns.AddMethodMapping(ctx.AsTime,
 			nil,
 			[][2]string{
@@ -80,6 +69,23 @@ func init() {
 			[][2]string{
 				{`{{ mul 60 60 | duration "second" }}`, `1h0m0s`},
 			},
+		)
+
+		ns.AddMethodMapping(ctx.Format,
+			[]string{"dateFormat"},
+			[][2]string{
+				{`dateFormat: {{ dateFormat "Monday, Jan 2, 2006" "2015-01-21" }}`, `dateFormat: Wednesday, Jan 21, 2015`},
+			},
+		)
+
+		ns.AddMethodMapping(ctx.In,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Now,
+			[]string{"now"},
+			[][2]string{},
 		)
 
 		ns.AddMethodMapping(ctx.ParseDuration,

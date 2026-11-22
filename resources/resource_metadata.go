@@ -19,16 +19,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gohugoio/hugo/hugofs/glob"
+	"github.com/gohugoio/hugo/hugofs/hglob"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/resources/page/pagemeta"
 	"github.com/gohugoio/hugo/resources/resource"
 
 	"github.com/spf13/cast"
 
-	"github.com/gohugoio/hugo/common/maps"
-	"github.com/gohugoio/hugo/common/paths"
 	maps0 "maps"
+
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/paths"
 )
 
 var (
@@ -59,7 +60,7 @@ type metaResource struct {
 	changed bool
 	title   string
 	name    string
-	params  maps.Params
+	params  hmaps.Params
 }
 
 func (r *metaResource) Name() string {
@@ -70,7 +71,7 @@ func (r *metaResource) Title() string {
 	return r.title
 }
 
-func (r *metaResource) Params() maps.Params {
+func (r *metaResource) Params() hmaps.Params {
 	return r.params
 }
 
@@ -118,7 +119,8 @@ func cloneWithMetadataFromResourceConfigIfNeeded(rc *pagemeta.ResourceConfig, r 
 }
 
 // CloneWithMetadataFromMapIfNeeded clones the given resource with the given metadata if the resource supports it.
-func CloneWithMetadataFromMapIfNeeded(m []map[string]any, r resource.Resource) resource.Resource {
+// The counters map is shared across all resources in a bundle so that the :counter placeholder increments correctly.
+func CloneWithMetadataFromMapIfNeeded(m []map[string]any, r resource.Resource, counters map[string]int) resource.Resource {
 	wmp, ok := r.(resource.WithResourceMetaProvider)
 	if !ok {
 		return r
@@ -130,7 +132,7 @@ func CloneWithMetadataFromMapIfNeeded(m []map[string]any, r resource.Resource) r
 		params: r.Params(),
 	}
 
-	assignMetadata(m, wrapped)
+	assignMetadata(m, wrapped, counters)
 	if !wrapped.changed {
 		return r
 	}
@@ -143,9 +145,7 @@ func CloneWithMetadataFromMapIfNeeded(m []map[string]any, r resource.Resource) r
 // This assignment is additive, but the most specific match needs to be first.
 // The `name` and `title` metadata field support shell-matched collection it got a match in.
 // See https://golang.org/pkg/path/#Match
-func assignMetadata(metadata []map[string]any, ma *metaResource) error {
-	counters := make(map[string]int)
-
+func assignMetadata(metadata []map[string]any, ma *metaResource, counters map[string]int) error {
 	var (
 		nameSet, titleSet                   bool
 		nameCounter, titleCounter           = 0, 0
@@ -161,7 +161,7 @@ func assignMetadata(metadata []map[string]any, ma *metaResource) error {
 
 		srcKey := strings.ToLower(cast.ToString(src))
 
-		glob, err := glob.GetGlob(srcKey)
+		glob, err := hglob.GetGlob(srcKey)
 		if err != nil {
 			return fmt.Errorf("failed to match resource with metadata: %w", err)
 		}
@@ -208,9 +208,9 @@ func assignMetadata(metadata []map[string]any, ma *metaResource) error {
 
 			params, found := meta["params"]
 			if found {
-				m := maps.ToStringMap(params)
+				m := hmaps.ToStringMap(params)
 				// Needed for case insensitive fetching of params values
-				maps.PrepareParams(m)
+				hmaps.PrepareParams(m)
 				ma.updateParams(m)
 			}
 		}

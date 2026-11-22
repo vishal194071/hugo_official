@@ -11,27 +11,27 @@ params:
 
 The translation key creates a relationship between all translations of a given page. The translation key is derived from the file path, or from the `translationKey` parameter if defined in front matter.
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 defaultContentLanguage = 'en'
 
 [languages.en]
 contentDir = 'content/en'
-languageCode = 'en-US'
-languageName = 'English'
+label = 'English'
+locale = 'en-US'
 weight = 1
 
 [languages.de]
 contentDir = 'content/de'
-languageCode = 'de-DE'
-languageName = 'Deutsch'
+label = 'Deutsch'
+locale = 'de-DE'
 weight = 2
 {{< /code-toggle >}}
 
 And this content:
 
-```text
+```tree
 content/
 ├── de/
 │   ├── books/
@@ -58,7 +58,7 @@ title = 'Buch 1'
 translationKey = 'foo'
 {{< /code-toggle >}}
 
-When rendering either either of the pages above:
+When rendering either of the pages above:
 
 ```go-html-template
 {{ .TranslationKey }} → page/foo

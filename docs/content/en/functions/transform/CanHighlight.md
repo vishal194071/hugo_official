@@ -1,8 +1,8 @@
 ---
 title: transform.CanHighlight
-description: Reports whether the given code language is supported by the Chroma highlighter.
+description: Reports whether the given language is supported for syntax highlighting.
 categories: []
-keywords: []
+keywords: [highlight]
 params:
   functions_and_methods:
     aliases: []

@@ -18,24 +18,21 @@ import (
 	"testing"
 	gtime "time"
 
+	"github.com/bep/golocales"
 	qt "github.com/frankban/quicktest"
 
 	"github.com/gohugoio/hugo/common/htime"
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/tpl/time"
-
-	translators "github.com/gohugoio/localescompressed"
 )
 
 func TestTimeLocation(t *testing.T) {
 	t.Parallel()
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	loc, _ := gtime.LoadLocation("America/Antigua")
-	ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), loc, b.H.Deps)
+	ns := time.New(htime.NewTimeFormatter(golocales.New("en")), loc, b.H.Deps)
 
 	for i, test := range []struct {
 		name     string
@@ -92,14 +89,12 @@ func TestTimeLocation(t *testing.T) {
 func TestFormat(t *testing.T) {
 	c := qt.New(t)
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	c.Run("UTC", func(c *qt.C) {
 		c.Parallel()
 
-		ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), gtime.UTC, b.H.Deps)
+		ns := time.New(htime.NewTimeFormatter(golocales.New("en")), gtime.UTC, b.H.Deps)
 
 		for i, test := range []struct {
 			layout string
@@ -142,23 +137,21 @@ func TestFormat(t *testing.T) {
 
 		loc, err := gtime.LoadLocation("America/Los_Angeles")
 		c.Assert(err, qt.IsNil)
-		ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), loc, b.H.Deps)
+		ns := time.New(htime.NewTimeFormatter(golocales.New("en")), loc, b.H.Deps)
 
 		d, err := ns.Format(":time_full", "2020-03-09T11:00:00")
 
 		c.Assert(err, qt.IsNil)
-		c.Assert(d, qt.Equals, "11:00:00 am Pacific Daylight Time")
+		c.Assert(d, qt.Equals, "11:00:00\u202fam Pacific Daylight Time")
 	})
 }
 
 func TestDuration(t *testing.T) {
 	t.Parallel()
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
-	ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), gtime.UTC, b.H.Deps)
+	ns := time.New(htime.NewTimeFormatter(golocales.New("en")), gtime.UTC, b.H.Deps)
 
 	for i, test := range []struct {
 		unit   any
@@ -201,11 +194,9 @@ func TestDuration(t *testing.T) {
 func TestIn(t *testing.T) {
 	t.Parallel()
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
-	ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), gtime.UTC, b.H.Deps)
+	ns := time.New(htime.NewTimeFormatter(golocales.New("en")), gtime.UTC, b.H.Deps)
 
 	in := gtime.Date(2025, gtime.March, 31, 15, 0, 0, 0, gtime.UTC)
 
@@ -242,13 +233,11 @@ func TestIn(t *testing.T) {
 var timeZoneNames []string = []string{"America/New_York", "Europe/Oslo", "Australia/Sydney", "UTC", "Local"}
 
 func BenchmarkInWithCaching(b *testing.B) {
-	bb := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: b},
-	).Build()
+	bb := hugolib.Test(b, "")
 
-	ns := time.New(htime.NewTimeFormatter(translators.GetTranslator("en")), gtime.UTC, bb.H.Deps)
+	ns := time.New(htime.NewTimeFormatter(golocales.New("en")), gtime.UTC, bb.H.Deps)
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		timeZoneName := timeZoneNames[i%len(timeZoneNames)]
 		_, err := ns.In(timeZoneName, gtime.Now())
 		if err != nil {
@@ -258,7 +247,7 @@ func BenchmarkInWithCaching(b *testing.B) {
 }
 
 func BenchmarkInWithoutCaching(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		timeZoneName := timeZoneNames[i%len(timeZoneNames)]
 		location, err := gtime.LoadLocation(timeZoneName)
 		if err != nil {

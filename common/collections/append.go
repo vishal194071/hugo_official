@@ -16,6 +16,8 @@ package collections
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/gohugoio/hugo/common/hreflect"
 )
 
 // Append appends from to a slice to and returns the resulting slice.
@@ -25,7 +27,7 @@ func Append(to any, from ...any) (any, error) {
 	if len(from) == 0 {
 		return to, nil
 	}
-	tov, toIsNil := indirect(reflect.ValueOf(to))
+	tov, toIsNil := hreflect.Indirect(reflect.ValueOf(to))
 
 	toIsNil = toIsNil || to == nil
 	var tot reflect.Type
@@ -80,6 +82,10 @@ func Append(to any, from ...any) (any, error) {
 					return from[0], nil
 				}
 
+				if fromv.Len() == 0 {
+					return tov.Interface(), nil
+				}
+
 				// If we get []string []string, we append the from slice to to
 				if tot == fromt {
 					return reflect.AppendSlice(tov, fromv).Interface(), nil
@@ -100,7 +106,7 @@ func Append(to any, from ...any) (any, error) {
 		fv := reflect.ValueOf(f)
 		if !fv.IsValid() || !fv.Type().AssignableTo(tot) {
 			// Fall back to a []interface{} slice.
-			tov, _ := indirect(reflect.ValueOf(to))
+			tov, _ := hreflect.Indirect(reflect.ValueOf(to))
 			return appendToInterfaceSlice(tov, from...)
 		}
 		tov = reflect.Append(tov, fv)
@@ -135,18 +141,4 @@ func appendToInterfaceSlice(tov reflect.Value, from ...any) ([]any, error) {
 	tos = append(tos, from...)
 
 	return tos, nil
-}
-
-// indirect is borrowed from the Go stdlib: 'text/template/exec.go'
-// TODO(bep) consolidate
-func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
-	for ; v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface; v = v.Elem() {
-		if v.IsNil() {
-			return v, true
-		}
-		if v.Kind() == reflect.Interface && v.NumMethod() > 0 {
-			break
-		}
-	}
-	return v, false
 }

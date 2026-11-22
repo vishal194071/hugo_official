@@ -49,6 +49,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/gohugoio/hugo/common/herrors"
 	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/common/paths"
+	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/tpl/tplimpl"
 
 	"github.com/gohugoio/hugo/common/types"
@@ -244,7 +246,7 @@ func (f *fileServer) createEndpoint(i int) (*http.ServeMux, net.Listener, string
 	logger := f.c.r.logger
 
 	if i == 0 {
-		r.Printf("Environment: %q\n", f.c.hugoTry().Deps.Site.Hugo().Environment)
+		r.Printf("Environment: %q\n", f.c.hugoTry().Deps.Site.Hugo().Environment())
 		mainTarget := "disk"
 		if f.c.r.renderToMemory {
 			mainTarget = "memory"
@@ -280,7 +282,7 @@ func (f *fileServer) createEndpoint(i int) (*http.ServeMux, net.Listener, string
 					}
 
 					port = 1313
-					f.c.withConf(func(conf *commonConfig) {
+					f.c.withConfOrOldConf(func(conf *commonConfig) {
 						if lrport := conf.configs.GetFirstLanguageConfig().BaseURLLiveReload().Port(); lrport != 0 {
 							port = lrport
 						}
@@ -369,6 +371,12 @@ func (f *fileServer) createEndpoint(i int) (*http.ServeMux, net.Listener, string
 
 			if f.c.fastRenderMode && f.c.errState.buildErr() == nil {
 				if isNavigation(requestURI, r) {
+					// See issue 14240.
+					// Hugo escapes the URL paths when generating them,
+					// that may not be the case when we receive it back from the browser.
+					// PathEscape will escape if it is not already escaped.
+					requestURI = paths.PathEscape(requestURI)
+
 					if !f.c.visitedURLs.Contains(requestURI) {
 						// If not already on stack, re-render that single page.
 						if err := f.c.partialReRender(requestURI); err != nil {
@@ -491,9 +499,7 @@ func (c *serverCommand) Run(ctx context.Context, cd *simplecobra.Commandeer, arg
 
 		watchGroups := helpers.ExtractAndGroupRootPaths(watchDirs)
 
-		for _, group := range watchGroups {
-			c.r.Printf("Watching for changes in %s\n", group)
-		}
+		c.r.Printf("Watching for changes in %s\n", strings.Join(watchGroups, ", "))
 		watcher, err := c.newWatcher(c.r.poll, watchDirs...)
 		if err != nil {
 			return err
@@ -517,7 +523,7 @@ func (c *serverCommand) Run(ctx context.Context, cd *simplecobra.Commandeer, arg
 func (c *serverCommand) Init(cd *simplecobra.Commandeer) error {
 	cmd := cd.CobraCommand
 	cmd.Short = "Start the embedded web server"
-	cmd.Long = `Hugo provides its own webserver which builds and serves the site.
+	cmd.Long = `Hugo provides its own webserver which builds and serves the project.
 While hugo server is high performance, it is a webserver with limited options.
 
 The ` + "`" + `hugo server` + "`" + ` command will by default write and serve files from disk, but
@@ -525,8 +531,8 @@ you can render to memory by using the ` + "`" + `--renderToMemory` + "`" + ` fla
 faster in some cases, but it will consume more memory.
 
 By default hugo will also watch your files for any changes you make and
-automatically rebuild the site. It will then live reload any open browser pages
-and push the latest content to them. As most Hugo sites are built in a fraction
+automatically rebuild the project. It will then live reload any open browser pages
+and push the latest content to them. As most Hugo projects are built in a fraction
 of a second, you will be able to save and see your changes nearly instantly.`
 	cmd.Aliases = []string{"serve"}
 
@@ -543,11 +549,11 @@ of a second, you will be able to save and see your changes nearly instantly.`
 	cmd.Flags().BoolVar(&c.tlsAuto, "tlsAuto", false, "generate and use locally-trusted certificates.")
 	cmd.Flags().BoolVar(&c.pprof, "pprof", false, "enable the pprof server (port 8080)")
 	cmd.Flags().BoolVarP(&c.serverWatch, "watch", "w", true, "watch filesystem for changes and recreate as needed")
-	cmd.Flags().BoolVar(&c.noHTTPCache, "noHTTPCache", false, "prevent HTTP caching")
+	cmd.Flags().BoolVar(&c.noHTTPCache, "noHTTPCache", false, "disable browser caching of pages served by the embedded web server")
 	cmd.Flags().BoolVarP(&c.serverAppend, "appendPort", "", true, "append port to baseURL")
 	cmd.Flags().BoolVar(&c.disableLiveReload, "disableLiveReload", false, "watch without enabling live browser reload on rebuild")
 	cmd.Flags().BoolVarP(&c.navigateToChanged, "navigateToChanged", "N", false, "navigate to changed content file on live browser reload")
-	cmd.Flags().BoolVarP(&c.openBrowser, "openBrowser", "O", false, "open the site in a browser after server startup")
+	cmd.Flags().BoolVarP(&c.openBrowser, "openBrowser", "O", false, "open the project in a browser after server startup")
 	cmd.Flags().BoolVar(&c.renderStaticToDisk, "renderStaticToDisk", false, "serve static files from disk and dynamic files from memory")
 	cmd.Flags().BoolVar(&c.disableFastRender, "disableFastRender", false, "enables full re-renders on changes")
 	cmd.Flags().BoolVar(&c.disableBrowserError, "disableBrowserError", false, "do not show build errors in the browser")
@@ -627,7 +633,7 @@ func (c *serverCommand) setServerInfoInConfig() error {
 		panic("no server ports set")
 	}
 	return c.withConfE(func(conf *commonConfig) error {
-		for i, language := range conf.configs.LanguagesDefaultFirst {
+		for i, language := range conf.configs.Languages {
 			isMultihost := conf.configs.IsMultihost
 			var serverPort int
 			if isMultihost {
@@ -841,6 +847,7 @@ func (c *serverCommand) fixURL(baseURLFromConfig, baseURLFromFlag string, port i
 func (c *serverCommand) partialReRender(urls ...string) (err error) {
 	defer func() {
 		c.errState.setWasErr(false)
+		c.recoverIfBroken(err)
 	}()
 	visited := types.NewEvictingQueue[string](len(urls))
 	for _, url := range urls {
@@ -879,7 +886,7 @@ func (c *serverCommand) serve() error {
 		if isMultihost {
 			for _, l := range conf.configs.ConfigLangs() {
 				baseURLs = append(baseURLs, l.BaseURL())
-				roots = append(roots, l.Language().Lang)
+				roots = append(roots, l.Language().(*langs.Language).Lang)
 			}
 		} else {
 			l := conf.configs.GetFirstLanguageConfig()
@@ -1020,6 +1027,7 @@ func (c *serverCommand) serve() error {
 			case <-c.quit:
 				return nil
 			case <-sigs:
+				c.progressInterrupted()
 				return nil
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1034,7 +1042,6 @@ func (c *serverCommand) serve() error {
 	defer cancel()
 	wg2, ctx := errgroup.WithContext(ctx)
 	for _, srv := range servers {
-		srv := srv
 		wg2.Go(func() error {
 			return srv.Shutdown(ctx)
 		})
@@ -1103,7 +1110,7 @@ func (s *staticSyncer) syncsStaticEvents(staticEvents []fsnotify.Event) error {
 
 			fromPath := ev.Name
 
-			relPath, found := sourceFs.MakePathRelative(fromPath, true)
+			relPath, found := sourceFs.MakePathRelative(fromPath, false)
 
 			if !found {
 				// Not member of this virtual host.
@@ -1155,18 +1162,17 @@ func (s *staticSyncer) syncsStaticEvents(staticEvents []fsnotify.Event) error {
 	return err
 }
 
+// chmodFilter is a ChmodFilter for static syncing.
+// Returns true to skip syncing permissions for directories and files without
+// owner-write permission. The primary use case is files from the module cache (0444).
 func chmodFilter(dst, src os.FileInfo) bool {
-	// Hugo publishes data from multiple sources, potentially
-	// with overlapping directory structures. We cannot sync permissions
-	// for directories as that would mean that we might end up with write-protected
-	// directories inside /public.
-	// One example of this would be syncing from the Go Module cache,
-	// which have 0555 directories.
-	return src.IsDir()
+	if src.IsDir() {
+		return true
+	}
+	return src.Mode().Perm()&0o200 == 0
 }
 
 func cleanErrorLog(content string) string {
-	content = strings.ReplaceAll(content, "\n", " ")
 	content = logReplacer.Replace(content)
 	content = logDuplicateTemplateExecuteRe.ReplaceAllString(content, "")
 	content = logDuplicateTemplateParseRe.ReplaceAllString(content, "")

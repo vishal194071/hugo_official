@@ -22,9 +22,10 @@ import (
 )
 
 type specDescriptor struct {
-	baseURL string
-	c       *qt.C
-	fs      afero.Fs
+	baseURL     string
+	c           *qt.C
+	fs          afero.Fs
+	imagingMeta map[string]any
 }
 
 func newTestResourceSpec(desc specDescriptor) *resources.Spec {
@@ -54,6 +55,10 @@ func newTestResourceSpec(desc specDescriptor) *resources.Spec {
 		"resampleFilter": "linear",
 		"quality":        68,
 		"anchor":         "left",
+	}
+
+	if desc.imagingMeta != nil {
+		imagingCfg["meta"] = desc.imagingMeta
 	}
 
 	cfg.Set("imaging", imagingCfg)
@@ -113,7 +118,11 @@ func fetchImageForSpec(spec *resources.Spec, c *qt.C, name string) images.ImageR
 func fetchResourceForSpec(spec *resources.Spec, c *qt.C, name string, targetPathAddends ...string) resource.ContentResource {
 	b, err := os.ReadFile(filepath.FromSlash("testdata/" + name))
 	c.Assert(err, qt.IsNil)
-	open := hugio.NewOpenReadSeekCloser(hugio.NewReadSeekerNoOpCloserFromBytes(b))
+	// Create a new reader each time to avoid race conditions when multiple
+	// goroutines access the same resource concurrently.
+	open := func() (hugio.ReadSeekCloser, error) {
+		return hugio.NewReadSeekerNoOpCloserFromBytes(b), nil
+	}
 	targetPath := name
 	base := "/a/"
 	r, err := spec.NewResource(resources.ResourceSourceDescriptor{

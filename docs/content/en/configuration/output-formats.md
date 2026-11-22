@@ -37,43 +37,43 @@ The following is the default configuration that matches the table above:
 
 {{< code-toggle config=outputFormats />}}
 
-baseName
+`baseName`
 : (`string`) The base name of the published file. Default is `index`.
 
-isHTML
-: (`bool`) Whether to classify the output format as HTML. Hugo uses this value to determine when to create alias redirects and when to inject the LiveReload script. Default is `false`.
+`isHTML`
+: (`bool`) Whether to classify the output format as HTML. This value determines when the LiveReload script is injected and, in conjunction with [`permalinkable`](#permalinkable), whether [alias redirects][] are generated. Default is `false`.
 
-isPlainText
-: (`bool`) Whether to parse templates for this output format with Go's [text/template][] package instead of the [html/template][] package. Default is `false`.
+`isPlainText`
+: (`bool`) Whether to parse templates for this output format with Go's [`text/template`][] package instead of the [`html/template`][] package. Default is `false`.
 
-mediaType
+`mediaType`
 : (`string`) The [media type](g) of the published file. This must match one of the [configured media types][].
 
-notAlternative
+`notAlternative`
 : (`bool`) Whether to exclude this output format from the values returned by the [`AlternativeOutputFormats`][] method on a `Page` object. Default is `false`.
 
-noUgly
-: (`bool`) Whether to disable ugly URLs for this output format when [`uglyURLs`][] are enabled in your site configuration. Default is `false`.
+`noUgly`
+: (`bool`) Whether to disable ugly URLs for this output format when [`uglyURLs`][] are enabled in your project configuration. Default is `false`.
 
-path
-: (`string`) The first segment of the publication path for this output format. This path segment is relative to the root of your [`publishDir`][]. If omitted, Hugo will use the file's original content path for publishing.
+`path`
+: (`string`) The first segment of the publication path for this output format. This path segment is relative to the root of your `public` directory. If omitted, Hugo will use the file's original content path for publishing.
 
-permalinkable
-: (`bool`) Whether to return the rendering output format rather than main output format when invoking the [`Permalink`][] and [`RelPermalink`][] methods on a `Page` object. See&nbsp;[details](#link-to-output-formats). Enabled by default for the `html` and `amp` output formats. Default is `false`.
+`permalinkable`
+: (`bool`) Whether to return the rendering output format rather than the main output format when invoking the [`Permalink`][] and [`RelPermalink`][] methods on a `Page` object. Along with [`isHTML`](#ishtml), this must be `true` to create [alias redirects][]. Enabled by default for the `html` and `amp` output formats. Default is `false`.
 
-protocol
-: (`string`) The protocol (scheme) of the URL for this output format. For example, `https://` or `webcal://`. Default is the scheme of the [`baseURL`][] parameter in your site configuration, typically `https://`.
+`protocol`
+: (`string`) The protocol (scheme) of the URL for this output format. For example, `https://` or `webcal://`. Default is the scheme of the [`baseURL`][] parameter in your project configuration, typically `https://`.
 
-rel
-: (`string`) If provided, you can assign this value to `rel` attributes in `link` elements when iterating over output formats in your templates. Default is `alternate`.
+`rel`
+: (`string`) The relationship of the output format to the current page. Hugo uses this property to determine the [canonical output format](g) of the current page. For the predefined `html` output format, the default value is `canonical`; for all other predefined output formats, the default value is `alternate`.
 
-root
-: (`bool`) Whether to publish files to the root of the publish directory. Default is `false`.
+`root`
+: (`bool`) Whether to publish files to the root of the `public` directory. Default is `false`.
 
-ugly
-: (`bool`) Whether to enable uglyURLs for this output format when `uglyURLs` is `false` in your site configuration. Default is `false`.
+`ugly`
+: (`bool`) Whether to enable uglyURLs for this output format when `uglyURLs` is `false` in your project configuration. Default is `false`.
 
-weight
+`weight`
 : (`int`) When set to a non-zero value, Hugo uses the `weight` as the first criteria when sorting output formats, falling back to the name of the output format. Lighter items float to the top, while heavier items sink to the bottom. Hugo renders output formats sequentially based on the sort order. Default is `0`, except for the `html` output format, which has a default weight of `10`.
 
 ## Modify an output format
@@ -128,7 +128,7 @@ Step 3
   See [configure outputs][] for more information.
 
 Step 4
-: Create a template to render the output format. Since Atom feeds are lists, you need to create a list template. Consult the [template lookup order] to find the correct template path:
+: Create a template to render the output format. Since Atom feeds are lists, you need to create a list template. Consult the [template lookup order][] to find the correct template path:
 
   ```text
   layouts/list.atom.atom
@@ -138,7 +138,7 @@ Step 4
 
 ## List output formats
 
-To access output formats, each `Page` object provides two methods: [`OutputFormats`][] (for all formats, including the current one) and [`AlternativeOutputFormats`][]. Use `AlternativeOutputFormats` to create a link `rel` list within your site's `head` element, as shown below:
+To access output formats, each `Page` object provides two methods: [`OutputFormats`][] (for all formats, including the current one) and [`AlternativeOutputFormats`][]. Use `AlternativeOutputFormats` to create a link `rel` list within a `head` element, as shown below:
 
 ```go-html-template
 {{ range .AlternativeOutputFormats }}
@@ -148,7 +148,7 @@ To access output formats, each `Page` object provides two methods: [`OutputForma
 
 ## Link to output formats
 
-By default, a `Page` object's [`Permalink`][] and [`RelPermalink`][] methods return the URL of the [primary output format](g), typically `html`. This behavior remains consistent regardless of the template used.
+The URL returned by a `Page` object's [`Permalink`][] and [`RelPermalink`][] methods depends on the current output format. For output formats with [`permalinkable`](#permalinkable) set to `true`, such as `html` and `amp`, the methods return that format's own URL. For all other output formats, the methods return the URL of the page's [primary output format](g).
 
 For example, in `page.json.json`, you'll see:
 
@@ -159,7 +159,7 @@ For example, in `page.json.json`, you'll see:
 {{ end }}
 ```
 
-To make these methods return the URL of the _current_ template's output format, you must set the [`permalinkable`][] setting to `true` for that format.
+To make these methods return the URL of the _current_ template's output format, you must set the [`permalinkable`](#permalinkable) setting to `true` for that format.
 
 With `permalinkable` set to true for `json` in the same `page.json.json` template:
 
@@ -189,18 +189,17 @@ Output format|Template path
 `rss`|`layouts/section.rss.xml`
 
 [`AlternativeOutputFormats`]: /methods/page/alternativeoutputformats/
-[`baseURL`]: /configuration/all/#baseurl
 [`OutputFormats`]: /methods/page/outputformats/
 [`Permalink`]: /methods/page/permalink/
-[`permalinkable`]: #permalinkable
-[`publishDir`]: /configuration/all/#publishdir
 [`RelPermalink`]: /methods/page/relpermalink/
+[`baseURL`]: /configuration/all/#baseurl
+[`html/template`]: https://pkg.go.dev/html/template
+[`text/template`]: https://pkg.go.dev/text/template
 [`uglyURLs`]: /configuration/ugly-urls/
+[alias redirects]: /content-management/urls/#aliases
 [configure media types]: /configuration/media-types/
 [configure outputs]: /configuration/outputs/
 [configured media types]: /configuration/media-types/
 [default media types]: /configuration/media-types/
 [embedded RSS template]: <{{% eturl rss %}}>
-[html/template]: https://pkg.go.dev/html/template
 [template lookup order]: /templates/lookup-order/
-[text/template]: https://pkg.go.dev/text/template

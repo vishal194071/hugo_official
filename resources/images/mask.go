@@ -6,7 +6,7 @@ import (
 	"image/color"
 	"image/draw"
 
-	"github.com/disintegration/gift"
+	"github.com/gohugoio/gift"
 )
 
 // maskFilter applies a mask image to a base image.

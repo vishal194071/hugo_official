@@ -45,9 +45,9 @@ title = true
 | February | $80 |
 | March | $420 |
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/_default/_markup/render-table.html --
+-- layouts/_markup/render-table.html --
 Attributes: {{ .Attributes }}|
 {{ template "print" (dict "what" (printf "table-%d-thead" $.Ordinal) "rows" .THead) }}
 {{ template "print" (dict "what" (printf "table-%d-tbody" $.Ordinal)  "rows" .TBody) }}
@@ -56,18 +56,21 @@ Attributes: {{ .Attributes }}|
 {{ end }}
 
 `
-	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html",
-		"Attributes: map[class:foo foo:bar]|",
-		"table-0-thead: 0: 0: left: Item| 1: center: In Stock| 2: right: Price|$",
-		"table-0-tbody: 0: 0: left: Python Hat| 1: center: True| 2: right: 23.99| 1: 0: left: SQL <strong>Hat</strong>| 1: center: True| 2: right: 23.99| 2: 0: left: Codecademy Tee| 1: center: False| 2: right: 19.99| 3: 0: left: Codecademy Hoodie| 1: center: False| 2: right: 42.99|$",
-	)
+	for range 2 {
+		b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html",
-		"table-1-thead: 0: 0: : Month| 1: : Savings|$",
-		"table-1-tbody: 0: 0: : January| 1: : $250| 1: 0: : February| 1: : $80| 2: 0: : March| 1: : $420|$",
-	)
+		b.AssertFileContent("public/p1/index.html",
+			"Attributes: map[class:foo foo:bar]|",
+			"table-0-thead: 0: 0: left: Item| 1: center: In Stock| 2: right: Price|$",
+			"table-0-tbody: 0: 0: left: Python Hat| 1: center: True| 2: right: 23.99| 1: 0: left: SQL <strong>Hat</strong>| 1: center: True| 2: right: 23.99| 2: 0: left: Codecademy Tee| 1: center: False| 2: right: 19.99| 3: 0: left: Codecademy Hoodie| 1: center: False| 2: right: 42.99|$",
+		)
+
+		b.AssertFileContent("public/p1/index.html",
+			"table-1-thead: 0: 0: : Month| 1: : Savings|$",
+			"table-1-tbody: 0: 0: : January| 1: : $250| 1: 0: : February| 1: : $80| 2: 0: : March| 1: : $420|$",
+		)
+	}
 }
 
 func TestTableDefault(t *testing.T) {
@@ -96,7 +99,7 @@ a|b
 1|2
 {id="\"><script>alert()</script>"}
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 Summary: {{ .Summary }}
 Content: {{ .Content }}
 
@@ -132,13 +135,13 @@ output: ["rss", "html"]
 
 {{< foo >}}
 
--- layouts/index.html --
+-- layouts/home.html --
 Content: {{ .Content }}
 -- layouts/index.xml --
 Content: {{ .Content }}
--- layouts/shortcodes/foo.xml --
+-- layouts/_shortcodes/foo.xml --
 foo xml
--- layouts/shortcodes/foo.html --
+-- layouts/_shortcodes/foo.html --
 foo html
 
 `
@@ -179,4 +182,35 @@ Content: {{ .Content }}
 	b := hugolib.Test(t, files)
 
 	b.AssertFileContent("public/index.xml", "<table>")
+}
+
+// See issue 15389.
+func TestTableHookHTMLOnlyWithJSONOutput(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page', 'rss', 'section', 'sitemap', 'taxonomy', 'term']
+[outputs]
+  home = ['html', 'json']
+-- content/_index.md --
+---
+title: home
+---
+
+col_a|col_b
+---|---
+foo|bar
+-- layouts/_markup/render-table.html --
+TABLE RENDER HOOK
+-- layouts/home.html --
+{{ .Content }}
+-- layouts/home.json --
+{{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "TABLE RENDER HOOK")
+	b.AssertFileContent("public/index.json", "TABLE RENDER HOOK")
 }

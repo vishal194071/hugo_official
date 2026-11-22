@@ -15,20 +15,26 @@ package allconfig
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/gohugoio/hugo/cache/filecache"
+	"github.com/gohugoio/hugo/langs"
 
 	"github.com/gohugoio/hugo/cache/httpcache"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstrings"
+	"github.com/gohugoio/hugo/common/hugo"
+	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/config/privacy"
 	"github.com/gohugoio/hugo/config/security"
 	"github.com/gohugoio/hugo/config/services"
 	"github.com/gohugoio/hugo/deploy/deployconfig"
+	"github.com/gohugoio/hugo/hugolib/roles"
 	"github.com/gohugoio/hugo/hugolib/segments"
-	"github.com/gohugoio/hugo/langs"
+	"github.com/gohugoio/hugo/hugolib/versions"
 	"github.com/gohugoio/hugo/markup/markup_config"
 	"github.com/gohugoio/hugo/media"
 	"github.com/gohugoio/hugo/minifiers"
@@ -46,16 +52,18 @@ import (
 )
 
 type decodeConfig struct {
-	p    config.Provider
-	c    *Config
-	fs   afero.Fs
-	bcfg config.BaseConfig
+	p      config.Provider
+	c      *Config
+	fs     afero.Fs
+	bcfg   config.BaseConfig
+	logger loggers.Logger
 }
 
 type decodeWeight struct {
 	key                  string
 	decode               func(decodeWeight, decodeConfig) error
 	getCompiler          func(c *Config) configCompiler
+	getInitializer       func(c *Config) configInitializer
 	weight               int
 	internalOrDeprecated bool // Hide it from the docs.
 }
@@ -69,8 +77,10 @@ var allDecoderSetups = map[string]decodeWeight{
 				return err
 			}
 
-			// This need to match with Lang which is always lower case.
+			// This need to match with the map keys, always lower case.
 			p.c.RootConfig.DefaultContentLanguage = strings.ToLower(p.c.RootConfig.DefaultContentLanguage)
+			p.c.RootConfig.DefaultContentRole = strings.ToLower(p.c.RootConfig.DefaultContentRole)
+			p.c.RootConfig.DefaultContentVersion = strings.ToLower(p.c.RootConfig.DefaultContentVersion)
 
 			return nil
 		},
@@ -78,8 +88,18 @@ var allDecoderSetups = map[string]decodeWeight{
 	"imaging": {
 		key: "imaging",
 		decode: func(d decodeWeight, p decodeConfig) error {
+			m := p.p.GetStringMap(d.key)
+			if _, found := m["quality"]; found {
+				hugo.DeprecateWithLogger("project config key imaging.quality", "Set the quality per format instead with imaging.jpeg.quality, imaging.webp.quality and/or imaging.avif.quality.", "v0.163.0", p.logger.Logger())
+			}
+			if _, found := m["compression"]; found {
+				hugo.DeprecateWithLogger("project config key imaging.compression", "Set the compression type per format instead with imaging.webp.compression and/or imaging.avif.compression.", "v0.163.0", p.logger.Logger())
+			}
+			if _, found := m["hint"]; found {
+				hugo.DeprecateWithLogger("project config key imaging.hint", "Set the hint per format instead with imaging.webp.hint and/or imaging.avif.hint.", "v0.163.0", p.logger.Logger())
+			}
 			var err error
-			p.c.Imaging, err = images.DecodeConfig(p.p.GetStringMap(d.key))
+			p.c.Imaging, err = images.DecodeConfig(m)
 			return err
 		},
 	},
@@ -140,8 +160,11 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "segments",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			var err error
-			p.c.Segments, err = segments.DecodeSegments(p.p.GetStringMap(d.key))
+			p.c.Segments, err = segments.DecodeSegments(p.p.GetStringMap(d.key), p.c.RenderSegments, p.logger)
 			return err
+		},
+		getInitializer: func(c *Config) configInitializer {
+			return c.Segments.Config
 		},
 	},
 	"server": {
@@ -184,7 +207,7 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "outputs",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			defaults := createDefaultOutputFormats(p.c.OutputFormats.Config)
-			m := maps.CleanConfigStringMap(p.p.GetStringMap("outputs"))
+			m := hmaps.CleanConfigStringMap(p.p.GetStringMap("outputs"))
 			p.c.Outputs = make(map[string][]string)
 			for k, v := range m {
 				s := types.ToStringSlicePreserveString(v)
@@ -210,10 +233,64 @@ var allDecoderSetups = map[string]decodeWeight{
 			return err
 		},
 	},
+	"languages": {
+		key: "languages",
+		decode: func(d decodeWeight, p decodeConfig) error {
+			m := hmaps.CleanConfigStringMap(p.p.GetStringMap(d.key))
+			// Root-level locale/languageCode is passed to DecodeConfig so it can
+			// be applied to the default content language inside langs.DecodeConfig.
+			// They are passed separately so that an explicit per-lang languageCode
+			// can override a root-level languageCode (but not a root-level locale).
+			rootLocale := p.p.GetString("locale")
+			rootLanguageCode := p.p.GetString("languagecode")
+			var (
+				err                    error
+				defaultContentLanguage string
+			)
+			p.c.Languages, defaultContentLanguage, err = langs.DecodeConfig(p.c.RootConfig.DefaultContentLanguage, rootLocale, rootLanguageCode, p.c.RootConfig.DisableLanguages, m)
+			if err != nil {
+				return fmt.Errorf("failed to decode languages config: %w", err)
+			}
+			for k, v := range p.c.Languages.Config.LanguageConfigs {
+				if v.Disabled {
+					p.c.RootConfig.DisableLanguages = append(p.c.RootConfig.DisableLanguages, k)
+				}
+			}
+
+			p.c.RootConfig.DisableLanguages = hstrings.UniqueStringsReuse(p.c.RootConfig.DisableLanguages)
+			sort.Strings(p.c.RootConfig.DisableLanguages)
+			p.c.RootConfig.DefaultContentLanguage = defaultContentLanguage
+			return nil
+		},
+	},
+	"versions": {
+		key: "versions",
+		decode: func(d decodeWeight, p decodeConfig) error {
+			var err error
+			m := hmaps.CleanConfigStringMap(p.p.GetStringMap(d.key))
+			p.c.Versions, err = versions.DecodeConfig(p.c.RootConfig.DefaultContentVersion, m)
+			return err
+		},
+	},
+	"roles": {
+		key: "roles",
+		decode: func(d decodeWeight, p decodeConfig) error {
+			var (
+				err                error
+				defaultContentRole string
+			)
+			m := hmaps.CleanConfigStringMap(p.p.GetStringMap(d.key))
+			p.c.Roles, defaultContentRole, err = roles.DecodeConfig(p.c.RootConfig.DefaultContentRole, m)
+			p.c.RootConfig.DefaultContentRole = defaultContentRole
+
+			return err
+		},
+	},
+
 	"params": {
 		key: "params",
 		decode: func(d decodeWeight, p decodeConfig) error {
-			p.c.Params = maps.CleanConfigStringMap(p.p.GetStringMap("params"))
+			p.c.Params = hmaps.CleanConfigStringMap(p.p.GetStringMap("params"))
 			if p.c.Params == nil {
 				p.c.Params = make(map[string]any)
 			}
@@ -233,7 +310,7 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "module",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			var err error
-			p.c.Module, err = modules.DecodeConfig(p.p)
+			p.c.Module, err = modules.DecodeConfig(p.logger.Logger(), p.p)
 			return err
 		},
 	},
@@ -241,9 +318,10 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "permalinks",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			var err error
-			p.c.Permalinks, err = page.DecodePermalinksConfig(p.p.GetStringMap(d.key))
+			p.c.Permalinks, err = page.DecodePermalinksConfig(p.p.Get(d.key))
 			return err
 		},
+		getInitializer: func(c *Config) configInitializer { return c.Permalinks },
 	},
 	"sitemap": {
 		key: "sitemap",
@@ -259,7 +337,14 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "taxonomies",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			if p.p.IsSet(d.key) {
-				p.c.Taxonomies = maps.CleanConfigStringMapString(p.p.GetStringMapString(d.key))
+				m := hmaps.CleanConfigStringMapString(p.p.GetStringMapString(d.key))
+				// Remove invalid entries (e.g. non-taxonomy keys placed inside [taxonomies] in TOML).
+				for k, v := range m {
+					if k == "" || v == "" {
+						delete(m, k)
+					}
+				}
+				p.c.Taxonomies = m
 			}
 			return nil
 		},
@@ -283,56 +368,15 @@ var allDecoderSetups = map[string]decodeWeight{
 			return nil
 		},
 	},
-	"languages": {
-		key: "languages",
-		decode: func(d decodeWeight, p decodeConfig) error {
-			var err error
-			m := p.p.GetStringMap(d.key)
-			if len(m) == 1 {
-				// In v0.112.4 we moved this to the language config, but it's very commmon for mono language sites to have this at the top level.
-				var first maps.Params
-				var ok bool
-				for _, v := range m {
-					first, ok = v.(maps.Params)
-					if ok {
-						break
-					}
-				}
-				if first != nil {
-					if _, found := first["languagecode"]; !found {
-						first["languagecode"] = p.p.GetString("languagecode")
-					}
-				}
-			}
-			p.c.Languages, err = langs.DecodeConfig(m)
-			if err != nil {
-				return err
-			}
 
-			// Validate defaultContentLanguage.
-			if p.c.DefaultContentLanguage != "" {
-				var found bool
-				for lang := range p.c.Languages {
-					if lang == p.c.DefaultContentLanguage {
-						found = true
-						break
-					}
-				}
-				if !found {
-					return fmt.Errorf("config value %q for defaultContentLanguage does not match any language definition", p.c.DefaultContentLanguage)
-				}
-			}
-
-			return nil
-		},
-	},
 	"cascade": {
 		key: "cascade",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			var err error
-			p.c.Cascade, err = page.DecodeCascadeConfig(nil, true, p.p.Get(d.key))
+			p.c.Cascade, err = page.DecodeCascadeConfig(p.p.Get(d.key))
 			return err
 		},
+		getInitializer: func(c *Config) configInitializer { return c.Cascade },
 	},
 	"menus": {
 		key: "menus",
@@ -412,7 +456,7 @@ var allDecoderSetups = map[string]decodeWeight{
 	"author": {
 		key: "author",
 		decode: func(d decodeWeight, p decodeConfig) error {
-			p.c.Author = maps.CleanConfigStringMap(p.p.GetStringMap(d.key))
+			p.c.Author = hmaps.CleanConfigStringMap(p.p.GetStringMap(d.key))
 			return nil
 		},
 		internalOrDeprecated: true,
@@ -420,7 +464,7 @@ var allDecoderSetups = map[string]decodeWeight{
 	"social": {
 		key: "social",
 		decode: func(d decodeWeight, p decodeConfig) error {
-			p.c.Social = maps.CleanConfigStringMapString(p.p.GetStringMapString(d.key))
+			p.c.Social = hmaps.CleanConfigStringMapString(p.p.GetStringMapString(d.key))
 			return nil
 		},
 		internalOrDeprecated: true,
@@ -434,8 +478,8 @@ var allDecoderSetups = map[string]decodeWeight{
 				p.c.UglyURLs = vv
 			case string:
 				p.c.UglyURLs = vv == "true"
-			case maps.Params:
-				p.c.UglyURLs = cast.ToStringMapBool(maps.CleanConfigStringMap(vv))
+			case hmaps.Params:
+				p.c.UglyURLs = cast.ToStringMapBool(hmaps.CleanConfigStringMap(vv))
 			default:
 				p.c.UglyURLs = cast.ToStringMapBool(v)
 			}
@@ -447,6 +491,13 @@ var allDecoderSetups = map[string]decodeWeight{
 		key: "internal",
 		decode: func(d decodeWeight, p decodeConfig) error {
 			return mapstructure.WeakDecode(p.p.GetStringMap(d.key), &p.c.Internal)
+		},
+		internalOrDeprecated: true,
+	},
+	"internalexternal": {
+		key: "internalexternal",
+		decode: func(d decodeWeight, p decodeConfig) error {
+			return mapstructure.WeakDecode(p.p.GetStringMap(d.key), &p.c.InternalExternal)
 		},
 		internalOrDeprecated: true,
 	},

@@ -28,7 +28,7 @@ func TestAttributeExclusion(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.renderer]
 	unsafe = false
 [markup.goldmark.parser.attribute]
@@ -46,7 +46,7 @@ title: "p1"
 ~~~bash {id="c" onmouseover="alert('code fence')" LINENOS=true}
 foo
 ~~~
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -69,9 +69,9 @@ func TestAttributeExclusionWithRenderHook(t *testing.T) {
 title: "p1"
 ---
 ## Heading {onclick="alert('renderhook')" data-foo="bar"}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 <h{{ .Level }}
   {{- range $k, $v := .Attributes -}}
     {{- printf " %s=%q" $k $v | safeHTMLAttr -}}
@@ -95,7 +95,7 @@ func TestAttributesDefaultRenderer(t *testing.T) {
 title: "p1"
 ---
 ## Heading Attribute Which Needs Escaping { class="a < b" }
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -116,10 +116,10 @@ func TestAttributesHookNoEscape(t *testing.T) {
 title: "p1"
 ---
 ## Heading Attribute Which Needs Escaping { class="Smith & Wesson" }
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 plain: |{{- range $k, $v := .Attributes -}}{{ $k }}: {{ $v }}|{{ end }}|
 safeHTML: |{{- range $k, $v := .Attributes -}}{{ $k }}: {{ $v | safeHTML }}|{{ end }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -136,28 +136,66 @@ func TestLinkInTitle(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 -- content/p1.md --
 ---
 title: "p1"
 ---
 ## Hello [Test](https://example.com)
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 <h{{ .Level }} id="{{ .Anchor | safeURL }}">
   {{ .Text }}
   <a class="anchor" href="#{{ .Anchor | safeURL }}">#</a>
 </h{{ .Level }}>
--- layouts/_default/_markup/render-link.html --
+-- layouts/_markup/render-link.html --
 <a href="{{ .Destination | safeURL }}"{{ with .Title}} title="{{ . }}"{{ end }}>{{ .Text }}</a>
 
 `
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html",
+	b.AssertFileContent(
+		"public/p1/index.html",
 		"<h2 id=\"hello-test\">\n  Hello <a href=\"https://example.com\">Test</a>\n\n  <a class=\"anchor\" href=\"#hello-test\">#</a>\n</h2>",
+	)
+}
+
+// See issue 15472.
+func TestHeadingIDLinkTextStartingWithBracket(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+-- content/p1.md --
+---
+title: "p1"
+---
+## [[2603.24477] Composer 2 Technical Report](https://example.com/1)
+
+## [Plain link heading](https://example.com)
+
+## [2603.24477] Bracketed text, no link
+
+## [[2504.18425] Kimi-Audio Technical Report](https://example.com/2)
+
+## [Link with *emphasis* inside](https://example.com)
+-- layouts/page.html --
+{{ .Content }}
+-- layouts/_markup/render-heading.html --
+<h{{ .Level }} id="{{ .Anchor }}">{{ .PlainText }}</h{{ .Level }}>
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent(
+		"public/p1/index.html",
+		`<h2 id="260324477-composer-2-technical-report">[2603.24477] Composer 2 Technical Report</h2>`,
+		`<h2 id="plain-link-heading">Plain link heading</h2>`,
+		`<h2 id="260324477-bracketed-text-no-link">[2603.24477] Bracketed text, no link</h2>`,
+		`<h2 id="250418425-kimi-audio-technical-report">[2504.18425] Kimi-Audio Technical Report</h2>`,
+		`<h2 id="link-with-emphasis-inside">Link with emphasis inside</h2>`,
 	)
 }
 
@@ -165,7 +203,7 @@ func TestHighlight(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup]
 [markup.highlight]
 anchorLineNos = false
@@ -179,7 +217,7 @@ lineNumbersInTable = true
 noClasses = false
 style = 'monokai'
 tabWidth = 4
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 -- content/p1.md --
 ---
@@ -224,7 +262,8 @@ LINE8
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html",
+	b.AssertFileContent(
+		"public/p1/index.html",
 		"<div class=\"highlight\"><pre tabindex=\"0\" class=\"chroma\"><code class=\"language-bash\" data-lang=\"bash\"><span class=\"line\"><span class=\"cl\">LINE1\n</span></span></code></pre></div>",
 		"Code Fences No Lexer</h2>\n<pre tabindex=\"0\"><code class=\"language-moo\" data-lang=\"moo\">LINE1\n</code></pre>",
 		"lnt",
@@ -232,18 +271,19 @@ LINE8
 }
 
 func BenchmarkRenderHooks(b *testing.B) {
-	files := `
--- config.toml --
--- layouts/_default/_markup/render-heading.html --
+	var files strings.Builder
+	files.WriteString(`
+-- hugo.toml --
+-- layouts/_markup/render-heading.html --
 <h{{ .Level }} id="{{ .Anchor | safeURL }}">
 	{{ .Text }}
 	<a class="anchor" href="#{{ .Anchor | safeURL }}">#</a>
 </h{{ .Level }}>
--- layouts/_default/_markup/render-link.html --
+-- layouts/_markup/render-link.html --
 <a href="{{ .Destination | safeURL }}"{{ with .Title}} title="{{ . }}"{{ end }}>{{ .Text }}</a>
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
-`
+`)
 
 	content := `
 
@@ -271,29 +311,26 @@ D.
 `
 
 	for i := 1; i < 100; i++ {
-		files += fmt.Sprintf("\n-- content/posts/p%d.md --\n"+content, i+1)
+		files.WriteString(fmt.Sprintf("\n-- content/posts/p%d.md --\n"+content, i+1))
 	}
 
 	cfg := hugolib.IntegrationTestConfig{
 		T:           b,
-		TxtarString: files,
-	}
-	builders := make([]*hugolib.IntegrationTestBuilder, b.N)
-
-	for i := range builders {
-		builders[i] = hugolib.NewIntegrationTestBuilder(cfg)
+		TxtarString: files.String(),
 	}
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		builders[i].Build()
+	for b.Loop() {
+		b.StopTimer()
+		bb := hugolib.NewIntegrationTestBuilder(cfg)
+		b.StartTimer()
+		bb.Build()
 	}
 }
 
 func BenchmarkCodeblocks(b *testing.B) {
-	filesTemplate := `
--- config.toml --
+	var filesTemplate strings.Builder
+	filesTemplate.WriteString(`
+-- hugo.toml --
 [markup]
   [markup.highlight]
     anchorLineNos = false
@@ -307,9 +344,9 @@ func BenchmarkCodeblocks(b *testing.B) {
     noClasses = true
     style = 'monokai'
     tabWidth = 4
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
-`
+`)
 
 	content := `
 
@@ -329,7 +366,7 @@ FENCE
 	content = strings.ReplaceAll(content, "FENCE", "```")
 
 	for i := 1; i < 100; i++ {
-		filesTemplate += fmt.Sprintf("\n-- content/posts/p%d.md --\n"+content, i+1)
+		filesTemplate.WriteString(fmt.Sprintf("\n-- content/posts/p%d.md --\n"+content, i+1))
 	}
 
 	runBenchmark := func(files string, b *testing.B) {
@@ -337,26 +374,22 @@ FENCE
 			T:           b,
 			TxtarString: files,
 		}
-		builders := make([]*hugolib.IntegrationTestBuilder, b.N)
 
-		for i := range builders {
-			builders[i] = hugolib.NewIntegrationTestBuilder(cfg)
-		}
-
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			builders[i].Build()
+		for b.Loop() {
+			b.StopTimer()
+			bb := hugolib.NewIntegrationTestBuilder(cfg)
+			b.StartTimer()
+			bb.Build()
 		}
 	}
 
 	b.Run("Default", func(b *testing.B) {
-		runBenchmark(filesTemplate, b)
+		runBenchmark(filesTemplate.String(), b)
 	})
 
 	b.Run("Hook no higlight", func(b *testing.B) {
-		files := filesTemplate + `
--- layouts/_default/_markup/render-codeblock.html --
+		files := filesTemplate.String() + `
+-- layouts/_markup/render-codeblock.html --
 {{ .Inner }}
 `
 
@@ -371,10 +404,10 @@ func TestHookInfiniteRecursion(t *testing.T) {
 	for _, renderFunc := range []string{"markdownify", ".Page.RenderString"} {
 		t.Run(renderFunc, func(t *testing.T) {
 			files := `
--- config.toml --
--- layouts/_default/_markup/render-link.html --
+-- hugo.toml --
+-- layouts/_markup/render-link.html --
 <a href="{{ .Destination | safeURL }}">{{ .Text | RENDERFUNC }}</a>
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 -- content/p1.md --
 ---
@@ -390,12 +423,7 @@ a@b.com
 
 			files = strings.ReplaceAll(files, "RENDERFUNC", renderFunc)
 
-			b, err := hugolib.NewIntegrationTestBuilder(
-				hugolib.IntegrationTestConfig{
-					T:           t,
-					TxtarString: files,
-				},
-			).BuildE()
+			b, err := hugolib.TestE(t, files)
 
 			b.Assert(err, qt.IsNotNil)
 			b.Assert(err.Error(), qt.Contains, "text is already rendered, repeating it may cause infinite recursion")
@@ -408,7 +436,7 @@ func TestQuotesInImgAltAttr(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.extensions]
   typographer = false
 -- content/p1.md --
@@ -416,7 +444,7 @@ func TestQuotesInImgAltAttr(t *testing.T) {
 title: "p1"
 ---
 !["a"](b.jpg)
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -432,7 +460,7 @@ func TestLinkifyProtocol(t *testing.T) {
 
 	runTest := func(protocol string, withHook bool) *hugolib.IntegrationTestBuilder {
 		files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark]
 [markup.goldmark.extensions]
 linkify = true
@@ -445,29 +473,25 @@ Link no procol: www.example.org
 Link http procol: http://www.example.org
 Link https procol: https://www.example.org
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 		files = strings.ReplaceAll(files, "PROTOCOL", protocol)
 
 		if withHook {
-			files += `-- layouts/_default/_markup/render-link.html --
+			files += `-- layouts/_markup/render-link.html --
 <a href="{{ .Destination | safeURL }}">{{ .Text }}</a>`
 		}
 
-		return hugolib.NewIntegrationTestBuilder(
-			hugolib.IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		).Build()
+		return hugolib.Test(t, files)
 	}
 
 	for _, withHook := range []bool{false, true} {
 
 		b := runTest("https", withHook)
 
-		b.AssertFileContent("public/p1/index.html",
+		b.AssertFileContent(
+			"public/p1/index.html",
 			"Link no procol: <a href=\"https://www.example.org\">www.example.org</a>",
 			"Link http procol: <a href=\"http://www.example.org\">http://www.example.org</a>",
 			"Link https procol: <a href=\"https://www.example.org\">https://www.example.org</a></p>",
@@ -475,7 +499,8 @@ Link https procol: https://www.example.org
 
 		b = runTest("http", withHook)
 
-		b.AssertFileContent("public/p1/index.html",
+		b.AssertFileContent(
+			"public/p1/index.html",
 			"Link no procol: <a href=\"http://www.example.org\">www.example.org</a>",
 			"Link http procol: <a href=\"http://www.example.org\">http://www.example.org</a>",
 			"Link https procol: <a href=\"https://www.example.org\">https://www.example.org</a></p>",
@@ -483,7 +508,8 @@ Link https procol: https://www.example.org
 
 		b = runTest("gopher", withHook)
 
-		b.AssertFileContent("public/p1/index.html",
+		b.AssertFileContent(
+			"public/p1/index.html",
 			"Link no procol: <a href=\"gopher://www.example.org\">www.example.org</a>",
 			"Link http procol: <a href=\"http://www.example.org\">http://www.example.org</a>",
 			"Link https procol: <a href=\"https://www.example.org\">https://www.example.org</a></p>",
@@ -496,7 +522,7 @@ func TestGoldmarkBugs(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.renderer]
 unsafe = true
 -- content/p1.md --
@@ -513,13 +539,14 @@ a <!-- b --> c
 - This is a list item <!-- Comment: an innocent-looking comment -->
 
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContentExact("public/p1/index.html",
+	b.AssertFileContentExact(
+		"public/p1/index.html",
 		// Issue 9650
 		"<p>a <!-- b --> c</p>",
 		// Issue 9658 (crash)
@@ -535,8 +562,8 @@ func TestImageAltApostrophesWithTypographer(t *testing.T) {
 -- hugo.toml --
 [markup.goldmark.extensions.typographer]
 disable = false
- [markup.goldmark.renderHooks.image]
- enableDefault = true
+[markup.goldmark.renderHooks.image]
+useEmbedded = 'always'
 -- content/p1.md --
 ---
 title: "p1"
@@ -547,13 +574,14 @@ title: "p1"
 ![A's is > than B's](some-image.png)
 
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContentExact("public/p1/index.html",
+	b.AssertFileContentExact(
+		"public/p1/index.html",
 		// Note that this markup is slightly different than the one produced by the default Goldmark renderer,
 		// see issue 13292.
 		"alt=\"A’s is &gt; than B’s\">",
@@ -566,7 +594,7 @@ func TestGoldmarkEmojiExtension(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 enableEmoji = true
 -- content/p1.md --
 ---
@@ -589,22 +617,23 @@ title: "p1"
 title: "p2"
 ---
 :heavy_check_mark:
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/sc1.html --
+-- layouts/_shortcodes/sc1.html --
 sc1_begin|{{ .Inner }}|sc1_end
--- layouts/shortcodes/sc2.html --
+-- layouts/_shortcodes/sc2.html --
 sc2_begin|{{ .Inner | .Page.RenderString }}|sc2_end
--- layouts/shortcodes/sc3.html --
+-- layouts/_shortcodes/sc3.html --
 sc3_begin|{{ .Inner }}|sc3_end
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContentExact("public/p1/index.html",
+	b.AssertFileContentExact(
+		"public/p1/index.html",
 		// Issue #7332
 		"<span>:x:\n</span>",
 		// Issue #11587
@@ -622,14 +651,14 @@ func TestEmojiDisabled(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 enableEmoji = false
 -- content/p1.md --
 ---
 title: "p1"
 ---
 :x:
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -647,7 +676,7 @@ func TestEmojiDefaultConfig(t *testing.T) {
 title: "p1"
 ---
 :x:
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -661,12 +690,12 @@ func TestGoldmarkTemplateDelims(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [minify]
   minifyOutput = true
 [minify.tdewolff.html]
   templateDelims = ["<?php","?>"]
--- layouts/index.html --
+-- layouts/home.html --
 <div class="foo">
 {{ safeHTML "<?php" }}
 echo "hello";
@@ -683,7 +712,7 @@ func TestPassthroughInlineFences(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.extensions.passthrough]
 enable = true
 [markup.goldmark.extensions.passthrough.delimiters]
@@ -696,7 +725,7 @@ title: "p1"
 
 Inline equation that would be mangled by default parser: $a^*=x-b^*$
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -710,7 +739,7 @@ func TestPassthroughBlockFences(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.extensions.passthrough]
 enable = true
 [markup.goldmark.extensions.passthrough.delimiters]
@@ -725,7 +754,7 @@ Block equation that would be mangled by default parser:
 
 $$a^*=x-b^*$$
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -739,7 +768,7 @@ func TestPassthroughWithAlternativeFences(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.extensions.passthrough]
 enable = true
 [markup.goldmark.extensions.passthrough.delimiters]
@@ -760,7 +789,7 @@ Block equation that would be mangled by default parser:
 a^*=x-b^*
 %!%
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -796,7 +825,7 @@ enable = false
 enable = false
 [markup.goldmark.extensions.extras.superscript]
 enable = false
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 -- content/_index.md --
 ---
@@ -815,7 +844,8 @@ H~2~0
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/index.html",
+	b.AssertFileContent(
+		"public/index.html",
 		"<p>~~delete~~</p>",
 		"<p>++insert++</p>",
 		"<p>==mark==</p>",
@@ -827,7 +857,8 @@ H~2~0
 
 	b = hugolib.Test(t, files)
 
-	b.AssertFileContent("public/index.html",
+	b.AssertFileContent(
+		"public/index.html",
 		"<p><del>delete</del></p>",
 		"<p><ins>insert</ins></p>",
 		"<p><mark>mark</mark></p>",
@@ -847,14 +878,14 @@ markup.goldmark.renderer.unsafe = false
 title: "p1"
 ---
 <div>Some raw HTML</div>
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files, hugolib.TestOptWarn())
 
 	b.AssertFileContent("public/p1/index.html", "<!-- raw HTML omitted -->")
-	b.AssertLogContains("WARN  Raw HTML omitted while rendering \"/content/p1.md\"; see https://gohugo.io/getting-started/configuration-markup/#rendererunsafe\nYou can suppress this warning by adding the following to your site configuration:\nignoreLogs = ['warning-goldmark-raw-html']")
+	b.AssertLogContains("WARN  Raw HTML omitted while rendering \"/content/p1.md\"; see https://gohugo.io/getting-started/configuration-markup/#rendererunsafe\nYou can suppress this warning by adding the following to your project configuration:\nignoreLogs = ['warning-goldmark-raw-html']")
 
 	b = hugolib.Test(t, strings.ReplaceAll(files, "markup.goldmark.renderer.unsafe = false", "markup.goldmark.renderer.unsafe = true"), hugolib.TestOptWarn())
 	b.AssertFileContent("public/p1/index.html", "! <!-- raw HTML omitted -->")
@@ -871,14 +902,14 @@ markup.goldmark.renderer.unsafe = false
 title: "p1"
 ---
 <em>raw HTML</em>
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files, hugolib.TestOptWarn())
 
 	b.AssertFileContent("public/p1/index.html", "<!-- raw HTML omitted -->")
-	b.AssertLogContains("WARN  Raw HTML omitted while rendering \"/content/p1.md\"; see https://gohugo.io/getting-started/configuration-markup/#rendererunsafe\nYou can suppress this warning by adding the following to your site configuration:\nignoreLogs = ['warning-goldmark-raw-html']")
+	b.AssertLogContains("WARN  Raw HTML omitted while rendering \"/content/p1.md\"; see https://gohugo.io/getting-started/configuration-markup/#rendererunsafe\nYou can suppress this warning by adding the following to your project configuration:\nignoreLogs = ['warning-goldmark-raw-html']")
 
 	b = hugolib.Test(t, strings.ReplaceAll(files, "markup.goldmark.renderer.unsafe = false", "markup.goldmark.renderer.unsafe = true"), hugolib.TestOptWarn())
 	b.AssertFileContent("public/p1/index.html", "! <!-- raw HTML omitted -->")
@@ -897,7 +928,7 @@ title: "p1"
 ---
 # HTML comments
 
-## Simple 
+## Simple
 <!-- This is a comment -->
 
     <!-- This is a comment indented -->
@@ -918,7 +949,7 @@ title: "p1"
 <img border="0" src="pic_trulli.jpg" alt="Trulli">
 -->
 
-## XSS 
+## XSS
 
 <!-- --><script>alert("I just escaped the HTML comment")</script><!-- -->
 
@@ -931,21 +962,22 @@ This is a <!-- hidden--> word.
 
 This is a <!-- hidden --> word.
 
-This is a <!-- 
+This is a <!--
 hidden --> word.
 
-This is a <!-- 
+This is a <!--
 hidden
 --> word.
 
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := hugolib.Test(t, files, hugolib.TestOptWarn())
 
-	b.AssertFileContent("public/p1/index.html",
+	b.AssertFileContent(
+		"public/p1/index.html",
 		"! <!-- raw HTML omitted -->",
 		"! <!-- hidden -->",
 		"! <!-- This is a comment -->",
@@ -954,10 +986,141 @@ hidden
 	b.AssertLogContains("! WARN")
 
 	b = hugolib.Test(t, strings.ReplaceAll(files, "markup.goldmark.renderer.unsafe = false", "markup.goldmark.renderer.unsafe = true"), hugolib.TestOptWarn())
-	b.AssertFileContent("public/p1/index.html",
+	b.AssertFileContent(
+		"public/p1/index.html",
 		"! <!-- raw HTML omitted -->",
 		"<!-- hidden -->",
 		"<!-- This is a comment -->",
 	)
 	b.AssertLogContains("! WARN")
+}
+
+func TestFootnoteExtension(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','rss','section','sitemap','taxonomy','term']
+[markup.goldmark.extensions.footnote]
+enable = false
+enableAutoIDPrefix = false
+TBD = 'back'
+-- layouts/all.html --
+{{ .Content }}
+-- content/p1.md --
+---
+title: p1
+---
+foo[^1] and bar[^2]
+
+[^1]: footnote one
+[^2]: footnote two
+-- content/p2.md --
+---
+title: p2
+---
+foo[^1] and bar[^2]
+
+[^1]: footnote one
+[^2]: footnote two
+-- content/_content.gotmpl --
+{{ range slice 3 4 }}
+  {{ $page := dict
+    "content" (dict "mediaType" "text/markdown" "value" "foo[^1] and bar[^2]\n\n[^1]: footnote one\n[^2]: footnote two")
+    "path" (printf "p%d" .)
+    "title" (printf "p%d" .)
+  }}
+  {{ $.AddPage $page }}
+{{ end }}
+`
+
+	// test enableAutoIDPrefix
+
+	want := "<p>foo[^1] and bar[^2]</p>\n<p>[^1]: footnote one\n[^2]: footnote two</p>"
+	b := hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html", want)
+	b.AssertFileContent("public/p2/index.html", want)
+	b.AssertFileContent("public/p3/index.html", want)
+	b.AssertFileContent("public/p4/index.html", want)
+
+	files = strings.ReplaceAll(files, "enable = false", "enable = true")
+	want = "<p>foo<sup id=\"fnref:1\"><a href=\"#fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"fnref:2\"><a href=\"#fn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"fn:1\">\n<p>footnote one&#160;<a href=\"#fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n<li id=\"fn:2\">\n<p>footnote two&#160;<a href=\"#fnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>"
+	b = hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html", want)
+	b.AssertFileContent("public/p2/index.html", want)
+	b.AssertFileContent("public/p3/index.html", want)
+	b.AssertFileContent("public/p4/index.html", want)
+
+	files = strings.ReplaceAll(files, "enableAutoIDPrefix = false", "enableAutoIDPrefix = true")
+	b = hugolib.Test(t, files)
+	b.AssertFileContent(
+		"public/p1/index.html",
+		"<p>foo<sup id=\"hb5cdcabc9e678612fnref:1\"><a href=\"#hb5cdcabc9e678612fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"hb5cdcabc9e678612fnref:2\"><a href=\"#hb5cdcabc9e678612fn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"hb5cdcabc9e678612fn:1\">\n<p>footnote one&#160;<a href=\"#hb5cdcabc9e678612fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n<li id=\"hb5cdcabc9e678612fn:2\">\n<p>footnote two&#160;<a href=\"#hb5cdcabc9e678612fnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>",
+	)
+	b.AssertFileContent(
+		"public/p2/index.html",
+		"<p>foo<sup id=\"h58e8265a0c07b195fnref:1\"><a href=\"#h58e8265a0c07b195fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"h58e8265a0c07b195fnref:2\"><a href=\"#h58e8265a0c07b195fn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"h58e8265a0c07b195fn:1\">\n<p>footnote one&#160;<a href=\"#h58e8265a0c07b195fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n<li id=\"h58e8265a0c07b195fn:2\">\n<p>footnote two&#160;<a href=\"#h58e8265a0c07b195fnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>",
+	)
+	b.AssertFileContent(
+		"public/p3/index.html",
+		"<p>foo<sup id=\"h0aab769290d7e233fnref:1\"><a href=\"#h0aab769290d7e233fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"h0aab769290d7e233fnref:2\"><a href=\"#h0aab769290d7e233fn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"h0aab769290d7e233fn:1\">\n<p>footnote one&#160;<a href=\"#h0aab769290d7e233fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n<li id=\"h0aab769290d7e233fn:2\">\n<p>footnote two&#160;<a href=\"#h0aab769290d7e233fnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>",
+	)
+	b.AssertFileContent(
+		"public/p4/index.html",
+		"<p>foo<sup id=\"ha35b794ad6e8626cfnref:1\"><a href=\"#ha35b794ad6e8626cfn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"ha35b794ad6e8626cfnref:2\"><a href=\"#ha35b794ad6e8626cfn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"ha35b794ad6e8626cfn:1\">\n<p>footnote one&#160;<a href=\"#ha35b794ad6e8626cfnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n<li id=\"ha35b794ad6e8626cfn:2\">\n<p>footnote two&#160;<a href=\"#ha35b794ad6e8626cfnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">&#x21a9;&#xfe0e;</a></p>\n</li>\n</ol>\n</div>",
+	)
+
+	// test backlinkHTML
+
+	files = strings.ReplaceAll(files, "TBD", "backlinkHTML")
+	b = hugolib.Test(t, files)
+	b.AssertFileContent(
+		"public/p1/index.html",
+		"<p>foo<sup id=\"hb5cdcabc9e678612fnref:1\"><a href=\"#hb5cdcabc9e678612fn:1\" class=\"footnote-ref\" role=\"doc-noteref\">1</a></sup> and bar<sup id=\"hb5cdcabc9e678612fnref:2\"><a href=\"#hb5cdcabc9e678612fn:2\" class=\"footnote-ref\" role=\"doc-noteref\">2</a></sup></p>\n<div class=\"footnotes\" role=\"doc-endnotes\">\n<hr>\n<ol>\n<li id=\"hb5cdcabc9e678612fn:1\">\n<p>footnote one&#160;<a href=\"#hb5cdcabc9e678612fnref:1\" class=\"footnote-backref\" role=\"doc-backlink\">back</a></p>\n</li>\n<li id=\"hb5cdcabc9e678612fn:2\">\n<p>footnote two&#160;<a href=\"#hb5cdcabc9e678612fnref:2\" class=\"footnote-backref\" role=\"doc-backlink\">back</a></p>\n</li>\n</ol>\n</div>",
+	)
+}
+
+func TestRenderLinkDefaultDangerous(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- content/p1.md --
+---
+title: "p1"
+---
+Link: [Click me](&#106;avascript:alert(1))
+Image: ![alt](&#106;avascript:alert(2))
+-- layouts/all.html --
+Content: {{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent(
+		"public/p1/index.html",
+		`! alert(1)"`,
+		`! alert(2)"`,
+	)
+}
+
+// Issue 14715
+func TestRenderLinkDefaultAmpersand(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- content/_index.md --
+---
+title: "Home"
+---
+[foo](https://a.com/?a=1&b=2)
+-- layouts/home.html --
+{{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent(
+		"public/index.html",
+		`<a href="https://a.com/?a=1&amp;b=2">foo</a>`,
+	)
 }

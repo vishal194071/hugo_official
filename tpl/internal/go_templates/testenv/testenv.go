@@ -12,8 +12,10 @@ package testenv
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/gohugoio/hugo/tpl/internal/go_templates/cfg"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,8 +24,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/gohugoio/hugo/tpl/internal/go_templates/cfg"
 )
 
 // Save the original environment during init for use in checks. A test
@@ -32,8 +32,13 @@ import (
 // environment might cause environment checks to behave erratically.
 var origEnv = os.Environ()
 
-// Builder reports the name of the builder running this test
-// (for example, "linux-amd64" or "windows-386-gce").
+// Builder reports the name of the builder running this test. For example,
+// "gotip-linux-amd64_avx512-test_only" or "go1.24-windows-arm64" on LUCI,
+// or "linux-amd64" on our old infrastructure. Prefer using runtime.GOOS,
+// runtime.GOARCH, race.Enabled, reading the OS version, checking CPU
+// feature flags with internal/cpu, etc. over parsing builder names when
+// possible. When matching builder names, prefer a fuzzy match instead
+// of a strict comparison.
 // If the test is not running on the build infrastructure,
 // Builder returns the empty string.
 func Builder() string {
@@ -55,7 +60,6 @@ func HasGoBuild() bool {
 }
 
 var tryGoBuild = sync.OnceValue(func() error {
-	// Removed by Hugo, not used.
 	return nil
 })
 
@@ -210,8 +214,10 @@ func GOROOT(t testing.TB) string {
 
 // GoTool reports the path to the Go tool.
 func GoTool() (string, error) {
-	// Removed by Hugo, not used.
-	return "", nil
+	if !HasGoBuild() {
+		return "", errors.New("platform cannot run go tool")
+	}
+	return goTool()
 }
 
 var goTool = sync.OnceValues(func() (string, error) {
@@ -282,17 +288,30 @@ func MustHaveCGO(t testing.TB) {
 // CanInternalLink reports whether the current system can link programs with
 // internal linking.
 func CanInternalLink(withCgo bool) bool {
-	// Removed by Hugo, not used.
 	return false
 }
+
+// SpecialBuildTypes are interesting build types that may affect linking.
+type SpecialBuildTypes struct {
+	Cgo  bool
+	Asan bool
+	Msan bool
+	Race bool
+}
+
+// NoSpecialBuildTypes indicates a standard, no cgo go build.
+var NoSpecialBuildTypes SpecialBuildTypes
 
 // MustInternalLink checks that the current system can link programs with internal
 // linking.
 // If not, MustInternalLink calls t.Skip with an explanation.
-func MustInternalLink(t testing.TB, withCgo bool) {
-	if !CanInternalLink(withCgo) {
+func MustInternalLink(t testing.TB, with SpecialBuildTypes) {
+	if with.Asan || with.Msan || with.Race {
+		t.Skipf("skipping test: internal linking with sanitizers is not supported")
+	}
+	if !CanInternalLink(with.Cgo) {
 		t.Helper()
-		if withCgo && CanInternalLink(false) {
+		if with.Cgo && CanInternalLink(false) {
 			t.Skipf("skipping test: internal linking on %s/%s is not supported with cgo", runtime.GOOS, runtime.GOARCH)
 		}
 		t.Skipf("skipping test: internal linking on %s/%s is not supported", runtime.GOOS, runtime.GOARCH)
@@ -303,14 +322,12 @@ func MustInternalLink(t testing.TB, withCgo bool) {
 // internal linking.
 // If not, MustInternalLinkPIE calls t.Skip with an explanation.
 func MustInternalLinkPIE(t testing.TB) {
-	// Removed by Hugo, not used.
 }
 
 // MustHaveBuildMode reports whether the current system can build programs in
 // the given build mode.
 // If not, MustHaveBuildMode calls t.Skip with an explanation.
 func MustHaveBuildMode(t testing.TB, buildmode string) {
-	// Removed by Hugo, not used.
 }
 
 // HasSymlink reports whether the current system can use os.Symlink.
@@ -415,7 +432,7 @@ func WriteImportcfg(t testing.TB, dstPath string, packageFiles map[string]string
 			t.Fatalf("%v: %v\n%s", cmd, err, cmd.Stderr)
 		}
 
-		for _, line := range strings.Split(string(out), "\n") {
+		for line := range strings.SplitSeq(string(out), "\n") {
 			if line == "" {
 				continue
 			}
@@ -429,7 +446,7 @@ func WriteImportcfg(t testing.TB, dstPath string, packageFiles map[string]string
 		}
 	}
 
-	if err := os.WriteFile(dstPath, icfg.Bytes(), 0o666); err != nil {
+	if err := os.WriteFile(dstPath, icfg.Bytes(), 0666); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -440,9 +457,25 @@ func SyscallIsNotSupported(err error) bool {
 	return syscallIsNotSupported(err)
 }
 
-// ParallelOn64Bit calls t.Parallel() unless there is a case that cannot be parallel.
-// This function should be used when it is necessary to avoid t.Parallel on
-// 32-bit machines, typically because the test uses lots of memory.
-func ParallelOn64Bit(t *testing.T) {
-	// Removed by Hugo, not used.
+// CPUProfilingBroken returns true if CPU profiling has known issues on this
+// platform.
+func CPUProfilingBroken() bool {
+	switch runtime.GOOS {
+	case "plan9":
+		// Profiling unimplemented.
+		return true
+	case "aix":
+		// See https://golang.org/issue/45170.
+		return true
+	case "ios", "dragonfly", "netbsd", "illumos", "solaris":
+		// See https://golang.org/issue/13841.
+		return true
+	case "openbsd":
+		if runtime.GOARCH == "arm" || runtime.GOARCH == "arm64" {
+			// See https://golang.org/issue/13841.
+			return true
+		}
+	}
+
+	return false
 }

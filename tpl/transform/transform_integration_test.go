@@ -27,12 +27,12 @@ func TestMarkdownifyIssue11698(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 disableKinds = ['home','section','rss','sitemap','taxonomy','term']
 [markup.goldmark.parser.attribute]
 title = true
 block = true
--- layouts/_default/single.html --
+-- layouts/single.html --
 _{{ markdownify .RawContent }}_
 -- content/p1.md --
 ---
@@ -73,7 +73,7 @@ func TestXMLEscape(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 disableKinds = ['section','sitemap','taxonomy','term']
 -- content/p1.md --
 ---
@@ -96,18 +96,39 @@ func TestHighlightError(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ highlight "a" "b" 0 }}
   `
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-
-	_, err := b.BuildE()
+	b, err := hugolib.TestE(t, files)
 	b.Assert(err.Error(), qt.Contains, "error calling highlight: invalid Highlight option: 0")
+}
+
+// transform.Highlight: LANG is optional and may be set via the type option, and
+// the code option overrides CODE — consistent with transform.HighlightCodeBlock.
+// See issue 11872.
+func TestHighlightTypeAndCodeOptions(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+[markup.highlight]
+noClasses = false
+-- layouts/home.html --
+lang:{{ transform.Highlight "i = 42" "go" }}
+type:{{ transform.Highlight "i = 42" (dict "type" "go") }}
+code:{{ transform.Highlight "" (dict "type" "go" "code" "i = 42") }}
+`
+
+	b := hugolib.Test(t, files)
+
+	want := `<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-go" data-lang="go"><span class="line"><span class="cl"><span class="nx">i</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="mi">42</span></span></span></code></pre></div>`
+
+	b.AssertFileContent("public/index.html",
+		"lang:"+want,
+		"type:"+want,
+		"code:"+want,
+	)
 }
 
 // Issue #11884
@@ -124,7 +145,7 @@ Rover,"a big dog",5
 Felix,a "malicious" cat,7
 Bella,"an "evil" cat",9
 Scar,"a "dead cat",11
--- layouts/index.html --
+-- layouts/home.html --
 {{ $opts := dict "lazyQuotes" true }}
 {{ $data := resources.Get "pets.csv" | transform.Unmarshal $opts }}
 {{ printf "%v" $data | safeHTML }}
@@ -140,7 +161,7 @@ func TestToMath(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ transform.ToMath "c = \\pm\\sqrt{a^2 + b^2}" }}
   `
 	b := hugolib.Test(t, files)
@@ -155,7 +176,7 @@ func TestToMathError(t *testing.T) {
 		files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{  transform.ToMath "c = \\foo{a^2 + b^2}" }}
   `
 		b, err := hugolib.TestE(t, files, hugolib.TestOptWarn())
@@ -168,7 +189,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 		files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $opts := dict "throwOnError" false }}
 {{  transform.ToMath "c = \\foo{a^2 + b^2}" $opts }}
   `
@@ -182,7 +203,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 		files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ with try (transform.ToMath "c = \\foo{a^2 + b^2}") }}
 	{{ with .Err }}
 	 	{{ warnf "error: %s" . }}
@@ -194,7 +215,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 		b, err := hugolib.TestE(t, files, hugolib.TestOptWarn())
 
 		b.Assert(err, qt.IsNil)
-		b.AssertLogContains("WARN  error: template: index.html:1:22: executing \"index.html\" at <transform.ToMath>: error calling ToMath: KaTeX parse error: Undefined control sequence: \\foo at position 5: c = \\̲f̲o̲o̲{a^2 + b^2}")
+		b.AssertLogContains("WARN  error: template: home.html:1:22: executing \"home.html\" at <transform.ToMath>: error calling ToMath: KaTeX parse error: Undefined control sequence: \\foo at position 5: c = \\̲f̲o̲o̲{a^2 + b^2}")
 	})
 
 	// See issue 13239.
@@ -202,7 +223,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 		files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ with transform.ToMath "c = \\pm\\sqrt{a^2 + b^2}" }}
 	{{ with .Err }}
 	 	{{ warnf "error: %s" . }}
@@ -229,11 +250,11 @@ block  = [['\[', '\]'], ['$$', '$$']]
 inline = [['\(', '\)'], ['$', '$']]
 -- content/p1.md --
 P1_CONTENT
--- layouts/index.html --
+-- layouts/home.html --
 Home.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content: {{ .Content }}|
--- layouts/_default/_markup/render-passthrough.html --
+-- layouts/_markup/render-passthrough.html --
 {{ $opts := dict "throwOnError" false "displayMode" true }}
 {{ transform.ToMath .Inner $opts }}
   `
@@ -284,11 +305,11 @@ $$1+2$$
 
 Some inline $1+3$ math.
 
--- layouts/index.html --
+-- layouts/home.html --
 Home.
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content: {{ .Content }}|
--- layouts/_default/_markup/render-passthrough.html --
+-- layouts/_markup/render-passthrough.html --
 {{ $opts := dict "throwOnError" true "displayMode" true }}
 {{- with try (transform.ToMath .Inner $opts ) }}
   {{- with .Err }}
@@ -304,20 +325,20 @@ Content: {{ .Content }}|
 	files := strings.Replace(filesTemplate, "$$1+2$$", "$$\\foo1+2$$", 1)
 	b, err := hugolib.TestE(t, files)
 	b.Assert(err, qt.IsNotNil)
-	b.AssertLogContains("p1.md:6:1")
+	b.AssertLogContains("p1.md:7:1")
 
 	// Inline math.
 	files = strings.Replace(filesTemplate, "$1+3$", "$\\foo1+3$", 1)
 	b, err = hugolib.TestE(t, files)
 	b.Assert(err, qt.IsNotNil)
-	b.AssertLogContains("p1.md:8:13")
+	b.AssertLogContains("p1.md:9:13")
 }
 
 func TestToMathMacros(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $macros := dict
     "\\addBar" "\\bar{#1}"
 	"\\bold" "\\mathbf{#1}"
@@ -339,7 +360,7 @@ func TestUnmarshalWithIndentedYAML(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $yaml := "\n  a:\n    b: 1\n  c:\n    d: 2\n" }}
 {{ $yaml | transform.Unmarshal | encoding.Jsonify }}
 `
@@ -370,7 +391,7 @@ func TestPortableText(t *testing.T) {
     "style": "h2"
   }
 ]
--- layouts/index.html --
+-- layouts/home.html --
 {{ $markdown := resources.Get "sample.json" | transform.Unmarshal | transform.PortableText }}
 Markdown: {{ $markdown }}|
 
@@ -534,4 +555,88 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 	f = strings.ReplaceAll(files, "dict", `(dict "strict" "foo")`)
 	b, err = hugolib.TestE(t, f)
 	b.Assert(err.Error(), qt.Contains, "invalid strict mode")
+}
+
+func TestHTMLToMarkdown(t *testing.T) {
+	t.Parallel()
+
+	markdown := `
+# Heading
+
+Some **bold** text.
+
+A [link](https://example.com).
+
+An image:
+
+![alt text](https://example.com/image.jpg "Image Title")
+
+A list:
+
+- Item 1
+- Item 2
+  - Item 2a
+  - Item 2b
+
+A table:
+
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |
+
+A blockquote:
+
+> This is a quote.
+	`
+	files := `
+-- hugo.toml --
+disableKinds = ['rss','section','sitemap','taxonomy','term']
+-- layouts/all.html --
+All html.
+-- layouts/all.markdown --
+{{ .Content | transform.HTMLToMarkdown | safeHTML }}
+-- content/p1.md --
+---
+title: p1
+outputs: ["html", "markdown"]
+---
+`
+
+	files += markdown
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/p1/index.html", `All html.`)
+
+	// There are some white space differences, so we cannot do an exact match.
+	b.AssertFileContent("public/p1/index.md", markdown)
+}
+
+// See https://github.com/goccy/go-yaml/issues/461
+func TestUnmarshalExcessiveYAMLStructureShouldFail(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+-- assets/ddos.yaml --
+a: &a [_, _, _, _, _, _, _, _, _, _, _, _, _, _, _]
+b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a, *a]
+c: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b, *b]
+d: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c, *c]
+e: &e [*d, *d, *d, *d, *d, *d, *d, *d, *d, *d]
+f: &f [*e, *e, *e, *e, *e, *e, *e, *e, *e, *e]
+g: &g [*f, *f, *f, *f, *f, *f, *f, *f, *f, *f]
+h: &h [*g, *g, *g, *g, *g, *g, *g, *g, *g, *g]
+i: &i [*h, *h, *h, *h, *h, *h, *h, *h, *h, *h]
+-- layouts/home.html --
+{{ $m := resources.Get "ddos.yaml" | transform.Unmarshal }}
+{{ printf "Length: %d" (len $m) }}
+`
+
+	b, err := hugolib.TestE(t, files)
+
+	b.Assert(err, qt.IsNotNil)
+	b.Assert(err.Error(), qt.Contains, "too many YAML aliases for non-scalar nodes")
 }

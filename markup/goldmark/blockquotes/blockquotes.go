@@ -69,7 +69,7 @@ func (r *htmlRenderer) renderBlockquote(w util.BufWriter, src []byte, node ast.N
 		return ast.WalkContinue, nil
 	}
 
-	text := strings.TrimSpace(ctx.PopRenderedString())
+	text := ctx.PopRenderedString()
 
 	ordinal := ctx.GetAndIncrementOrdinal(ast.KindBlockquote)
 
@@ -90,7 +90,7 @@ func (r *htmlRenderer) renderBlockquote(w util.BufWriter, src []byte, node ast.N
 		// tag if the first line of the blockquote content does not have a
 		// closing p tag. At some point we might want to move this to the
 		// parser.
-		before, after, found := strings.Cut(text, "\n")
+		before, after, found := strings.Cut(strings.TrimSpace(text), "\n")
 		if found {
 			if strings.HasSuffix(before, "</p>") {
 				text = after
@@ -102,8 +102,8 @@ func (r *htmlRenderer) renderBlockquote(w util.BufWriter, src []byte, node ast.N
 		}
 	}
 
-	bqctx := &blockquoteContext{
-		BaseContext:      render.NewBaseContext(ctx, renderer, n, src, nil, ordinal),
+	bqctx := blockquoteContext{
+		BaseContext:      render.NewBaseContext(ctx, renderer, n, src, ordinal),
 		typ:              typ,
 		alert:            alert,
 		text:             hstring.HTML(text),
@@ -150,30 +150,30 @@ type blockquoteContext struct {
 	*attributes.AttributesHolder
 }
 
-func (c *blockquoteContext) Type() string {
+func (c blockquoteContext) Type() string {
 	return c.typ
 }
 
-func (c *blockquoteContext) AlertType() string {
+func (c blockquoteContext) AlertType() string {
 	return c.alert.typ
 }
 
-func (c *blockquoteContext) AlertTitle() hstring.HTML {
+func (c blockquoteContext) AlertTitle() hstring.HTML {
 	return hstring.HTML(c.alert.title)
 }
 
-func (c *blockquoteContext) AlertSign() string {
+func (c blockquoteContext) AlertSign() string {
 	return c.alert.sign
 }
 
-func (c *blockquoteContext) Text() hstring.HTML {
+func (c blockquoteContext) Text() hstring.HTML {
 	return c.text
 }
 
 var blockQuoteAlertRe = regexp.MustCompile(`^<p>\[!([a-zA-Z]+)\](-|\+)?[^\S\r\n]?([^\n]*)\n?`)
 
 func resolveBlockQuoteAlert(s string) blockQuoteAlert {
-	m := blockQuoteAlertRe.FindStringSubmatch(s)
+	m := blockQuoteAlertRe.FindStringSubmatch(strings.TrimSpace(s))
 	if len(m) == 4 {
 		title := strings.TrimSpace(m[3])
 		title = strings.TrimSuffix(title, "</p>")

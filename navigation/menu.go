@@ -16,22 +16,22 @@ package navigation
 
 import (
 	"html/template"
+	"slices"
 	"sort"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/compare"
 	"github.com/gohugoio/hugo/config"
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/spf13/cast"
-	"slices"
 )
 
 var smc = newMenuCache()
 
 // MenuEntry represents a menu item defined in either Page front matter
-// or in the site config.
+// or in the project config.
 type MenuEntry struct {
 	// The menu entry configuration.
 	MenuConfig
@@ -52,7 +52,7 @@ type MenuEntry struct {
 func (m *MenuEntry) URL() string {
 	// Check page first.
 	// In Hugo 0.86.0 we added `pageRef`,
-	// a way to connect menu items in site config to pages.
+	// a way to connect menu items in project config to pages.
 	// This means that you now can have both a Page
 	// and a configured URL.
 	// Having the configured URL as a fallback if the Page isn't found
@@ -89,7 +89,7 @@ type Page interface {
 	IsPage() bool
 	IsSection() bool
 	IsAncestor(other any) bool
-	Params() maps.Params
+	Params() hmaps.Params
 }
 
 // Menu is a collection of menu entries.
@@ -158,7 +158,7 @@ type MenuConfig struct {
 	Weight     int
 	Title      string
 	// User defined params.
-	Params maps.Params
+	Params hmaps.Params
 }
 
 // For internal use.
@@ -279,11 +279,11 @@ func DecodeConfig(in any) (*config.ConfigNamespace[map[string]MenuConfig, Menus]
 			return ret, map[string]any{}, nil
 		}
 
-		menus, err := maps.ToStringMapE(in)
+		menus, err := hmaps.ToStringMapE(in)
 		if err != nil {
 			return ret, nil, err
 		}
-		menus = maps.CleanConfigStringMap(menus)
+		menus = hmaps.CleanConfigStringMap(menus)
 
 		for name, menu := range menus {
 			m, err := cast.ToSliceE(menu)
@@ -295,7 +295,7 @@ func DecodeConfig(in any) (*config.ConfigNamespace[map[string]MenuConfig, Menus]
 					if err := mapstructure.WeakDecode(entry, &menuConfig); err != nil {
 						return ret, nil, err
 					}
-					maps.PrepareParams(menuConfig.Params)
+					hmaps.PrepareParams(menuConfig.Params)
 					menuEntry := MenuEntry{
 						Menu:       name,
 						MenuConfig: menuConfig,

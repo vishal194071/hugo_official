@@ -7,8 +7,7 @@ params:
   functions_and_methods:
     aliases: [findRE]
     returnType: '[]string'
-    signatures: ['strings.FindRE PATTERN INPUT [LIMIT]']
-aliases: [/functions/findre]
+    signatures: ['strings.FindRE PATTERN STRING [LIMIT]']
 ---
 By default, `findRE` finds all matches. You can limit the number of matches with an optional LIMIT argument.
 
@@ -28,5 +27,7 @@ To limit the number of matches to one:
 {{ findRE `(?s)<h2.*?>.*?</h2>` .Content 1 }}
 ```
 
-> [!note]
-> You can write and test your regular expression using [regex101.com](https://regex101.com/). Be sure to select the Go flavor before you begin.
+> [!NOTE]
+> You can write and test your regular expression using [regex101.com][]. Be sure to select the Go flavor before you begin.
+
+[regex101.com]: https://regex101.com/

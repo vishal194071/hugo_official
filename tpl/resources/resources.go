@@ -19,11 +19,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/hugo"
-	"github.com/gohugoio/hugo/common/maps"
-
-	"github.com/gohugoio/hugo/tpl/css"
-	"github.com/gohugoio/hugo/tpl/js"
 
 	"github.com/gohugoio/hugo/resources/postpub"
 
@@ -61,7 +58,10 @@ func New(deps *deps.Deps) (*Namespace, error) {
 	}, nil
 }
 
-var _ resource.ResourceFinder = (*Namespace)(nil)
+var (
+	_ resource.ResourceFinder = (*Namespace)(nil)
+	_ resource.Identifier     = (*Namespace)(nil)
+)
 
 // Namespace provides template functions for the "resources" namespace.
 type Namespace struct {
@@ -72,11 +72,6 @@ type Namespace struct {
 	integrityClient *integrity.Client
 	minifyClient    *minifier.Client
 	templatesClient *templates.Client
-
-	// We moved some CSS and JS related functions to the css and js package in Hugo 0.128.0.
-	// Keep this here until the deprecation period is over.
-	cssNs *css.Namespace
-	jsNs  *js.Namespace
 }
 
 // Copy copies r to the new targetPath in s.
@@ -129,7 +124,7 @@ func (ns *Namespace) GetRemote(args ...any) (resource.Resource, error) {
 		var options map[string]any
 
 		if len(args) > 1 {
-			options, err = maps.ToStringMapE(args[1])
+			options, err = hmaps.ToStringMapE(args[1])
 			if err != nil {
 				return nil, err
 			}
@@ -219,6 +214,15 @@ func (ns *Namespace) Concat(targetPathIn any, r any) (resource.Resource, error) 
 		rr = v
 	case resource.ResourcesConverter:
 		rr = v.ToResources()
+	case []any:
+		rr = make(resource.Resources, len(v))
+		for i, vv := range v {
+			res, ok := vv.(resource.Resource)
+			if !ok {
+				return nil, fmt.Errorf("expected slice of Resource objects, received %T in slice at index %d", vv, i)
+			}
+			rr[i] = res
+		}
 	default:
 		return nil, fmt.Errorf("expected slice of Resource objects, received %T instead", r)
 	}
@@ -301,30 +305,27 @@ func (ns *Namespace) Minify(r resources.ResourceTransformer) (resource.Resource,
 	return ns.minifyClient.Minify(r)
 }
 
-// ToCSS converts the given Resource to CSS. You can optional provide an Options object
-// as second argument. As an option, you can e.g. specify e.g. the target path (string)
-// for the converted CSS resource.
-// Deprecated: Moved to the css namespace in Hugo 0.128.0.
-func (ns *Namespace) ToCSS(args ...any) (resource.Resource, error) {
-	hugo.Deprecate("resources.ToCSS", "Use css.Sass instead.", "v0.128.0")
-	return ns.cssNs.Sass(args...)
-}
-
-// PostCSS processes the given Resource with PostCSS.
-// Deprecated: Moved to the css namespace in Hugo 0.128.0.
-func (ns *Namespace) PostCSS(args ...any) (resource.Resource, error) {
-	hugo.Deprecate("resources.PostCSS", "Use css.PostCSS instead.", "v0.128.0")
-	return ns.cssNs.PostCSS(args...)
+// Publish publishes r to the destination and returns it.
+func (ns *Namespace) Publish(r resource.Resource) (resource.Resource, error) {
+	s, ok := r.(resource.Source)
+	if !ok {
+		return nil, fmt.Errorf("%T can not be published", r)
+	}
+	if err := s.Publish(); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // PostProcess processes r after the build.
+//
+// Deprecated: Use templates.Defer instead.
 func (ns *Namespace) PostProcess(r resource.Resource) (postpub.PostPublishedResource, error) {
+	hugo.DeprecateWithLogger("resources.PostProcess", "Use templates.Defer instead. See https://gohugo.io/functions/templates/defer/", "v0.164.0", ns.deps.Log.Logger())
 	return ns.deps.ResourceSpec.PostProcess(r)
 }
 
-// Babel processes the given Resource with Babel.
-// Deprecated: Moved to the js namespace in Hugo 0.128.0.
-func (ns *Namespace) Babel(args ...any) (resource.Resource, error) {
-	hugo.Deprecate("resources.Babel", "Use js.Babel.", "v0.128.0")
-	return ns.jsNs.Babel(args...)
+// For internal use only.
+func (ns *Namespace) Key() string {
+	return "tpl.resources"
 }

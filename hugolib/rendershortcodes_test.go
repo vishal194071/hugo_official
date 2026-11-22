@@ -50,16 +50,16 @@ title: "p3"
 ### p3-h2
 {{% withmarkdown %}}
 {{< level3 >}}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/withhtml.html --
+-- layouts/_shortcodes/withhtml.html --
 <div>{{ .Page.Title }} withhtml</div>
--- layouts/shortcodes/withmarkdown.html --
+-- layouts/_shortcodes/withmarkdown.html --
 #### {{ .Page.Title }} withmarkdown
--- layouts/shortcodes/level3.html --
+-- layouts/_shortcodes/level3.html --
 Level 3: {{ .Page.Title }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Fragments: {{ .Fragments.Identifiers }}|
 HasShortcode Level 1: {{ .HasShortcode "include" }}|
 HasShortcode Level 2: {{ .HasShortcode "withmarkdown" }}|
@@ -100,16 +100,16 @@ title: "p2"
 ---
 ### p2-h1
 {{% myshort %}}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/myshort.html --
+-- layouts/_shortcodes/myshort.html --
 Myshort HTML.
--- layouts/shortcodes/myshort.json --
+-- layouts/_shortcodes/myshort.json --
 Myshort JSON.
--- layouts/_default/single.html --
+-- layouts/single.html --
 HTML: {{ .Content }}
--- layouts/_default/single.json --
+-- layouts/single.json --
 JSON: {{ .Content }}
 
 
@@ -141,19 +141,19 @@ title: "p2"
 ---
 ### p2-h1
 {{% myshort %}}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/myshort.html --
+-- layouts/_shortcodes/myshort.html --
 Myshort Original.
--- layouts/_default/single.html --
+-- layouts/single.html --
  {{ .Content }}
 `
 	b := TestRunning(t, files)
 	b.AssertNoRenderShortcodesArtifacts()
 	b.AssertFileContent("public/p1/index.html", "Myshort Original.")
 
-	b.EditFileReplaceAll("layouts/shortcodes/myshort.html", "Original", "Edited").Build()
+	b.EditFileReplaceAll("layouts/_shortcodes/myshort.html", "Original", "Edited").Build()
 	b.AssertNoRenderShortcodesArtifacts()
 	b.AssertFileContent("public/p1/index.html", "Myshort Edited.")
 }
@@ -177,25 +177,19 @@ title: "p2"
 ---
 ### Original
 {{% myshort %}}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/myshort.html --
+-- layouts/_shortcodes/myshort.html --
 Myshort Original.
--- layouts/_default/single.html --
+-- layouts/single.html --
  {{ .Content }}
 
 
 
 `
 
-	b := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			Running:     true,
-		},
-	).Build()
+	b := TestRunning(t, files)
 
 	b.AssertNoRenderShortcodesArtifacts()
 	b.AssertFileContent("public/p1/index.html", "Original")
@@ -227,12 +221,12 @@ title: "p2"
 ---
 ### Original
 {{% myshort %}}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := .Page.GetPage (.Get 0) }}
 {{ $p.RenderShortcodes }}
--- layouts/shortcodes/myshort.html --
+-- layouts/_shortcodes/myshort.html --
 Myshort Original.
--- layouts/_default/list.html --
+-- layouts/list.html --
  {{ .Content }}
 
 
@@ -253,20 +247,22 @@ func TestRenderShortcodesNestedPageContextIssue12356(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ["taxonomy", "term", "rss", "sitemap", "robotsTXT", "404"]
--- layouts/_default/_markup/render-image.html --
+[security]
+allowContent = ['.*']
+-- layouts/_markup/render-image.html --
 {{- with .PageInner.Resources.Get .Destination -}}Image: {{ .RelPermalink }}|{{- end -}}
--- layouts/_default/_markup/render-link.html --
+-- layouts/_markup/render-link.html --
 {{- with .PageInner.GetPage .Destination -}}Link: {{ .RelPermalink }}|{{- end -}}
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 Heading: {{ .PageInner.Title }}: {{ .PlainText }}|
--- layouts/_default/_markup/render-codeblock.html --
+-- layouts/_markup/render-codeblock.html --
 CodeBlock: {{ .PageInner.Title }}: {{ .Type }}|
--- layouts/_default/list.html --
+-- layouts/list.html --
 Content:{{ .Content }}|
 Fragments: {{ with .Fragments }}{{.Identifiers }}{{ end }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content:{{ .Content }}|
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ with site.GetPage (.Get 0) }}
   {{ .RenderShortcodes }}
 {{ end }}
@@ -364,18 +360,18 @@ title: "p1"
 title: "p2"
 ---
 Hello <b>world</b>. Some **bold** text. Some Unicode: 神真美好.
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ with site.GetPage (.Get 0) }}
 <div>{{ .RenderShortcodes }}</div>
 {{ end }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
 	b := TestRunning(t, files, TestOptWarn())
 
 	b.AssertNoRenderShortcodesArtifacts()
-	b.AssertLogContains(filepath.ToSlash("WARN  .RenderShortcodes detected inside HTML block in \"/content/p1.md\"; this may not be what you intended, see https://gohugo.io/methods/page/rendershortcodes/#limitations\nYou can suppress this warning by adding the following to your site configuration:\nignoreLogs = ['warning-rendershortcodes-in-html']"))
+	b.AssertLogContains(filepath.ToSlash("WARN  .RenderShortcodes detected inside HTML block in \"/content/p1.md\"; this may not be what you intended, see https://gohugo.io/methods/page/rendershortcodes/#limitations\nYou can suppress this warning by adding the following to your project configuration:\nignoreLogs = ['warning-rendershortcodes-in-html']"))
 	b.AssertFileContent("public/p1/index.html", "<div>Hello <b>world</b>. Some **bold** text. Some Unicode: 神真美好.\n</div>")
 	b.EditFileReplaceAll("content/p2.md", "Hello", "Hello Edited").Build()
 	b.AssertNoRenderShortcodesArtifacts()
@@ -421,13 +417,13 @@ title: "p3"
 §§§ php
 code_p3
 §§§
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ with site.GetPage (.Get 0) -}}
 {{ .RenderShortcodes -}}
 {{ end -}}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/_default/_markup/render-codeblock.html --
+-- layouts/_markup/render-codeblock.html --
 <code>{{ .Inner | safeHTML }}</code>
 `
 
@@ -467,10 +463,10 @@ title: "p2"
 ### p2-h1
 
 This is some **markup**.
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
 {{ $p := site.GetPage (.Get 0) -}}
 {{ $p.RenderShortcodes -}}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 	b := TestRunning(t, files)
@@ -488,11 +484,11 @@ func TestRenderShortcodesEmptyParagraph(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['section','rss','sitemap','taxonomy','term']
--- layouts/_default/home.html --
+-- layouts/home.html --
 {{ .Content }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/shortcodes/include.html --
+-- layouts/_shortcodes/include.html --
  {{ with site.GetPage (.Get 0) }}
   {{ .RenderShortcodes }}
 {{ end }}
@@ -526,4 +522,64 @@ not emphasized
 	b.AssertFileContentEquals("public/index.html",
 		"<p>a</p>\n<p><em>emphasized</em></p>\n<p>not emphasized</p>\n<p>b</p>\n",
 	)
+}
+
+// Issue 14732.
+func TestRenderShortcodesStandalone(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['section','rss','sitemap','taxonomy','term']
+-- layouts/all.html --
+RenderShortcodes: {{ .RenderShortcodes }}|
+-- layouts/_shortcodes/headings.html --
+## Heading 1
+### Heading 2
+{{ $p := site.GetPage "includeme" }}
+RenderShortcodes2: {{ $p.RenderShortcodes }}|
+-- content/p1.md --
+---
+title: "p1"
+---
+{{% headings "headings" %}}
+-- content/includeme.md --
+---
+title: "includeme"
+---
+## Heading 2
+`
+
+	b := Test(t, files)
+
+	b.AssertNoRenderShortcodesArtifacts()
+}
+
+// Issue 12457.
+func TestRenderShortcodesCodeBlock(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['section','rss','sitemap','taxonomy','term']
+-- layouts/_shortcodes/foo.html --
+{{ $p := site.GetPage "includeme" }}
+    {{ $p.RenderShortcodes }}
+-- layouts/home.html --
+{{ .Content }}
+-- content/_index.md --
+---
+title: home
+---
+{{% foo %}}
+-- content/includeme.md --
+---
+title: "includeme"
+---
+Some markdown.
+    `
+
+	b := Test(t, files)
+	b.AssertNoRenderShortcodesArtifacts()
+	b.AssertFileContentEquals("public/index.html", "<p>Some markdown.</p>\n")
 }

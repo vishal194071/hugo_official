@@ -10,7 +10,7 @@ params:
     signatures: [templates.Current]
 ---
 
-> [!note]
+> [!NOTE]
 > This function is experimental and subject to change.
 
 {{< new-in 0.146.0 />}}
@@ -19,24 +19,26 @@ The `templates.Current` function provides introspection capabilities, allowing y
 
 ## Methods
 
-Ancestors
-: (`tpl.CurrentTemplateInfos`) Returns a slice containing information about each template in the current execution chain, starting from the parent of the current template and going up towards the initial template called. It excludes any base template applied via `define` and `block`. You can chain the `Reverse` method to this result to get the slice in chronological execution order.
+Use these methods on the `CurrentTemplateInfo` object.
 
-Base
-: (`tpl.CurrentTemplateInfoCommonOps`) Returns an object representing the base template that was applied to the current template, if any. This may be `nil`.
+`Ancestors`
+: (`tpl.CurrentTemplateInfos`) Returns a slice containing information about each template in the current execution chain, starting from the parent of the current template and going up towards the initial template called. It excludes any _base_ template applied via `define` and `block`. You can chain the `Reverse` method to this result to get the slice in chronological execution order.
 
-Filename
+`Base`
+: (`tpl.CurrentTemplateInfoCommonOps`) Returns an object representing the _base_ template that was applied to the current template, if any. This may be `nil`.
+
+`Filename`
 : (`string`) Returns the absolute path of the current template. This will be empty for embedded templates.
 
-Name
-: (`string`) Returns the name of the current template. This is usually the path relative to the layouts directory.
+`Name`
+: (`string`) Returns the name of the current template. This is usually the path relative to the `layouts` directory.
 
-Parent
+`Parent`
 : (`tpl.CurrentTemplateInfo`) Returns an object representing the parent of the current template, if any. This may be `nil`.
 
 ## Examples
 
-The examples below help visualize template execution and require a `debug` parameter set to `true` in your site configuration:
+The examples below help visualize template execution and require a `debug` parameter set to `true` in your project configuration:
 
 {{< code-toggle file=hugo >}}
 [params]
@@ -79,7 +81,7 @@ To display the chain of templates that led to the current one, create a _partial
 {{ end }}
 ```
 
-Then call the partial from any template:
+Then call the _partial_ template from any template:
 
 ```go-html-template {file="layouts/_partials/footer/copyright.html" copy=true}
 {{ if site.Params.debug }}
@@ -126,7 +128,7 @@ To render links that, when clicked, will open the template in Microsoft Visual S
 {{ end }}
 ```
 
-Then call the partial from any template:
+Then call the _partial_ template from any template:
 
 ```go-html-template {file="layouts/page.html" copy=true}
 {{ define "main" }}

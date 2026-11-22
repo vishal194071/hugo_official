@@ -1,9 +1,10 @@
 ---
 title: Filter
-description: Applicable to images, applies one or more image filters to the given image resource.
+description: Returns a new image resource with one or more image filters applied.
 categories: []
-keywords: []
+keywords: [filter]
 params:
+  alt_title: RESOURCE.Filter
   functions_and_methods:
     returnType: images.ImageResource
     signatures: [RESOURCE.Filter FILTER...]
@@ -11,7 +12,14 @@ params:
 
 {{% include "/_common/methods/resource/global-page-remote-resources.md" %}}
 
-Apply one or more [image filters](#image-filters) to the given image.
+The `Filter` method returns a new resource from a [processable image](g) after applying one or more [image filters](#image-filters).
+
+> [!NOTE]
+> Use the [`reflect.IsImageResourceProcessable`][] function to verify that an image can be processed.
+
+## Usage
+
+Use the `Filter` method to apply effects such as blurring, sharpening, or grayscale conversion. You can pass a single filter or a slice of filters. When providing a slice, Hugo applies the filters from left to right.
 
 To apply a single filter:
 
@@ -23,7 +31,7 @@ To apply a single filter:
 {{ end }}
 ```
 
-To apply two or more filters, executing from left to right:
+To apply multiple filters:
 
 ```go-html-template
 {{ $filters := slice
@@ -37,9 +45,7 @@ To apply two or more filters, executing from left to right:
 {{ end }}
 ```
 
-You can also apply image filters using the [`images.Filter`] function.
-
-[`images.Filter`]: /functions/images/filter/
+You can also apply image filters using the [`images.Filter`][] function.
 
 ## Example
 
@@ -63,4 +69,7 @@ You can also apply image filters using the [`images.Filter`] function.
 
 Use any of these filters with the `Filter` method.
 
-{{% list-pages-in-section path=/functions/images filter=functions_images_no_filters filterType=exclude %}}
+{{% render-list-of-pages-in-section path=/functions/images filter=functions_images_no_filters filterType=exclude %}}
+
+[`images.Filter`]: /functions/images/filter/
+[`reflect.IsImageResourceProcessable`]: /functions/reflect/isimageresourceprocessable/

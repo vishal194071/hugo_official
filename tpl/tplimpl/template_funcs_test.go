@@ -31,12 +31,12 @@ func TestTemplateFuncsExamples(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 disableKinds=["home", "section", "taxonomy", "term", "sitemap", "robotsTXT"]
 ignoreErrors = ["my-err-id"]
 [outputs]
 home=["HTML"]
--- layouts/partials/header.html --
+-- layouts/_partials/header.html --
 <title>Hugo Rocks!</title>
 -- files/README.txt --
 Hugo Rocks!
@@ -46,13 +46,7 @@ title: "**BatMan**"
 ---
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-		},
-	).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs())
 
 	d := b.H.Sites[0].Deps
 
@@ -77,14 +71,8 @@ title: "**BatMan**"
 		}
 	}
 
-	files += fmt.Sprintf("-- layouts/_default/single.html --\n%s\n", strings.Join(templates, "\n"))
-	b = hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-		},
-	).Build()
+	files += fmt.Sprintf("-- layouts/single.html --\n%s\n", strings.Join(templates, "\n"))
+	b = hugolib.Test(t, files, hugolib.TestOptOsFs())
 
 	b.AssertFileContent("public/blog/hugo-rocks/index.html", expected...)
 }

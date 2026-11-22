@@ -1,4 +1,4 @@
-// Copyright 2018 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,10 +20,11 @@ import (
 	"strings"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/parser"
 
 	"github.com/gohugoio/hugo/common/paths"
 
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/parser/metadecoders"
 	"github.com/spf13/afero"
 )
@@ -57,12 +58,23 @@ func IsValidConfigFilename(filename string) bool {
 	return validConfigFileExtensionsMap[ext]
 }
 
+// FromTOMLConfigString creates a config from the given TOML config. This is useful in tests.
 func FromTOMLConfigString(config string) Provider {
 	cfg, err := FromConfigString(config, "toml")
 	if err != nil {
 		panic(err)
 	}
 	return cfg
+}
+
+// FromMapToTOMLString converts the given map to a TOML string. This is useful in tests.
+func FromMapToTOMLString(v map[string]any) string {
+	var sb strings.Builder
+	err := parser.InterfaceToConfig(v, metadecoders.TOML, &sb)
+	if err != nil {
+		panic(err)
+	}
+	return sb.String()
 }
 
 // FromConfigString creates a config from the given YAML, JSON or TOML config. This is useful in tests.
@@ -161,9 +173,11 @@ func LoadConfigFromDir(sourceFs afero.Fs, configDir, environment string) (Provid
 			}
 
 			var keyPath []string
+			var unwrapKey string
 			if !DefaultConfigNamesSet[name] {
 				// Can be params.jp, menus.en etc.
 				name, lang := paths.FileAndExtNoDelimiter(name)
+				unwrapKey = name
 
 				keyPath = []string{name}
 
@@ -178,13 +192,23 @@ func LoadConfigFromDir(sourceFs afero.Fs, configDir, environment string) (Provid
 				}
 			}
 
+			// TOML/YAML can't represent a headless top-level array, so allow a
+			// file to wrap its content under a single top-level key matching
+			// the basename (e.g. cascade.yaml with `cascade: [...]`).
+			var itemValue any = item
+			if unwrapKey != "" && len(item) == 1 {
+				if inner, ok := item[unwrapKey]; ok {
+					itemValue = inner
+				}
+			}
+
 			root := item
 			if len(keyPath) > 0 {
 				root = make(map[string]any)
 				m := root
 				for i, key := range keyPath {
 					if i >= len(keyPath)-1 {
-						m[key] = item
+						m[key] = itemValue
 					} else {
 						nm := make(map[string]any)
 						m[key] = nm
@@ -210,15 +234,14 @@ func LoadConfigFromDir(sourceFs afero.Fs, configDir, environment string) (Provid
 	return cfg, dirnames, nil
 }
 
-var keyAliases maps.KeyRenamer
+var keyAliases hmaps.KeyRenamer
 
 func init() {
 	var err error
-	keyAliases, err = maps.NewKeyRenamer(
+	keyAliases, err = hmaps.NewKeyRenamer(
 		// Before 0.53 we used singular for "menu".
 		"{menu,languages/*/menu}", "menus",
 	)
-
 	if err != nil {
 		panic(err)
 	}

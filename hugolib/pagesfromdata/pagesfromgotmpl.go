@@ -17,12 +17,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 
 	"github.com/gohugoio/hugo/common/hashing"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstore"
 	"github.com/gohugoio/hugo/common/paths"
-	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/resources/page"
@@ -48,7 +47,7 @@ type PagesFromDataTemplateContext interface {
 
 	// The same template may be executed multiple times for multiple languages.
 	// The Store can be used to store state between these invocations.
-	Store() *maps.Scratch
+	Store() *hstore.Scratch
 
 	// By default, the template will be executed for the language
 	// defined by the _content.gotmpl file (e.g. its mount definition).
@@ -63,55 +62,62 @@ type pagesFromDataTemplateContext struct {
 	p *PagesFromTemplate
 }
 
-func (p *pagesFromDataTemplateContext) toPathMap(v any) (string, map[string]any, error) {
-	m, err := maps.ToStringMapE(v)
+func (p *pagesFromDataTemplateContext) toPathSitesMap(v any) (string, map[string]any, map[string]any, error) {
+	m, err := hmaps.ToStringMapE(v)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	path, err := cast.ToStringE(m["path"])
 	if err != nil {
-		return "", nil, fmt.Errorf("invalid path %q", path)
+		return "", nil, nil, fmt.Errorf("invalid path %q", path)
 	}
-	return path, m, nil
+
+	sites := hmaps.ToStringMap(m["sites"])
+
+	return path, sites, m, nil
 }
 
 func (p *pagesFromDataTemplateContext) AddPage(v any) (string, error) {
-	path, m, err := p.toPathMap(v)
+	path, sites, m, err := p.toPathSitesMap(v)
 	if err != nil {
 		return "", err
 	}
 
-	if !p.p.buildState.checkHasChangedAndSetSourceInfo(path, m) {
+	hash, hasChanged := p.p.buildState.checkHasChangedAndSetSourceInfo(path, sites, m)
+	if !hasChanged {
 		return "", nil
 	}
 
-	pd := pagemeta.DefaultPageConfig
-	pd.IsFromContentAdapter = true
-	pd.ContentAdapterData = m
+	pe := &pagemeta.PageConfigEarly{
+		IsFromContentAdapter: true,
+		Frontmatter:          m,
+		SourceEntryHash:      hash,
+	}
 
 	// The rest will be handled after the cascade is calculated and applied.
-	if err := mapstructure.WeakDecode(pd.ContentAdapterData, &pd.PageConfigEarly); err != nil {
+	if err := mapstructure.WeakDecode(pe.Frontmatter, pe); err != nil {
 		err = fmt.Errorf("failed to decode page map: %w", err)
 		return "", err
 	}
 
-	if err := pd.Init(true); err != nil {
+	if err := pe.Init(true); err != nil {
 		return "", err
 	}
 
 	p.p.buildState.NumPagesAdded++
 
-	return "", p.p.HandlePage(p.p, &pd)
+	return "", p.p.HandlePage(p.p, pe)
 }
 
 func (p *pagesFromDataTemplateContext) AddResource(v any) (string, error) {
-	path, m, err := p.toPathMap(v)
+	path, sites, m, err := p.toPathSitesMap(v)
 	if err != nil {
 		return "", err
 	}
 
-	if !p.p.buildState.checkHasChangedAndSetSourceInfo(path, m) {
+	hash, hasChanged := p.p.buildState.checkHasChangedAndSetSourceInfo(path, sites, m)
+	if !hasChanged {
 		return "", nil
 	}
 
@@ -119,6 +125,7 @@ func (p *pagesFromDataTemplateContext) AddResource(v any) (string, error) {
 	if err := mapstructure.WeakDecode(m, &rd); err != nil {
 		return "", err
 	}
+	rd.ContentAdapterSourceEntryHash = hash
 
 	p.p.buildState.NumResourcesAdded++
 
@@ -133,7 +140,7 @@ func (p *pagesFromDataTemplateContext) Site() page.Site {
 	return p.p.Site
 }
 
-func (p *pagesFromDataTemplateContext) Store() *maps.Scratch {
+func (p *pagesFromDataTemplateContext) Store() *hstore.Scratch {
 	return p.p.store
 }
 
@@ -142,14 +149,19 @@ func (p *pagesFromDataTemplateContext) EnableAllLanguages() string {
 	return ""
 }
 
+func (p *pagesFromDataTemplateContext) EnableAllDimensions() string {
+	p.p.buildState.EnableAllDimensions = true
+	return ""
+}
+
 func NewPagesFromTemplate(opts PagesFromTemplateOptions) *PagesFromTemplate {
 	return &PagesFromTemplate{
 		PagesFromTemplateOptions: opts,
 		PagesFromTemplateDeps:    opts.DepsFromSite(opts.Site),
 		buildState: &BuildState{
-			sourceInfosCurrent: maps.NewCache[string, *sourceInfo](),
+			sourceInfosCurrent: hmaps.NewCache[string, *sourceInfo](),
 		},
-		store: maps.NewScratch(),
+		store: hstore.NewScratch(),
 	}
 }
 
@@ -161,7 +173,7 @@ type PagesFromTemplateOptions struct {
 
 	Watching bool
 
-	HandlePage     func(pt *PagesFromTemplate, p *pagemeta.PageConfig) error
+	HandlePage     func(pt *PagesFromTemplate, p *pagemeta.PageConfigEarly) error
 	HandleResource func(pt *PagesFromTemplate, p *pagemeta.ResourceConfig) error
 
 	GoTmplFi hugofs.FileMetaInfo
@@ -177,7 +189,7 @@ type PagesFromTemplate struct {
 	PagesFromTemplateOptions
 	PagesFromTemplateDeps
 	buildState *BuildState
-	store      *maps.Scratch
+	store      *hstore.Scratch
 }
 
 func (b *PagesFromTemplate) AddChange(id identity.Identity) {
@@ -193,21 +205,23 @@ func (b *PagesFromTemplate) StaleVersion() uint32 {
 }
 
 type BuildInfo struct {
-	NumPagesAdded      uint64
-	NumResourcesAdded  uint64
-	EnableAllLanguages bool
-	ChangedIdentities  []identity.Identity
-	DeletedPaths       []string
-	Path               *paths.Path
+	NumPagesAdded       uint64
+	NumResourcesAdded   uint64
+	EnableAllLanguages  bool
+	EnableAllDimensions bool
+	ChangedIdentities   []identity.Identity
+	DeletedPaths        []PathHashes
+	Path                *paths.Path
 }
 
 type BuildState struct {
 	StaleVersion uint32
 
-	EnableAllLanguages bool
+	EnableAllLanguages  bool
+	EnableAllDimensions bool
 
-	// Paths deleted in the current build.
-	DeletedPaths []string
+	// PathHashes deleted in the current build.
+	DeletedPaths []PathHashes
 
 	// Changed identities in the current build.
 	ChangedIdentities []identity.Identity
@@ -215,28 +229,48 @@ type BuildState struct {
 	NumPagesAdded     uint64
 	NumResourcesAdded uint64
 
-	sourceInfosCurrent  *maps.Cache[string, *sourceInfo]
-	sourceInfosPrevious *maps.Cache[string, *sourceInfo]
+	sourceInfosCurrent  *hmaps.Cache[string, *sourceInfo]
+	sourceInfosPrevious *hmaps.Cache[string, *sourceInfo]
 }
 
 func (b *BuildState) hash(v any) uint64 {
 	return hashing.HashUint64(v)
 }
 
-func (b *BuildState) checkHasChangedAndSetSourceInfo(changedPath string, v any) bool {
-	h := b.hash(v)
-	si, found := b.sourceInfosPrevious.Get(changedPath)
-	if found {
-		b.sourceInfosCurrent.Set(changedPath, si)
-		if si.hash == h {
-			return false
-		}
-	} else {
-		si = &sourceInfo{}
-		b.sourceInfosCurrent.Set(changedPath, si)
+type sourceInfo struct {
+	siteHashes map[uint64]uint64
+}
+
+func (b *BuildState) checkHasChangedAndSetSourceInfo(changedPath string, sites map[string]any, v any) (uint64, bool) {
+	hv := b.hash(v)
+	hsites := b.hash(sites)
+
+	si, _ := b.sourceInfosCurrent.GetOrCreate(changedPath, func() (*sourceInfo, error) {
+		return &sourceInfo{
+			siteHashes: make(map[uint64]uint64),
+		}, nil
+	})
+
+	if h, found := si.siteHashes[hsites]; found && h == hv {
+		return hv, false
 	}
-	si.hash = h
-	return true
+
+	if psi, found := b.sourceInfosPrevious.Get(changedPath); found {
+		if h, found := psi.siteHashes[hsites]; found && h == hv {
+			// Not changed.
+			si.siteHashes[hsites] = hv
+			return hv, false
+		}
+	}
+
+	// It has changed.
+	si.siteHashes[hsites] = hv
+	return hv, true
+}
+
+type PathHashes struct {
+	Path   string
+	Hashes map[uint64]struct{}
 }
 
 func (b *BuildState) resolveDeletedPaths() {
@@ -244,20 +278,31 @@ func (b *BuildState) resolveDeletedPaths() {
 		b.DeletedPaths = nil
 		return
 	}
-	var paths []string
-	b.sourceInfosPrevious.ForEeach(func(k string, _ *sourceInfo) bool {
-		if _, found := b.sourceInfosCurrent.Get(k); !found {
-			paths = append(paths, k)
+	var pathsHashes []PathHashes
+	b.sourceInfosPrevious.ForEeach(func(k string, pv *sourceInfo) bool {
+		if cv, found := b.sourceInfosCurrent.Get(k); !found {
+			pathsHashes = append(pathsHashes, PathHashes{Path: k, Hashes: map[uint64]struct{}{}})
+		} else {
+			deleted := map[uint64]struct{}{}
+			for k, ph := range pv.siteHashes {
+				ch, found := cv.siteHashes[k]
+				if !found || ch != ph {
+					deleted[ph] = struct{}{}
+				}
+			}
+			if len(deleted) > 0 {
+				pathsHashes = append(pathsHashes, PathHashes{Path: k, Hashes: deleted})
+			}
 		}
 		return true
 	})
 
-	b.DeletedPaths = paths
+	b.DeletedPaths = pathsHashes
 }
 
 func (b *BuildState) PrepareNextBuild() {
 	b.sourceInfosPrevious = b.sourceInfosCurrent
-	b.sourceInfosCurrent = maps.NewCache[string, *sourceInfo]()
+	b.sourceInfosCurrent = hmaps.NewCache[string, *sourceInfo]()
 	b.StaleVersion = 0
 	b.DeletedPaths = nil
 	b.ChangedIdentities = nil
@@ -265,16 +310,12 @@ func (b *BuildState) PrepareNextBuild() {
 	b.NumResourcesAdded = 0
 }
 
-type sourceInfo struct {
-	hash uint64
-}
-
 func (p PagesFromTemplate) CloneForSite(s page.Site) *PagesFromTemplate {
 	// We deliberately make them share the same DependencyManager and Store.
 	p.PagesFromTemplateOptions.Site = s
 	p.PagesFromTemplateDeps = p.PagesFromTemplateOptions.DepsFromSite(s)
 	p.buildState = &BuildState{
-		sourceInfosCurrent: maps.NewCache[string, *sourceInfo](),
+		sourceInfosCurrent: hmaps.NewCache[string, *sourceInfo](),
 	}
 	return &p
 }
@@ -297,13 +338,12 @@ func (p *PagesFromTemplate) Execute(ctx context.Context) (BuildInfo, error) {
 		p.buildState.PrepareNextBuild()
 	}()
 
-	f, err := p.GoTmplFi.Meta().Open()
+	b, err := p.GoTmplFi.Meta().ReadAll()
 	if err != nil {
 		return BuildInfo{}, err
 	}
-	defer f.Close()
 
-	tmpl, err := p.TemplateStore.TextParse(filepath.ToSlash(p.GoTmplFi.Meta().Filename), helpers.ReaderToString(f))
+	tmpl, err := p.TemplateStore.TextParse(p.GoTmplFi.Meta().PathInfo.Path(), string(b))
 	if err != nil {
 		return BuildInfo{}, err
 	}
@@ -323,12 +363,13 @@ func (p *PagesFromTemplate) Execute(ctx context.Context) (BuildInfo, error) {
 	}
 
 	bi := BuildInfo{
-		NumPagesAdded:      p.buildState.NumPagesAdded,
-		NumResourcesAdded:  p.buildState.NumResourcesAdded,
-		EnableAllLanguages: p.buildState.EnableAllLanguages,
-		ChangedIdentities:  p.buildState.ChangedIdentities,
-		DeletedPaths:       p.buildState.DeletedPaths,
-		Path:               p.GoTmplFi.Meta().PathInfo,
+		NumPagesAdded:       p.buildState.NumPagesAdded,
+		NumResourcesAdded:   p.buildState.NumResourcesAdded,
+		EnableAllLanguages:  p.buildState.EnableAllLanguages,
+		EnableAllDimensions: p.buildState.EnableAllDimensions,
+		ChangedIdentities:   p.buildState.ChangedIdentities,
+		DeletedPaths:        p.buildState.DeletedPaths,
+		Path:                p.GoTmplFi.Meta().PathInfo,
 	}
 
 	return bi, nil

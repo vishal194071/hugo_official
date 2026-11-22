@@ -7,7 +7,7 @@ keywords: []
 
 ## GoAT diagrams (ASCII)
 
-Hugo natively supports [GoAT] diagrams with an [embedded code block render hook]. This means that this code block:
+Hugo natively supports [GoAT][] diagrams with an [embedded code block render hook][]. This means that this code block:
 
 ````txt
 ```goat
@@ -37,7 +37,7 @@ Will be rendered as:
 
 ## Mermaid diagrams
 
-Hugo does not provide a built-in template for Mermaid diagrams. Create your own using a [code block render hook]:
+Hugo does not provide a built-in template for Mermaid diagrams. Create your own using a [code block render hook][]:
 
 ```go-html-template {file="layouts/_markup/render-codeblock-mermaid.html" copy=true}
 <pre class="mermaid">
@@ -46,7 +46,7 @@ Hugo does not provide a built-in template for Mermaid diagrams. Create your own 
 {{ .Page.Store.Set "hasMermaid" true }}
 ```
 
-Then include this snippet at the _bottom_ of your base template, before the closing `body` tag:
+Then include this snippet at the _bottom_ of your _base_ template, before the closing `body` tag:
 
 ```go-html-template {file="layouts/baseof.html" copy=true}
 {{ if .Store.Get "hasMermaid" }}
@@ -59,7 +59,7 @@ Then include this snippet at the _bottom_ of your base template, before the clos
 
 With that you can use the `mermaid` language in Markdown code blocks:
 
-````text {copy=true}
+````md {file="content/example.md" copy=true}
 ```mermaid
 sequenceDiagram
     participant Alice
@@ -76,6 +76,8 @@ sequenceDiagram
 ````
 
 ## Goat ASCII diagram examples
+
+The following examples demonstrate the range of diagrams you can create with GoAT.
 
 ### Graphics
 
@@ -255,6 +257,6 @@ Created from <https://arthursonzogni.com/Diagon/#Tree>
 └────────────────────────────────────────────────┘
 ```
 
-[code block render hook]: /render-hooks/code-blocks/
-[embedded code block render hook]: {{% eturl render-codeblock-goat %}}
 [GoAT]: https://github.com/bep/goat
+[code block render hook]: /render-hooks/code-blocks/
+[embedded code block render hook]: <{{% eturl render-codeblock-goat %}}>

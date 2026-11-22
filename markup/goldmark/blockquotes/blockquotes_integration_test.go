@@ -15,6 +15,7 @@ package blockquotes_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gohugoio/hugo/hugolib"
@@ -31,9 +32,9 @@ func TestBlockquoteHook(t *testing.T) {
       [markup.goldmark.parser.attribute]
         block = true
         title = true
--- layouts/_default/_markup/render-blockquote.html --
+-- layouts/_markup/render-blockquote.html --
 Blockquote: |{{ .Text }}|{{ .Type }}|
--- layouts/_default/_markup/render-blockquote-alert.html --
+-- layouts/_markup/render-blockquote-alert.html --
 {{ $text := .Text }}
 Blockquote Alert: |{{ $text }}|{{ .Type }}|
 Blockquote Alert Attributes: |{{ $text }}|{{ .Attributes }}|
@@ -41,7 +42,7 @@ Blockquote Alert Page: |{{ $text }}|{{ .Page.Title }}|{{ .PageInner.Title }}|
 {{ if .Attributes.showpos }}
 Blockquote Alert Position: |{{ $text }}|{{ .Position | safeHTML }}|
 {{ end }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content: {{ .Content }}
 -- content/p1.md --
 ---
@@ -76,9 +77,9 @@ title: "p1"
 		"Blockquote Alert: |<p>This is a note with some whitespace after the alert type.</p>|alert|",
 		"Blockquote Alert: |<p>This is a tip.</p>",
 		"Blockquote Alert: |<p>This is a caution with some whitespace before the alert type.</p>|alert|",
-		"Blockquote: |<p>A regular blockquote.</p>|regular|",
+		"Blockquote: |<p>A regular blockquote.</p>\n|regular|",
 		"Blockquote Alert Attributes: |<p>This is a tip with attributes.</p>|map[class:foo bar id:baz]|",
-		filepath.FromSlash("/content/p1.md:19:3"),
+		filepath.FromSlash("/content/p1.md:20:1"),
 		"Blockquote Alert Page: |<p>This is a tip with attributes.</p>|p1|p1|",
 
 		// Issue 12767.
@@ -97,7 +98,7 @@ title: "p1"
 ---
 
 >
--- layouts/_default/single.html --
+-- layouts/single.html --
 Content: {{ .Content }}
 
 `
@@ -134,9 +135,9 @@ title: "Home"
 > > [!important] Yes!, they can.
 > > > [!tip] You can even use multiple layers of nesting.
 
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
--- layouts/_default/_markup/render-blockquote.html --
+-- layouts/_markup/render-blockquote.html --
 AlertType: {{ .AlertType }}|AlertTitle: {{ .AlertTitle }}|AlertSign: {{ .AlertSign | safeHTML }}|Text: {{ .Text }}|
 
 	`
@@ -162,9 +163,9 @@ func TestBlockquoteRenderHookTextParsing(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
--- layouts/_default/_markup/render-blockquote.html --
+-- layouts/_markup/render-blockquote.html --
 AlertType: {{ .AlertType }}|AlertTitle: {{ .AlertTitle }}|Text: {{ .Text }}|
 -- content/_index.md --
 ---
@@ -248,6 +249,37 @@ title: home
 		"AlertType: fourteen|AlertTitle: title|Text: <p><img src=\"a.jpg\" alt=\"alt\"></p>|",
 		"AlertType: fifteen|AlertTitle: <em>title</em>|Text: |",
 		"AlertType: sixteen|AlertTitle: <em>title</em>|Text: <p>line one</p>|",
-		"AlertType: |AlertTitle: |Text: <p>seventeen</p>|",
+		"AlertType: |AlertTitle: |Text: <p>seventeen</p>\n|",
 	)
+}
+
+// Issue14046
+func TestBlockquoteDefaultOutput(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','rss','section','sitemap','taxonomy','term']
+-- content/p1.md --
+---
+title: p1
+---
+> foo
+-- layouts/page.html --
+|{{ .Content }}|
+-- xxx --
+<blockquote>
+{{ .Text }}
+</blockquote>
+`
+
+	want := "|<blockquote>\n<p>foo</p>\n</blockquote>\n|"
+
+	b := hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html", want) // fail
+
+	files = strings.ReplaceAll(files, "xxx", "layouts/_markup/render-blockquote.html")
+
+	b = hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html", want)
 }

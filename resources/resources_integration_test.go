@@ -26,7 +26,7 @@ func TestImageCache(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 disableLiveReload = true
 baseURL = "https://example.org"
 -- content/mybundle/index.md --
@@ -38,7 +38,7 @@ iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAA
 -- content/mybundle/giphy.gif --
 sourcefilename: testdata/giphy.gif
 -- layouts/foo.html --
--- layouts/index.html --
+-- layouts/home.html --
 {{ $p := site.GetPage "mybundle"}}
 {{ $img := $p.Resources.Get "pixel.png" }}
 {{ $giphy := $p.Resources.Get "giphy.gif" }}
@@ -52,19 +52,13 @@ bmp: {{ $bmp.RelPermalink }}|}|{{ $bmp.Width }}|{{ $bmp.Height }}|{{ $bmp.MediaT
 anigif: {{ $anigif.RelPermalink }}|{{ $anigif.Width }}|{{ $anigif.Height }}|{{ $anigif.MediaType }}|
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-			Running:     true,
-		}).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptRunning())
 
 	assertImages := func() {
 		b.AssertFileContent("public/index.html", `
- gif: /mybundle/pixel_hu_93429543fc146fce.gif|}|1|2|image/gif|
-bmp: /mybundle/pixel_hu_f9bf2acd6578e2c6.bmp|}|2|3|image/bmp|
-anigif: /mybundle/giphy_hu_652d28653068b48f.gif|4|5|image/gif|
+gif: /mybundle/pixel_hu_d6bad5e71f783c98.gif|}|1|2|image/gif|
+bmp: /mybundle/pixel_hu_a8812c9bf8812b53.bmp|}|2|3|image/bmp|
+anigif: /mybundle/giphy_hu_7f64f85f904209d4.gif|4|5|image/gif|
 		`)
 	}
 
@@ -80,24 +74,18 @@ func TestSVGError(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 -- assets/circle.svg --
 <svg height="100" width="100"><circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red" /></svg>
--- layouts/index.html --
+-- layouts/home.html --
 {{ $svg := resources.Get "circle.svg" }}
 Width: {{ $svg.Width }}
 `
 
-	b, err := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-			Running:     true,
-		}).BuildE()
+	b, err := hugolib.TestE(t, files, hugolib.TestOptOsFs(), hugolib.TestOptRunning())
 
 	b.Assert(err, qt.IsNotNil)
-	b.Assert(err.Error(), qt.Contains, `error calling Width: this method is only available for raster images. To determine if an image is SVG, you can do {{ if eq .MediaType.SubType "svg" }}{{ end }}`)
+	b.Assert(err.Error(), qt.Contains, `error calling Width: resource "/circle.svg" of media type "image/svg+xml" does not support this method: use reflect.IsImageResource, reflect.IsImageResourceProcessable, or reflect.IsImageResourceWithMeta to check if the resource supports this method before calling it`)
 }
 
 // Issue 10255.
@@ -109,7 +97,7 @@ func TestNoPublishOfUnusedProcessedImage(t *testing.T) {
 	files := `
 -- assets/images/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/index.html --
+-- layouts/home.html --
 {{ $image := resources.Get "images/pixel.png" }}
 {{ $image = $image.Resize "400x" }}
 {{ $image = $image.Resize "300x" }}
@@ -124,17 +112,12 @@ iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAA
 
 	for range 3 {
 
-		b := hugolib.NewIntegrationTestBuilder(
-			hugolib.IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-				NeedsOsFS:   true,
-				WorkingDir:  workingDir,
-			}).Build()
+		b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithConfig(func(cfg *hugolib.IntegrationTestConfig) {
+			cfg.WorkingDir = workingDir
+		}))
 
 		b.AssertFileCount("resources/_gen/images", 6)
 		b.AssertFileCount("public/images", 1)
-		b.Build()
 	}
 }
 
@@ -144,7 +127,7 @@ func TestProcessFilter(t *testing.T) {
 	files := `
 -- assets/images/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/index.html --
+-- layouts/home.html --
 {{ $pixel := resources.Get "images/pixel.png" }}
 {{ $filters := slice (images.GaussianBlur 6) (images.Pixelate 8) (images.Process "jpg") }}
 {{ $image := $pixel.Filter $filters }}
@@ -160,9 +143,9 @@ resize 2|RelPermalink: {{ $image.RelPermalink }}|MediaType: {{ $image.MediaType 
 	b := hugolib.Test(t, files)
 
 	b.AssertFileContent("public/index.html",
-		"jpg|RelPermalink: /images/pixel_hu_38c3f257174fc757.jpg|MediaType: image/jpeg|Width: 1|Height: 1|",
-		"resize 1|RelPermalink: /images/pixel_hu_b5c2a3d88991f65a.jpg|MediaType: image/jpeg|Width: 20|Height: 30|",
-		"resize 2|RelPermalink: /images/pixel_hu_b5c2a3d88991f65a.jpg|MediaType: image/jpeg|Width: 20|Height: 30|",
+		"jpg|RelPermalink: /images/pixel_hu_43e529ee1951bebf.jpg|MediaType: image/jpeg|Width: 1|Height: 1|",
+		"resize 1|RelPermalink: /images/pixel_hu_81fc53effe4c3cf6.jpg|MediaType: image/jpeg|Width: 20|Height: 30|",
+		"resize 2|RelPermalink: /images/pixel_hu_81fc53effe4c3cf6.jpg|MediaType: image/jpeg|Width: 20|Height: 30|",
 	)
 }
 
@@ -171,9 +154,9 @@ func TestGroupByParamDate(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 disableKinds = ['section','rss','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{- range site.RegularPages.GroupByParamDate "eventDate" "2006-01" }}
 	{{- .Key }}|{{ range .Pages }}{{ .Title }}|{{ end }}
 {{- end }}
@@ -238,7 +221,7 @@ func TestImageTransformThenCopy(t *testing.T) {
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 -- assets/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/index.html --
+-- layouts/home.html --
 {{- with resources.Get "pixel.png" }}
   {{- with .Resize "200x" | resources.Copy "pixel.png" }}
     <img src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}">|{{ .Key }}
@@ -263,7 +246,7 @@ func TestUseDifferentCacheKeyForResourceCopy(t *testing.T) {
 disableKinds = ['page','section','rss','sitemap','taxonomy','term']
 -- assets/a.txt --
 This was assets/a.txt
--- layouts/index.html --
+-- layouts/home.html --
 {{ $nilResource := resources.Get "/p1/b.txt" }}
 {{ $r := resources.Get "a.txt" }}
 {{ $r = resources.Copy "/p1/b.txt" $r }}

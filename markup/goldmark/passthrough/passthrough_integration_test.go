@@ -14,6 +14,7 @@
 package passthrough_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gohugoio/hugo/hugolib"
@@ -23,7 +24,7 @@ func TestPassthroughRenderHook(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 [markup.goldmark.extensions.passthrough]
 enable = true
 [markup.goldmark.extensions.passthrough.delimiters]
@@ -43,11 +44,11 @@ $$a^*=x-b^*$$
 
 Some inline LaTeX 2: $a^*=x-b^*$.
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
--- layouts/_default/_markup/render-passthrough-block.html --
+-- layouts/_markup/render-passthrough-block.html --
 Passthrough block: {{ .Inner | safeHTML }}|{{ .Type }}|{{ .Ordinal }}:END
--- layouts/_default/_markup/render-passthrough-inline.html --
+-- layouts/_markup/render-passthrough-inline.html --
 Passthrough inline: {{ .Inner | safeHTML }}|{{ .Type }}|{{ .Ordinal }}:END
 
 `
@@ -59,4 +60,48 @@ Passthrough inline: {{ .Inner | safeHTML }}|{{ .Type }}|{{ .Ordinal }}:END
 		Some inline LaTeX 2: Passthrough inline: a^*=x-b^*|inline|2:END
 
 	`)
+}
+
+func TestPassthroughNoRenderHookEscapesHTML(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+[markup.goldmark.extensions.passthrough]
+enable = true
+[markup.goldmark.extensions.passthrough.delimiters]
+block = [['$$', '$$']]
+inline = [['\(', '\)']]
+-- content/p1.md --
+---
+title: "p1"
+---
+Inline \(<img src=x onerror=alert(1)> a<b\).
+
+$$
+x <script>alert(2)</script>
+$$
+-- layouts/page.html --
+{{ .Content }}
+`
+
+	t.Run("Default", func(t *testing.T) {
+		t.Parallel()
+		b := hugolib.Test(t, files)
+		b.AssertFileContent("public/p1/index.html",
+			"Inline \\(&lt;img src=x onerror=alert(1)&gt; a&lt;b\\).",
+			"x &lt;script&gt;alert(2)&lt;/script&gt;",
+			"! <img",
+			"! <script>",
+		)
+	})
+
+	t.Run("Unsafe", func(t *testing.T) {
+		t.Parallel()
+		b := hugolib.Test(t, strings.Replace(files, "[markup.goldmark.extensions.passthrough]", "[markup.goldmark.renderer]\nunsafe = true\n[markup.goldmark.extensions.passthrough]", 1))
+		b.AssertFileContent("public/p1/index.html",
+			"Inline \\(<img src=x onerror=alert(1)> a<b\\).",
+			"x <script>alert(2)</script>",
+		)
+	})
 }

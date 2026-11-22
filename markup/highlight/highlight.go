@@ -71,7 +71,7 @@ type chromaHighlighter struct {
 
 func (h chromaHighlighter) Highlight(code, lang string, opts any) (string, error) {
 	cfg := h.cfg
-	if err := applyOptions(opts, &cfg); err != nil {
+	if err := applyOptions(opts, &cfg, &lang, &code); err != nil {
 		return "", err
 	}
 	var b strings.Builder
@@ -90,14 +90,14 @@ func (h chromaHighlighter) HighlightCodeBlock(ctx hooks.CodeblockContext, opts a
 
 	attributes := ctx.(hooks.AttributesOptionsSliceProvider).AttributesSlice()
 
-	options := ctx.Options()
-
-	if err := applyOptionsFromMap(options, &cfg); err != nil {
+	if err := applyOptionsFromMap(ctx.Options(), &cfg); err != nil {
 		return HighlightResult{}, err
 	}
 
-	// Apply these last so the user can override them.
-	if err := applyOptions(opts, &cfg); err != nil {
+	lang, code := ctx.Type(), ctx.Inner()
+
+	// Apply these last so the user can override them, including the type and code.
+	if err := applyOptions(opts, &cfg, &lang, &code); err != nil {
 		return HighlightResult{}, err
 	}
 
@@ -105,7 +105,7 @@ func (h chromaHighlighter) HighlightCodeBlock(ctx hooks.CodeblockContext, opts a
 		return HighlightResult{}, err
 	}
 
-	low, high, err := highlight(&b, ctx.Inner(), ctx.Type(), attributes, cfg)
+	low, high, err := highlight(&b, code, lang, attributes, cfg)
 	if err != nil {
 		return HighlightResult{}, err
 	}
@@ -181,13 +181,14 @@ func highlight(fw hugio.FlexiWriter, code, lang string, attributes []attributes.
 	if lexer == nil {
 		if cfg.Hl_inline {
 			fmt.Fprintf(w, "<code%s>%s</code>", inlineCodeAttrs(lang), gohtml.EscapeString(code))
-		} else {
-			preWrapper := getPreWrapper(lang, w)
-			fmt.Fprint(w, preWrapper.Start(true, ""))
-			fmt.Fprint(w, gohtml.EscapeString(code))
-			fmt.Fprint(w, preWrapper.End(true))
+			return 0, 0, nil
 		}
-		return 0, 0, nil
+
+		preWrapper := getPreWrapper(lang, w)
+		fmt.Fprint(w, preWrapper.Start(true, ""))
+		fmt.Fprint(w, gohtml.EscapeString(code))
+		fmt.Fprint(w, preWrapper.End(true))
+		return preWrapper.low, preWrapper.high, nil
 	}
 
 	style := styles.Get(cfg.Style)
@@ -205,7 +206,11 @@ func highlight(fw hugio.FlexiWriter, code, lang string, attributes []attributes.
 		writeDivStart(w, attributes, cfg.WrapperClass)
 	}
 
-	options := cfg.toHTMLOptions()
+	options, err := cfg.toHTMLOptions()
+	if err != nil {
+		return 0, 0, err
+	}
+
 	var wrapper html.PreWrapper
 
 	if cfg.Hl_inline {
@@ -270,6 +275,7 @@ func (p *preWrapper) Start(code bool, styleAttr string) string {
 }
 
 func inlineCodeAttrs(lang string) string {
+	lang = gohtml.EscapeString(lang)
 	return fmt.Sprintf(` class="code-inline language-%s"`, lang)
 }
 
@@ -277,6 +283,7 @@ func WritePreStart(w io.Writer, language, styleAttr string) {
 	fmt.Fprintf(w, `<pre tabindex="0"%s>`, styleAttr)
 	fmt.Fprint(w, "<code")
 	if language != "" {
+		language = gohtml.EscapeString(language)
 		fmt.Fprint(w, ` class="language-`+language+`"`)
 		fmt.Fprint(w, ` data-lang="`+language+`"`)
 	}
@@ -305,11 +312,11 @@ func (s startEnd) End(code bool) string {
 
 func writeDivStart(w hugio.FlexiWriter, attrs []attributes.Attribute, wrapperClass string) {
 	w.WriteString(`<div class="`)
-	w.WriteString(wrapperClass)
+	w.WriteString(gohtml.EscapeString(wrapperClass))
 	if attrs != nil {
 		for _, attr := range attrs {
 			if attr.Name == "class" {
-				w.WriteString(" " + attr.ValueString())
+				w.WriteString(" " + gohtml.EscapeString(attr.ValueString()))
 				break
 			}
 		}

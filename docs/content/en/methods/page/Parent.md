@@ -11,12 +11,12 @@ params:
 
 {{% glossary-term section %}}
 
-> [!note]
-> The parent section of a regular page is the [current section].
+> [!NOTE]
+> The parent section of a regular page is the [current section][].
 
 Consider this content structure:
 
-```text
+```tree
 content/
 ├── auctions/
 │   ├── 2023-11/
@@ -24,7 +24,7 @@ content/
 │   │   ├── auction-1.md
 │   │   └── auction-2.md  <-- parent: 2023-11
 │   ├── 2023-12/
-│   │   ├── _index.md     
+│   │   ├── _index.md
 │   │   ├── auction-3.md
 │   │   └── auction-4.md
 │   ├── _index.md         <-- parent: home
@@ -35,13 +35,13 @@ content/
 │   ├── book-1.md
 │   └── book-2.md         <-- parent: books
 ├── films/
-│   ├── _index.md         <-- parent: home 
+│   ├── _index.md         <-- parent: home
 │   ├── film-1.md
 │   └── film-2.md         <-- parent: films
 └── _index.md             <-- parent: nil
 ```
 
-In the example above, note the parent section of the home page is nil. Code defensively by verifying existence of the parent section before calling methods on its `Page` object. To create a link to the parent section page of the current page:
+In the example above, note the parent section of the home page is `nil`. Code defensively by verifying existence of the parent section before calling methods on its `Page` object. To create a link to the parent section page of the current page:
 
 ```go-html-template
 {{ with .Parent }}

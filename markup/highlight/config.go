@@ -16,6 +16,7 @@ package highlight
 
 import (
 	"fmt"
+	gohtml "html"
 	"strconv"
 	"strings"
 
@@ -60,7 +61,7 @@ type Config struct {
 	NoClasses bool
 
 	// When set, line numbers will be printed.
-	LineNos            bool
+	LineNos            any
 	LineNumbersInTable bool
 
 	// When set, add links to line numbers
@@ -85,16 +86,45 @@ type Config struct {
 	GuessSyntax bool
 }
 
-func (cfg Config) toHTMLOptions() []html.Option {
-	var lineAnchors string
+const errLineNosMsg = `lineNos must be one of true, false, "inline", or "table"; got %[1]v (%[1]T)`
+
+func (cfg Config) toHTMLOptions() ([]html.Option, error) {
+	var (
+		lineAnchors string
+		lineNos     bool
+		inTable     = cfg.LineNumbersInTable
+	)
+
 	if cfg.LineAnchors != "" {
-		lineAnchors = cfg.LineAnchors + "-"
+		// Chroma writes this verbatim into id and href attributes.
+		lineAnchors = gohtml.EscapeString(cfg.LineAnchors) + "-"
 	}
+
+	switch v := cfg.LineNos.(type) {
+	case string:
+		switch v {
+		case "inline":
+			lineNos = true
+			inTable = false
+		case "table":
+			lineNos = true
+			inTable = true
+		default:
+			return nil, fmt.Errorf(errLineNosMsg, v)
+		}
+	case bool:
+		lineNos = v
+	case nil:
+		lineNos = false
+	default:
+		return nil, fmt.Errorf(errLineNosMsg, v)
+	}
+
 	options := []html.Option{
 		html.TabWidth(cfg.TabWidth),
-		html.WithLineNumbers(cfg.LineNos),
+		html.WithLineNumbers(lineNos),
 		html.BaseLineNumber(cfg.LineNoStart),
-		html.LineNumbersInTable(cfg.LineNumbersInTable),
+		html.LineNumbersInTable(inTable),
 		html.WithClasses(!cfg.NoClasses),
 		html.WithLinkableLineNumbers(cfg.AnchorLineNos, lineAnchors),
 		html.InlineCode(cfg.Hl_inline),
@@ -117,23 +147,7 @@ func (cfg Config) toHTMLOptions() []html.Option {
 		}
 	}
 
-	return options
-}
-
-func applyOptions(opts any, cfg *Config) error {
-	if opts == nil {
-		return nil
-	}
-	switch vv := opts.(type) {
-	case map[string]any:
-		return applyOptionsFromMap(vv, cfg)
-	default:
-		s, err := cast.ToStringE(opts)
-		if err != nil {
-			return err
-		}
-		return applyOptionsFromString(s, cfg)
-	}
+	return options, nil
 }
 
 func applyOptionsFromString(opts string, cfg *Config) error {
@@ -147,6 +161,43 @@ func applyOptionsFromString(opts string, cfg *Config) error {
 func applyOptionsFromMap(optsm map[string]any, cfg *Config) error {
 	normalizeHighlightOptions(optsm)
 	return mapstructure.WeakDecode(optsm, cfg)
+}
+
+// applyOptions applies opts (a string or a map) to cfg. The type and code
+// options, if set, are not part of Config and instead override lang and code
+// respectively. Shared by Highlight and HighlightCodeBlock. See issue 11872.
+func applyOptions(opts any, cfg *Config, lang, code *string) error {
+	if opts == nil {
+		return nil
+	}
+
+	var optsm map[string]any
+	switch vv := opts.(type) {
+	case map[string]any:
+		optsm = make(map[string]any, len(vv))
+		for k, v := range vv {
+			optsm[strings.ToLower(k)] = v
+		}
+	default:
+		s, err := cast.ToStringE(opts)
+		if err != nil {
+			return err
+		}
+		if optsm, err = parseHighlightOptions(s); err != nil {
+			return err
+		}
+	}
+
+	if v, found := optsm["type"]; found {
+		*lang = cast.ToString(v)
+		delete(optsm, "type")
+	}
+	if v, found := optsm["code"]; found {
+		*code = cast.ToString(v)
+		delete(optsm, "code")
+	}
+
+	return applyOptionsFromMap(optsm, cfg)
 }
 
 func applyOptionsFromCodeBlockContext(ctx hooks.CodeblockContext, cfg *Config) error {
@@ -197,7 +248,7 @@ func parseHighlightOptions(in string) (map[string]any, error) {
 		return opts, nil
 	}
 
-	for _, v := range strings.Split(in, ",") {
+	for v := range strings.SplitSeq(in, ",") {
 		keyVal := strings.Split(v, "=")
 		key := strings.Trim(keyVal[0], " ")
 		if len(keyVal) != 2 {
@@ -265,8 +316,8 @@ func hlLinesToRanges(startLine int, s string) ([][2]int, error) {
 	// 1-2 3
 	// 1 3-4
 	// 1    3-4
-	fields := strings.Split(s, " ")
-	for _, field := range fields {
+	fields := strings.SplitSeq(s, " ")
+	for field := range fields {
 		field = strings.TrimSpace(field)
 		if field == "" {
 			continue

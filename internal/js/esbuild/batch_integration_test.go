@@ -22,8 +22,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 
-	"github.com/bep/logg"
 	"github.com/gohugoio/hugo/common/paths"
+	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/internal/js/esbuild"
 )
@@ -48,7 +48,7 @@ export default function Main() {};
 console.log("Hello, Runner!");
 -- node_modules/mylib/index.js --
 console.log("Hello, My Lib!");
--- layouts/shortcodes/hdx.html --
+-- layouts/_shortcodes/hdx.html --
 {{ $path := .Get "r" }}
 {{ $r := or (.Page.Resources.Get $path) (resources.Get $path) }}
 {{ $batch := (js.Batch "mybatch") }}
@@ -74,7 +74,7 @@ console.log("Hello, My Lib!");
 	{{ end }}
 {{ end }}
 hdx-instance: {{ $scriptID }}: {{ $instanceID }}|
--- layouts/_default/baseof.html --
+-- layouts/baseof.html --
 Base.
 {{ $batch := (js.Batch "mybatch") }}
  {{ with $batch.Config }}
@@ -95,7 +95,7 @@ Defer:
 {{ end }}
 {{ block "main" . }}Main{{ end }}
 End.
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ define "main" }}
 ==> Single Template Content: {{ .Content }}$
 {{ $batch := (js.Batch "mybatch") }}
@@ -111,7 +111,7 @@ End.
 	{{ end }}
 {{ end }}
 {{ end }}
--- layouts/index.html --
+-- layouts/home.html --
 {{ define "main" }}
 Home.
 {{ end }}
@@ -172,7 +172,7 @@ func TestBatchEditInstance(t *testing.T) {
 	files := jsBatchFilesTemplate
 	b := hugolib.TestRunning(t, files, hugolib.TestOptWithOSFs())
 	b.AssertFileContent("public/mybatch/mygroup.js", "Instance 1")
-	b.EditFileReplaceAll("layouts/_default/single.html", "Instance 1", "Instance 1 Edit").Build()
+	b.EditFileReplaceAll("layouts/single.html", "Instance 1", "Instance 1 Edit").Build()
 	b.AssertFileContent("public/mybatch/mygroup.js", "Instance 1 Edit")
 }
 
@@ -180,7 +180,7 @@ func TestBatchEditScriptParam(t *testing.T) {
 	files := jsBatchFilesTemplate
 	b := hugolib.TestRunning(t, files, hugolib.TestOptWithOSFs())
 	b.AssertFileContent("public/mybatch/mygroup.js", "param-p1-main")
-	b.EditFileReplaceAll("layouts/_default/single.html", "param-p1-main", "param-p1-main-edited").Build()
+	b.EditFileReplaceAll("layouts/single.html", "param-p1-main", "param-p1-main-edited").Build()
 	b.AssertFileContent("public/mybatch/mygroup.js", "param-p1-main-edited")
 }
 
@@ -207,7 +207,7 @@ console.log("Hello, Main!");
 console.log("Hello, Runner!");
 -- node_modules/mylib/index.js --
 console.log("Hello, My Lib!");
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ $batch := (js.Batch "mybatch") }}
  {{ with $batch.Config }}
@@ -243,8 +243,8 @@ Defer:
 `
 	b := hugolib.Test(t, files, hugolib.TestOptWithOSFs())
 	b.AssertPublishDir(
-		"en/mybatch/chunk-TOZKWCDE.js", "en/mybatch/mygroup.js ",
-		"fr/mybatch/mygroup.js", "fr/mybatch/chunk-TOZKWCDE.js")
+		"en/mybatch/chunk-MO3Q4WT6.js", "en/mybatch/mygroup.js ",
+		"fr/mybatch/mygroup.js", "fr/mybatch/chunk-MO3Q4WT6.js")
 }
 
 func TestBatchRenameBundledScript(t *testing.T) {
@@ -259,6 +259,26 @@ func TestBatchRenameBundledScript(t *testing.T) {
 	// Rename it back.
 	b.RenameFile("content/p1/p1script2.js", "content/p1/p1script.js")
 	b.Build()
+}
+
+func TestBatchMissingImportedAssetIssue13737(t *testing.T) {
+	files := jsBatchFilesTemplate
+	b := hugolib.TestRunning(t, files, hugolib.TestOptWithOSFs())
+	b.AssertFileContent("public/mybatch/mygroup.js", "Hello, Main")
+
+	filename := filepath.Join(b.Cfg.WorkingDir, "assets/js/main.js")
+	content, err := os.ReadFile(filename)
+	b.Assert(err, qt.IsNil)
+	b.Assert(os.Remove(filename), qt.IsNil)
+
+	_, err = b.BuildE()
+	b.Assert(err, qt.IsNotNil)
+	b.Assert(err.Error(), qt.Contains, "failed to read import")
+	b.Assert(err.Error(), qt.Contains, "main.js")
+
+	b.Assert(os.WriteFile(filename, content, 0o666), qt.IsNil)
+	b.Build()
+	b.AssertFileContent("public/mybatch/mygroup.js", "Hello, Main")
 }
 
 func TestBatchErrorScriptResourceNotSet(t *testing.T) {
@@ -291,7 +311,7 @@ console.log("Hello, Main!");
 console.log("Hello, Runner!");
 -- node_modules/mylib/index.js --
 console.log("Hello, My Lib!");
--- layouts/shortcodes/hdx.html --
+-- layouts/_shortcodes/hdx.html --
 {{ $path := .Get "r" }}
 {{ $r := or (.Page.Resources.Get $path) (resources.Get $path) }}
 {{ $batch := (js.Batch "mybatch") }}
@@ -317,7 +337,7 @@ console.log("Hello, My Lib!");
 	{{ end }}
 {{ end }}
 hdx-instance: {{ $scriptID }}: {{ $instanceID }}|
--- layouts/_default/baseof.html --
+-- layouts/baseof.html --
 Base.
 {{ $batch := (js.Batch "mybatch") }}
  {{ with $batch.Config }}
@@ -338,7 +358,7 @@ Defer:
 {{ end }}
 {{ block "main" . }}Main{{ end }}
 End.
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ define "main" }}
 ==> Single Template Content: {{ .Content }}$
 {{ $batch := (js.Batch "mybatch") }}
@@ -354,7 +374,7 @@ End.
 	{{ end }}
 {{ end }}
 {{ end }}
--- layouts/index.html --
+-- layouts/home.html --
 {{ define "main" }}
 Home.
 {{ end }}
@@ -382,7 +402,7 @@ export default function P1Script() {};
 	b.AssertFileContent("public/mybatch/mygroup.js", "sourceMappingURL=mygroup.js.map")
 	b.AssertFileContent("public/mybatch/p1.js", "sourceMappingURL=p1.js.map")
 	b.AssertFileContent("public/mybatch/mygroup_run_runner.js", "sourceMappingURL=mygroup_run_runner.js.map")
-	b.AssertFileContent("public/mybatch/chunk-UQKPPNA6.js", "sourceMappingURL=chunk-UQKPPNA6.js.map")
+	b.AssertFileContent("public/mybatch/chunk-3REXYBSZ.js", "sourceMappingURL=chunk-3REXYBSZ.js.map")
 
 	checkMap := func(p string, expectLen int) {
 		s := b.FileContent(p)
@@ -401,7 +421,7 @@ export default function P1Script() {};
 	checkMap("public/mybatch/mygroup.js.map", 1)
 	checkMap("public/mybatch/p1.js.map", 1)
 	checkMap("public/mybatch/mygroup_run_runner.js.map", 0)
-	checkMap("public/mybatch/chunk-UQKPPNA6.js.map", 1)
+	checkMap("public/mybatch/chunk-3REXYBSZ.js.map", 1)
 }
 
 func TestBatchErrorRunnerResourceNotSet(t *testing.T) {
@@ -428,6 +448,7 @@ func TestBatchErrorScriptResourceInBundleSyntaxError(t *testing.T) {
 }
 
 func TestBatch(t *testing.T) {
+	htesting.SkipSlowTestUnlessCI(t)
 	files := `
 -- hugo.toml --
 disableKinds = ["taxonomy", "term"]
@@ -584,7 +605,7 @@ console.log('config.params.id', config.id)
 
 export default function Main3() {};
 
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
 
 {{ $r := .Resources.GetMatch "*.jsx" }}
@@ -612,7 +633,7 @@ Single.
 	 	{{ .SetOptions  (dict "title" "r2 instance 1")}}
 	{{ end }}
 {{ end }}
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ with (templates.Defer (dict "key" "global")) }}
 {{ $batch := (js.Batch "mybundle") }}
@@ -677,16 +698,7 @@ Home.
  
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:               t,
-			NeedsOsFS:       true,
-			NeedsNpmInstall: true,
-			TxtarString:     files,
-			Running:         true,
-			LogLevel:        logg.LevelWarn,
-			// PrintAndKeepTempDir: true,
-		}).Build()
+	b := hugolib.TestRunning(t, files, hugolib.TestOptWithOSFs(), hugolib.TestOptWithNpmInstall(), hugolib.TestOptWarn())
 
 	b.AssertFileContent("public/index.html",
 		"mains: 0: /mybundle/mains.js",

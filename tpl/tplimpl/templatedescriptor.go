@@ -14,6 +14,10 @@
 package tplimpl
 
 import (
+	"strings"
+
+	"github.com/gohugoio/hugo/common/types"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 	"github.com/gohugoio/hugo/resources/kinds"
 )
 
@@ -29,7 +33,8 @@ type TemplateDescriptor struct {
 	// Group 2.
 	OutputFormat string // rss, csv ...
 	MediaType    string // text/html, text/plain, ...
-	Lang         string // en, nn, fr, ...
+
+	SitesHash uint64
 
 	Variant1 string // contextual variant, e.g. "link" in render hooks."
 	Variant2 string // contextual variant, e.g. "id" in render.
@@ -41,6 +46,8 @@ type TemplateDescriptor struct {
 }
 
 func (d *TemplateDescriptor) normalizeFromFile() {
+	d.LayoutFromTemplate = strings.ToLower(d.LayoutFromTemplate)
+
 	if d.LayoutFromTemplate == d.OutputFormat {
 		d.LayoutFromTemplate = ""
 	}
@@ -60,26 +67,43 @@ type descriptorHandler struct {
 
 // Note that this in this setup is usually a descriptor constructed from a page,
 // so we want to find the best match for that page.
-func (s descriptorHandler) compareDescriptors(category Category, isEmbedded bool, this, other TemplateDescriptor) weight {
+func (s descriptorHandler) compareDescriptors(category Category, this, other TemplateDescriptor, sitesMatrixThis, sitesMatrixOther sitesmatrix.VectorProvider) weight {
 	if this.LayoutFromUserMustMatch && this.LayoutFromUser != other.LayoutFromTemplate {
 		return weightNoMatch
 	}
 
-	w := this.doCompare(category, s.opts.DefaultContentLanguage, other)
+	w := this.doCompare(category, other, sitesMatrixThis, sitesMatrixOther)
 
 	if w.w1 <= 0 {
+		if sitesMatrixOther != nil {
+			if sitesMatrixThis == nil || !sitesMatrixOther.HasAnyVector(sitesMatrixThis) {
+				return w
+			}
+		}
+
 		if category == CategoryMarkup && (this.Variant1 == other.Variant1) && (this.Variant2 == other.Variant2 || this.Variant2 != "" && other.Variant2 == "") {
 			// See issue 13242.
 			if this.OutputFormat != other.OutputFormat && this.OutputFormat == s.opts.DefaultOutputFormat {
 				return w
 			}
 
-			w.w1 = 1
+			if this.isLayoutCompatible(other) {
+				w.w1 = 1
+				if other.Variant2 != "" && other.Variant2 == this.Variant2 {
+					// Prefer e.g. render-codeblock-goat.html over render-codeblock.html. See issue #15614.
+					w.w1 = 2
+				}
+			}
 		}
 
 		if category == CategoryShortcode {
-			if (this.IsPlainText == other.IsPlainText || !other.IsPlainText) || this.AlwaysAllowPlainText {
+			plainTextOK := this.IsPlainText == other.IsPlainText || !other.IsPlainText || this.AlwaysAllowPlainText
+			if plainTextOK && this.isLayoutCompatible(other) {
 				w.w1 = 1
+				if other.OutputFormat == s.opts.DefaultOutputFormat {
+					// Prefer the default output format when falling back. See issue #15540.
+					w.wfallback = 1
+				}
 			}
 		}
 	}
@@ -88,7 +112,7 @@ func (s descriptorHandler) compareDescriptors(category Category, isEmbedded bool
 }
 
 //lint:ignore ST1006 this vs other makes it easier to reason about.
-func (this TemplateDescriptor) doCompare(category Category, defaultContentLanguage string, other TemplateDescriptor) weight {
+func (this TemplateDescriptor) doCompare(category Category, other TemplateDescriptor, sitesMatrixThis, sitesMatrixOther sitesmatrix.VectorProvider) weight {
 	w := weightNoMatch
 
 	if !this.AlwaysAllowPlainText {
@@ -110,8 +134,13 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 		}
 	}
 
-	if other.Lang != "" && other.Lang != this.Lang {
-		return w
+	if sitesMatrixOther != nil {
+		// sitesMatrixThis is usually a single Site.
+		// But we also use this method to find all base template variants for a given template,
+		// and in that case we may get multiple vectors (e.g. multiple languages).
+		if sitesMatrixThis == nil || !sitesMatrixOther.HasAnyVector(sitesMatrixThis) {
+			return w
+		}
 	}
 
 	if other.OutputFormat != "" && other.OutputFormat != this.OutputFormat {
@@ -124,7 +153,7 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 		// when one exist for the html output format (same media type).
 		skip := category != CategoryBaseof && (this.Kind == "" || (this.Kind != other.Kind && (this.LayoutFromTemplate != other.LayoutFromTemplate && other.LayoutFromTemplate != layoutAll)))
 		if this.LayoutFromUser != "" {
-			skip = skip && (this.LayoutFromUser != other.LayoutFromTemplate)
+			skip = skip && this.LayoutFromUser != other.LayoutFromTemplate
 		}
 		if skip {
 			return w
@@ -156,7 +185,7 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 		weightLayoutAll      = 2 // the "all" layout
 		weightOutputFormat   = 4 // a configured output format (e.g. rss, html, json)
 		weightMediaType      = 1 // a configured media type (e.g. text/html, text/plain)
-		weightLang           = 1 // a configured language (e.g. en, nn, fr, ...)
+		weightSitesMatrix    = 1 // a configured language (e.g. en, nn, fr, ...)
 		weightVariant1       = 6 // currently used for render hooks, e.g. "link", "image"
 		weightVariant2       = 4 // currently used for render hooks, e.g. the language "go" in code blocks.
 
@@ -170,7 +199,7 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 		weight2Group1 = 1 // kind, standardl layout (single,list,all)
 		weight2Group2 = 2 // custom layout (mylayout)
 
-		weight3 = 1 // for media type, lang, output format.
+		weight3 = 1 // for media type, output format, and dimensions (if not provided).
 	)
 
 	// Now we now know that the other descriptor is a subset of this.
@@ -196,9 +225,16 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 		w.w2 = weight2Group2
 	}
 
-	if (other.Lang != "" && other.Lang == this.Lang) || (other.Lang == "" && this.Lang == defaultContentLanguage) {
-		w.w1 += weightLang
-		w.w3 += weight3
+	if sitesMatrixOther != nil {
+		// sitesMatrixThis is usually a single Site.
+		if sitesMatrixThis != nil && sitesMatrixOther.HasAnyVector(sitesMatrixThis) {
+			w.w1 += weightSitesMatrix
+			if wp, ok := sitesMatrixOther.(types.WeightProvider); ok {
+				w.wsm = wp.Weight()
+			} else {
+				w.wsm = weight3
+			}
+		}
 	}
 
 	if other.OutputFormat != "" && other.OutputFormat == this.OutputFormat {
@@ -220,6 +256,15 @@ func (this TemplateDescriptor) doCompare(category Category, defaultContentLangua
 	}
 
 	return w
+}
+
+//lint:ignore ST1006 this vs other makes it easier to reason about.
+func (this TemplateDescriptor) isLayoutCompatible(other TemplateDescriptor) bool {
+	switch other.LayoutFromTemplate {
+	case "", layoutAll, this.LayoutFromTemplate, this.LayoutFromUser:
+		return true
+	}
+	return false
 }
 
 func (d TemplateDescriptor) IsZero() bool {

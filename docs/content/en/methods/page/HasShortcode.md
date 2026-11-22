@@ -9,11 +9,9 @@ params:
     signatures: [PAGE.HasShortcode NAME]
 ---
 
-By example, let's use [Plotly] to render a chart:
+By example, let's use [Plotly][] to render a chart:
 
-[Plotly]: https://plotly.com/javascript/
-
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 {{</* plotly */>}}
 {
   "data": [
@@ -37,14 +35,14 @@ The shortcode is simple:
 </script>
 ```
 
-Now we can selectively load the required JavaScript on pages that call the "plotly" shortcode:
+Now we can selectively load the required JavaScript on pages that call the `plotly` shortcode:
 
 ```go-html-template {file="layouts/baseof.html"}
 <head>
-  ...
   {{ if .HasShortcode "plotly" }}
     <script src="https://cdn.plot.ly/plotly-2.28.0.min.js"></script>
   {{ end }}
-  ...
 </head>
 ```
+
+[Plotly]: https://plotly.com/javascript/

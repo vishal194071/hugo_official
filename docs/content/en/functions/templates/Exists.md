@@ -8,7 +8,6 @@ params:
     aliases: []
     returnType: bool
     signatures: [templates.Exists PATH]
-aliases: [/functions/templates.exists]
 ---
 
 A template file is any file within the `layouts` directory of either the project or any of its theme components.
@@ -24,4 +23,4 @@ Use the `templates.Exists` function with dynamic template paths:
 {{ end }}
 ```
 
-In the example above, if a "headers" partial does not exist for the given content type, Hugo falls back to a default template.
+In the example above, if a "headers" _partial_ template does not exist for the given content type, Hugo falls back to a default template.

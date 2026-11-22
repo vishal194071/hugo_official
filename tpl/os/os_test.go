@@ -26,7 +26,7 @@ import (
 func TestReadFile(t *testing.T) {
 	t.Parallel()
 
-	b := newFileTestBuilder(t).Build()
+	b := newFileTestBuilder(t)
 
 	// helpers.PrintFs(b.H.PathSpec.BaseFs.Work, "", _os.Stdout)
 
@@ -59,25 +59,20 @@ func TestFileExists(t *testing.T) {
 	t.Parallel()
 	c := qt.New(t)
 
-	b := newFileTestBuilder(t).Build()
+	b := newFileTestBuilder(t)
 	ns := os.New(b.H.Deps)
 
 	for _, test := range []struct {
 		filename string
-		expect   any
+		expect   bool
 	}{
 		{filepath.FromSlash("/f/f1.txt"), true},
 		{filepath.FromSlash("f/f1.txt"), true},
 		{filepath.FromSlash("../f2.txt"), false},
 		{"b", false},
-		{"", nil},
+		{"", false},
 	} {
 		result, err := ns.FileExists(test.filename)
-
-		if test.expect == nil {
-			c.Assert(err, qt.Not(qt.IsNil))
-			continue
-		}
 
 		c.Assert(err, qt.IsNil)
 		c.Assert(result, qt.Equals, test.expect)
@@ -86,7 +81,7 @@ func TestFileExists(t *testing.T) {
 
 func TestStat(t *testing.T) {
 	t.Parallel()
-	b := newFileTestBuilder(t).Build()
+	b := newFileTestBuilder(t)
 	ns := os.New(b.H.Deps)
 
 	for _, test := range []struct {
@@ -101,7 +96,8 @@ func TestStat(t *testing.T) {
 		result, err := ns.Stat(test.filename)
 
 		if test.expect == nil {
-			b.Assert(err, qt.Not(qt.IsNil))
+			b.Assert(err, qt.IsNil)
+			b.Assert(result, qt.IsNil)
 			continue
 		}
 
@@ -118,11 +114,7 @@ f1-content
 f2-content
 	`
 
-	return hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			WorkingDir:  "/mywork",
-		},
-	)
+	return hugolib.Test(t, files, hugolib.TestOptWithConfig(func(c *hugolib.IntegrationTestConfig) {
+		c.WorkingDir = "/mywork"
+	}))
 }

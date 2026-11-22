@@ -6,15 +6,13 @@ categories: []
 keywords: []
 ---
 
-{{< new-in 0.122.0 />}}
-
 ## Overview
 
-Mathematical equations and expressions written in [LaTeX] are common in academic and scientific publications. Your browser typically renders this mathematical markup using an open-source JavaScript display engine such as [MathJax] or [KaTeX].
+Mathematical equations and expressions written in [LaTeX][] are common in academic and scientific publications. Your browser typically renders this mathematical markup using an open-source JavaScript display engine such as [MathJax][] or [KaTeX][].
 
-For example, with this LaTeX markup:
+For example, this LaTeX markup:
 
-```text
+```md
 \[
 \begin{aligned}
 KL(\hat{y} || y) &= \sum_{c=1}^{M}\hat{y}_c \log{\frac{\hat{y}_c}{y_c}} \\
@@ -23,7 +21,7 @@ JS(\hat{y} || y) &= \frac{1}{2}(KL(y||\frac{y+\hat{y}}{2}) + KL(\hat{y}||\frac{y
 \]
 ```
 
-The MathJax display engine renders this:
+Is rendered to:
 
 \[
 \begin{aligned}
@@ -36,8 +34,8 @@ Equations and expressions can be displayed inline with other text, or as standal
 
 Whether an equation or expression appears inline, or as a block, depends on the delimiters that surround the mathematical markup. Delimiters are defined in pairs, where each pair consists of an opening and closing delimiter. The opening and closing delimiters may be the same, or different.
 
-> [!note]
-> You can configure Hugo to render mathematical markup on the client side using the MathJax or KaTeX display engine, or you can render the markup with the [`transform.ToMath`] function while building your site.
+> [!NOTE]
+> You can configure Hugo to render mathematical markup on the client side using the MathJax or KaTeX display engine, or you can render the markup with the [`transform.ToMath`][] function while building your project.
 >
 > The first approach is described below.
 
@@ -46,7 +44,7 @@ Whether an equation or expression appears inline, or as a block, depends on the 
 Follow these instructions to include mathematical equations and expressions in your Markdown using LaTeX markup.
 
 Step 1
-: Enable and configure the Goldmark [passthrough extension] in your site configuration. The passthrough extension preserves raw Markdown within delimited snippets of text, including the delimiters themselves.
+: Enable and configure the Goldmark [passthrough extension][] in your project configuration. The passthrough extension preserves raw Markdown within delimited snippets of text, including the delimiters themselves.
 
   {{< code-toggle file=hugo copy=true >}}
   [markup.goldmark.extensions.passthrough]
@@ -60,9 +58,9 @@ Step 1
   math = true
   {{< /code-toggle >}}
 
-  The configuration above enables mathematical rendering on every page unless you set the `math` parameter to `false` in front matter. To enable mathematical rendering as needed, set the `math` parameter to `false` in your site configuration, and set the `math` parameter to `true` in front matter. Use this parameter in your base template as shown in [Step 3](#step-3).
+  The configuration above enables mathematical rendering on every page unless you set the `math` parameter to `false` in front matter. To enable mathematical rendering as needed, set the `math` parameter to `false` in your project configuration, and set the `math` parameter to `true` in front matter. Use this parameter in your _base_ template as shown in [Step 3](#step-3).
 
-  > [!note]
+  > [!NOTE]
   > The configuration above precludes the use of the `$...$` delimiter pair for inline equations. Although you can add this delimiter pair to the configuration and JavaScript, you must double-escape the `$` symbol when used outside of math contexts to avoid unintended formatting.
   >
   > See the [inline delimiters](#inline-delimiters) section for details.
@@ -74,7 +72,7 @@ Step 1
   block = [['\[', '\]'], ['$$', '$$']]
   {{< /code-toggle >}}
 
-  You can define your own opening and closing delimiters, provided they match the delimiters that you set in [Step 2].
+  You can define your own opening and closing delimiters, provided they match the delimiters that you set in [Step 2](#step-2).
 
   {{< code-toggle file=hugo >}}
   [markup.goldmark.extensions.passthrough.delimiters]
@@ -86,7 +84,8 @@ Step 2
 : Create a _partial_ template to load MathJax or KaTeX. The example below loads MathJax, or you can use KaTeX as described in the [engines](#engines) section.
 
   ```go-html-template {file="layouts/_partials/math.html" copy=true}
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+
   <script>
     MathJax = {
       tex: {
@@ -100,25 +99,23 @@ Step 2
   </script>
   ```
 
-  The delimiters above must match the delimiters in your site configuration.
+  The delimiters above must match the delimiters in your project configuration.
 
 Step 3
-: Conditionally call the _partial_ template from the base template.
+: Conditionally call the _partial_ template from the _base_ template.
 
   ```go-html-template {file="layouts/baseof.html"}
   <head>
-    ...
     {{ if .Param "math" }}
       {{ partialCached "math.html" . }}
     {{ end }}
-    ...
   </head>
   ```
 
-  The example above loads the _partial_ template if you have set the `math` parameter in front matter to `true`. If you have not set the `math` parameter in front matter, the conditional statement falls back to the `math` parameter in your site configuration.
+  The example above loads the _partial_ template if you have set the `math` parameter in front matter to `true`. If you have not set the `math` parameter in front matter, the conditional statement falls back to the `math` parameter in your project configuration.
 
 Step 4
-: If you set the `math` parameter to `false` in your site configuration, you must set the `math` parameter to `true` in front matter. For example:
+: If you set the `math` parameter to `false` in your project configuration, you must set the `math` parameter to `true` in front matter. For example:
 
   {{< code-toggle file=content/math-examples.md fm=true >}}
   title = 'Math examples'
@@ -130,7 +127,7 @@ Step 4
 Step 5
 : Include mathematical equations and expressions in Markdown using LaTeX markup.
 
-  ```text {file="content/math-examples.md" copy=true}
+  ```md {file="content/math-examples.md" copy=true}
   This is an inline \(a^*=x-b^*\) equation.
 
   These are block equations:
@@ -160,44 +157,32 @@ The configuration, JavaScript, and examples above use the `\(...\)` delimiter pa
 
 If you add the `$...$` delimiter pair to your configuration and JavaScript, you must double-escape the `$` symbol when used outside of math contexts to avoid unintended formatting. For example:
 
-```text
+```md
 I will give you \\$2 if you can solve $y = x^2$.
 ```
 
-> [!note]
-> If you use the `$...$` delimiter pair for inline equations, and occasionally use the&nbsp;`$`&nbsp;symbol outside of math contexts, you must use MathJax instead of KaTeX to avoid unintended formatting caused by [this KaTeX limitation](https://github.com/KaTeX/KaTeX/issues/437).
+> [!NOTE]
+> If you use the `$...$` delimiter pair for inline equations, and occasionally use the&nbsp;`$`&nbsp;symbol outside of math contexts, you must use MathJax instead of KaTeX to avoid unintended formatting caused by [this KaTeX limitation][].
 
 ## Engines
 
-MathJax and KaTeX are open-source JavaScript display engines. Both engines are fast, but at the time of this writing MathJax v3.2.2 is slightly faster than KaTeX v0.16.11.
+MathJax and KaTeX are open-source JavaScript display engines.
 
-> [!note]
-> If you use the `$...$` delimiter pair for inline equations, and occasionally use the&nbsp;`$`&nbsp;symbol outside of math contexts, you must use MathJax instead of KaTeX to avoid unintended formatting caused by [this KaTeX limitation](https://github.com/KaTeX/KaTeX/issues/437).
+> [!NOTE]
+> If you use the `$...$` delimiter pair for inline equations, and occasionally use the&nbsp;`$`&nbsp;symbol outside of math contexts, you must use MathJax instead of KaTeX to avoid unintended formatting caused by [this KaTeX limitation][].
 >
 >See the [inline delimiters](#inline-delimiters) section for details.
 
-To use KaTeX instead of MathJax, replace the _partial_ template from [Step 2] with this:
+To use KaTeX instead of MathJax, replace the _partial_ template from [Step 2](#step-2) with this:
 
 ```go-html-template {file="layouts/_partials/math.html" copy=true}
-<link
-  rel="stylesheet"
-  href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css"
-  integrity="sha384-zh0CIslj+VczCZtlzBcjt5ppRcsAmDnRem7ESsYwWwg3m/OaJ2l4x7YBZl9Kxxib"
-  crossorigin="anonymous"
->
-<script
-  defer
-  src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"
-  integrity="sha384-Rma6DA2IPUwhNxmrB/7S3Tno0YY7sFu9WSYMCuulLhIqYSGZ2gKCJWIqhBWqMQfh"
-  crossorigin="anonymous">
-</script>
-<script
-  defer
-  src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"
-  integrity="sha384-hCXGrW6PitJEwbkoStFjeJxv+fSOOQKOPbJxSfM6G5sWZjAyWhXiTIIAmQqnlLlh"
-  crossorigin="anonymous"
-  onload="renderMathInElement(document.body);">
-</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.css" integrity="sha384-u1zONI5gPXUx0UKI62c75/zww972y0v2rSK5ZYlVdS6xEuWDeZWUI66v6t1gvlXJ" crossorigin="anonymous">
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.js" integrity="sha384-ykMNcWQhhTUb0YV9SPpPUFURHZ+tWmubkakGBP+OgNK/UXdO2gtzglWx0Rj9hnO3" crossorigin="anonymous"></script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"
+        onload="renderMathInElement(document.body);"></script>
+
 <script>
   document.addEventListener("DOMContentLoaded", function() {
     renderMathInElement(document.body, {
@@ -212,22 +197,24 @@ To use KaTeX instead of MathJax, replace the _partial_ template from [Step 2] wi
 </script>
 ```
 
-The delimiters above must match the delimiters in your site configuration.
+The delimiters above must match the delimiters in your project configuration.
 
 ## Chemistry
 
 Both MathJax and KaTeX provide support for chemical equations. For example:
 
-```text
+```md
 $$C_p[\ce{H2O(l)}] = \pu{75.3 J // mol K}$$
 ```
 
 $$C_p[\ce{H2O(l)}] = \pu{75.3 J // mol K}$$
 
-As shown in [Step 2](#step-2) above, MathJax supports chemical equations without additional configuration. To add chemistry support to KaTeX, enable the mhchem extension as described in the KaTeX [documentation](https://katex.org/docs/libs).
+As shown in [Step 2](#step-2) above, MathJax supports chemical equations without additional configuration. To add chemistry support to KaTeX, enable the mhchem extension as described in the KaTeX [documentation][].
 
-[`transform.ToMath`]: /functions/transform/tomath/
 [KaTeX]: https://katex.org/
 [LaTeX]: https://www.latex-project.org/
 [MathJax]: https://www.mathjax.org/
+[`transform.ToMath`]: /functions/transform/tomath/
+[documentation]: https://katex.org/docs/libs
 [passthrough extension]: /configuration/markup/#passthrough
+[this KaTeX limitation]: https://github.com/KaTeX/KaTeX/issues/437

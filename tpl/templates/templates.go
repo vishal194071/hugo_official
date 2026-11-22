@@ -17,12 +17,16 @@ package templates
 import (
 	"context"
 	"fmt"
+	htmltemplate "html/template"
 	"strconv"
 	"sync/atomic"
+
+	"github.com/gohugoio/hugo/tpl/tplimpl"
 
 	"github.com/gohugoio/hugo/common/hashing"
 	"github.com/gohugoio/hugo/deps"
 	"github.com/gohugoio/hugo/tpl"
+	"github.com/gohugoio/hugo/tpl/partials"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -37,7 +41,8 @@ func New(deps *deps.Deps) *Namespace {
 
 // Namespace provides template functions for the "templates" namespace.
 type Namespace struct {
-	deps *deps.Deps
+	deps       *deps.Deps
+	partialsNs *partials.Namespace
 }
 
 // Exists returns whether the template with the given name exists.
@@ -48,10 +53,17 @@ func (ns *Namespace) Exists(name string) bool {
 }
 
 // Defer defers the execution of a template block.
-func (ns *Namespace) Defer(args ...any) (bool, error) {
+func (ns *Namespace) Defer(ctx context.Context, args ...any) (bool, error) {
 	// Prevent defer from being used in content adapters,
 	// that just doesn't work.
 	ns.deps.Site.CheckReady()
+
+	// Reject use inside a partialCached body: the cached output retains the
+	// deferred placeholder across rebuilds while the executions map is reset,
+	// which used to cause a panic in executeDeferredTemplates. See issue #13492.
+	if tpl.Context.IsInPartialCached.Get(ctx) {
+		return false, fmt.Errorf("templates.Defer cannot be used inside a partialCached partial; use partial instead, or move templates.Defer to the calling template")
+	}
 
 	if len(args) != 0 {
 		return false, fmt.Errorf("Defer does not take any arguments")
@@ -70,6 +82,53 @@ type DeferOpts struct {
 	Data any
 }
 
+// Inner executes the inner content of a partial decorator.
+// Note that there is only one inner block per partial decorator, but inner may be called multiple times with, typically, different data.
+func (ns *Namespace) Inner(ctx context.Context, data any) (any, error) {
+	stack := tpl.Context.PartialDecoratorIDStack.Get(ctx)
+	id, ok := stack.Peek()
+	if !ok {
+		panic("no partial decorator ID on stack")
+	}
+
+	// Signal that inner exists.
+	id.Bool = true
+
+	partialName := fmt.Sprintf("%s%s", tplimpl.PartialDecoratorPrefix, id.Str)
+
+	v, err := ns.partialsNs.Include(ctx, partialName, data)
+
+	return v, err
+}
+
+// For internal use only.
+func (ns *Namespace) _PushPartialDecorator(ctx context.Context, id string) (any, error) {
+	tpl.Context.PartialDecoratorIDStack.Get(ctx).Push(&tpl.StringBool{Str: id, Bool: false})
+	return "", nil
+}
+
+// For internal use only.
+func (ns *Namespace) _PopPartialDecorator(ctx context.Context, id string) any {
+	stack := tpl.Context.PartialDecoratorIDStack.Get(ctx)
+	if stack == nil || stack.Len() == 0 {
+		panic("decorator stack is nil or empty")
+	}
+
+	// The stack is tied to the context, so no data race.
+	top, ok := stack.Pop()
+	if !ok || top.Str != id {
+		panic("partial decorator ID mismatch")
+	}
+	if !top.Bool {
+		// Prevents anything being rendered if inner was not called.
+		// Use template.JS to avoid Go's html/template JS escaper
+		// wrapping an empty string in quotes inside <script> tags.
+		// See https://github.com/gohugoio/hugo/issues/14711
+		return htmltemplate.JS("")
+	}
+	return top.Bool // return whether inner exists in the wrapped partial.
+}
+
 // DoDefer defers the execution of a template block.
 // For internal use only.
 func (ns *Namespace) DoDefer(ctx context.Context, id string, optsv any) string {
@@ -83,7 +142,7 @@ func (ns *Namespace) DoDefer(ctx context.Context, id string, optsv any) string {
 	templateName := id
 	var key string
 	if opts.Key != "" {
-		key = hashing.MD5FromStringHexEncoded(opts.Key)
+		key = hashing.XxHashFromStringHexEncoded(opts.Key)
 	} else {
 		key = strconv.FormatUint(defferedIDCounter.Add(1), 10)
 	}

@@ -1,6 +1,4 @@
-// Copyright 2024 The Hugo Authors. All rights reserved.
-// Some functions in this file (see comments) is based on the Go source code,
-// copyright The Go Authors and  governed by a BSD-style license.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,10 +20,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/htime"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/types"
 )
+
+// IsInterfaceOrPointer returns whether the given kind is an interface or a pointer.
+func IsInterfaceOrPointer(kind reflect.Kind) bool {
+	return kind == reflect.Interface || kind == reflect.Pointer
+}
 
 // TODO(bep) replace the private versions in /tpl with these.
 // IsNumber returns whether the given kind is a number.
@@ -63,6 +66,11 @@ func IsFloat(kind reflect.Kind) bool {
 	}
 }
 
+// IsString returns whether the given kind is a string.
+func IsString(kind reflect.Kind) bool {
+	return kind == reflect.String
+}
+
 // IsTruthful returns whether in represents a truthful value.
 // See IsTruthfulValue
 func IsTruthful(in any) bool {
@@ -84,7 +92,19 @@ func IsSlice(v any) bool {
 	return reflect.ValueOf(v).Kind() == reflect.Slice
 }
 
-var zeroType = reflect.TypeOf((*types.Zeroer)(nil)).Elem()
+var zeroType = reflect.TypeFor[types.Zeroer]()
+
+var isZeroCache sync.Map
+
+func implementsIsZero(tp reflect.Type) bool {
+	v, ok := isZeroCache.Load(tp)
+	if ok {
+		return v.(bool)
+	}
+	implements := tp.Implements(zeroType)
+	isZeroCache.Store(tp, implements)
+	return implements
+}
 
 // IsTruthfulValue returns whether the given value has a meaningful truth value.
 // This is based on template.IsTrue in Go's stdlib, but also considers
@@ -94,14 +114,18 @@ var zeroType = reflect.TypeOf((*types.Zeroer)(nil)).Elem()
 // Based on:
 // https://github.com/golang/go/blob/178a2c42254166cffed1b25fb1d3c7a5727cada6/src/text/template/exec.go#L306
 func IsTruthfulValue(val reflect.Value) (truth bool) {
-	val = indirectInterface(val)
+	val, isNil := Indirect(val)
 
 	if !val.IsValid() {
-		// Something like var x interface{}, never set. It's a form of nil.
+		// Something like: var x any, never set. It's a form of nil.
 		return
 	}
 
-	if val.Type().Implements(zeroType) {
+	if val.Kind() == reflect.Pointer && isNil {
+		return
+	}
+
+	if implementsIsZero(val.Type()) {
 		return !val.Interface().(types.Zeroer).IsZero()
 	}
 
@@ -112,7 +136,7 @@ func IsTruthfulValue(val reflect.Value) (truth bool) {
 		truth = val.Bool()
 	case reflect.Complex64, reflect.Complex128:
 		truth = val.Complex() != 0
-	case reflect.Chan, reflect.Func, reflect.Ptr, reflect.Interface:
+	case reflect.Chan, reflect.Func, reflect.Pointer, reflect.UnsafePointer, reflect.Interface:
 		truth = !val.IsNil()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		truth = val.Int() != 0
@@ -134,10 +158,31 @@ type methodKey struct {
 	name string
 }
 
-var methodCache sync.Map
+var (
+	methodIndexCache sync.Map
+	methodCache      sync.Map
+)
 
-// GetMethodByName is the same as reflect.Value.MethodByName, but it caches the
-// type lookup.
+// GetMethodByNameForType returns the method with the given name for the given type,
+// or a zero Method if no such method exists.
+// It panics if tp is an interface type.
+// It caches the lookup.
+func GetMethodByNameForType(tp reflect.Type, name string) reflect.Method {
+	if tp.Kind() == reflect.Interface {
+		// Func field is nil for interface types.
+		panic("not supported for interface types")
+	}
+	k := methodKey{tp, name}
+	v, found := methodCache.Load(k)
+	if found {
+		return v.(reflect.Method)
+	}
+	m, _ := tp.MethodByName(name)
+	methodCache.Store(k, m)
+	return m
+}
+
+// GetMethodByName is the same as reflect.Value.MethodByName, but it caches the lookup.
 func GetMethodByName(v reflect.Value, name string) reflect.Value {
 	index := GetMethodIndexByName(v.Type(), name)
 
@@ -152,7 +197,7 @@ func GetMethodByName(v reflect.Value, name string) reflect.Value {
 // -1 if no such method exists.
 func GetMethodIndexByName(tp reflect.Type, name string) int {
 	k := methodKey{tp, name}
-	v, found := methodCache.Load(k)
+	v, found := methodIndexCache.Load(k)
 	if found {
 		return v.(int)
 	}
@@ -161,7 +206,7 @@ func GetMethodIndexByName(tp reflect.Type, name string) int {
 	if !ok {
 		index = -1
 	}
-	methodCache.Store(k, index)
+	methodIndexCache.Store(k, index)
 
 	if !ok {
 		return -1
@@ -171,8 +216,8 @@ func GetMethodIndexByName(tp reflect.Type, name string) int {
 }
 
 var (
-	timeType           = reflect.TypeOf((*time.Time)(nil)).Elem()
-	asTimeProviderType = reflect.TypeOf((*htime.AsTimeProvider)(nil)).Elem()
+	timeType           = reflect.TypeFor[time.Time]()
+	asTimeProviderType = reflect.TypeFor[htime.AsTimeProvider]()
 )
 
 // IsTime returns whether tp is a time.Time type or if it can be converted into one
@@ -195,7 +240,7 @@ func IsValid(v reflect.Value) bool {
 	}
 
 	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		return !v.IsNil()
 	}
 
@@ -243,6 +288,7 @@ func ToSliceAny(v any) ([]any, bool) {
 	return nil, false
 }
 
+// CallMethodByName calls the method with the given name on v.
 func CallMethodByName(cxt context.Context, name string, v reflect.Value) []reflect.Value {
 	fn := v.MethodByName(name)
 	var args []reflect.Value
@@ -260,20 +306,56 @@ func CallMethodByName(cxt context.Context, name string, v reflect.Value) []refle
 	return fn.Call(args)
 }
 
-// Based on: https://github.com/golang/go/blob/178a2c42254166cffed1b25fb1d3c7a5727cada6/src/text/template/exec.go#L931
-func indirectInterface(v reflect.Value) reflect.Value {
-	if v.Kind() != reflect.Interface {
-		return v
+// Indirect unwraps interfaces and pointers until it finds a non-interface/pointer value.
+// If a nil is encountered, the second return value is true.
+// If a pointer to a struct is encountered, it is not unwrapped.
+func Indirect(v reflect.Value) (vv reflect.Value, isNil bool) {
+	for ; IsInterfaceOrPointer(v.Kind()); v = v.Elem() {
+		if IsNil(v) {
+			return v, true
+		}
+		if v.Kind() != reflect.Interface {
+			// A pointer.
+			if v.NumMethod() > 0 {
+				break
+			}
+			if v.Elem().Kind() == reflect.Struct {
+				// Avoid unwrapping pointers to structs.
+				break
+			}
+		}
 	}
-	if v.IsNil() {
-		return reflect.Value{}
-	}
-	return v.Elem()
+	return v, false
 }
 
-var contextInterface = reflect.TypeOf((*context.Context)(nil)).Elem()
+// IndirectElem is like Indirect, but if the final value is a pointer, it unwraps it.
+func IndirectElem(v reflect.Value) (vv reflect.Value, isNil bool) {
+	vv, isNil = Indirect(v)
+	if isNil {
+		return vv, isNil
+	}
+	if vv.Kind() == reflect.Pointer {
+		vv = vv.Elem()
+	}
+	return vv, isNil
+}
 
-var isContextCache = maps.NewCache[reflect.Type, bool]()
+// IsNil reports whether v is nil.
+// Based on reflect.Value.IsNil, but also considers invalid values as nil.
+func IsNil(v reflect.Value) bool {
+	if !v.IsValid() {
+		return true
+	}
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return v.IsNil()
+	}
+	return false
+}
+
+var contextInterface = reflect.TypeFor[context.Context]()
+
+var isContextCache = hmaps.NewCache[reflect.Type, bool]()
 
 type k string
 

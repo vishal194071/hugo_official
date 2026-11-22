@@ -25,7 +25,7 @@ func TestThatPageIsAvailableEverywhere(t *testing.T) {
 	t.Parallel()
 
 	filesTemplate := `
--- config.toml --
+-- hugo.toml --
 baseURL = 'http://example.com/'
 disableKinds = ["taxonomy", "term"]
 enableInlineShortcodes = true
@@ -65,29 +65,29 @@ title: "P2_1"
 ---
 {{< foo.inline >}}{{ if page.IsHome }}Shortcode in bundled page OK.{{ else}}Failed.{{ end }}{{< /foo.inline >}}
 -- content/p3.md --
--- layouts/_default/_markup/render-heading.html --
+-- layouts/_markup/render-heading.html --
 {{ if page.IsHome }}
 Heading OK.
 {{ end }}
--- layouts/_default/_markup/render-image.html --
+-- layouts/_markup/render-image.html --
 {{ if page.IsHome }}
 Image OK.
 {{ end }}
--- layouts/_default/_markup/render-link.html --
+-- layouts/_markup/render-link.html --
 {{ if page.IsHome }}
 Link OK.
 {{ end }}
--- layouts/_default/myview.html
+-- layouts/myview.html --
 {{ if page.IsHome }}
 Render OK.
 {{ end }}
--- layouts/_default/_markup/render-codeblock.html --
+-- layouts/_markup/render-codeblock.html --
 {{ if page.IsHome }}
 Codeblock OK.
 {{ end }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single.
--- layouts/index.html --
+-- layouts/home.html --
 {{ if eq page . }}Page OK.{{ end }}
 {{ $r := "{{ if page.IsHome }}ExecuteAsTemplate OK.{{ end }}" | resources.FromString "foo.html" |  resources.ExecuteAsTemplate "foo.html" . }}
 {{ $r.Content }}
@@ -104,13 +104,13 @@ Bundled page: {{ $p2_1.Content }}
 {{ if eq page .Page }}Alias OK.{{ else }}Failed.{{ end }}
 -- layouts/404.html --
 {{ if eq page . }}404 Page OK.{{ else }}Failed.{{ end }}
--- layouts/partials/foo.html --
+-- layouts/_partials/foo.html --
 {{ if page.IsHome }}Partial OK.{{ else }}Failed.{{ end }}
--- layouts/shortcodes/outer.html --
+-- layouts/_shortcodes/outer.html --
 {{ .Inner }}
--- layouts/shortcodes/inner.html --
+-- layouts/_shortcodes/inner.html --
 {{ if page.IsHome }}Shortcode Inner OK.{{ else }}Failed.{{ end }}
--- layouts/shortcodes/shortcode.html --
+-- layouts/_shortcodes/shortcode.html --
 {{ if page.IsHome }}Shortcode {{ .Get 0 }} OK.{{ else }}Failed.{{ end }}
 -- layouts/sitemap.xml --
 {{ if eq page . }}Sitemap OK.{{ else }}Failed.{{ end }}
@@ -121,7 +121,7 @@ Bundled page: {{ $p2_1.Content }}
 
   `
 
-	for _, multilingual := range []bool{false, true} {
+	for _, multilingual := range []bool{true, false} {
 		t.Run(fmt.Sprintf("multilingual-%t", multilingual), func(t *testing.T) {
 			// Fenced code blocks.
 			files := strings.ReplaceAll(filesTemplate, "$$$", "```")
@@ -138,14 +138,11 @@ weight = 2
 				files = strings.ReplaceAll(files, "LANG_CONFIG", "")
 			}
 
-			b := hugolib.NewIntegrationTestBuilder(
-				hugolib.IntegrationTestConfig{
-					T:           t,
-					TxtarString: files,
-				},
-			).Build()
+			for range 1 {
 
-			b.AssertFileContent("public/index.html", `
+				b := hugolib.Test(t, files)
+
+				b.AssertFileContent("public/index.html", `
 Heading OK.
 Image OK.
 Link OK.
@@ -162,15 +159,16 @@ Render OK.
 Shortcode in bundled page OK.
 	`)
 
-			b.AssertFileContent("public/404.html", `404 Page OK.`)
-			b.AssertFileContent("public/robots.txt", `Robots OK.`)
-			b.AssertFileContent("public/homealias/index.html", `Alias OK.`)
-			b.AssertFileContent("public/page/1/index.html", `Alias OK.`)
-			b.AssertFileContent("public/page/2/index.html", `Page OK.`)
-			if multilingual {
-				b.AssertFileContent("public/sitemap.xml", `SitemapIndex OK: sitemapindex`)
-			} else {
-				b.AssertFileContent("public/sitemap.xml", `Sitemap OK.`)
+				b.AssertFileContent("public/404.html", `404 Page OK.`)
+				b.AssertFileContent("public/robots.txt", `Robots OK.`)
+				b.AssertFileContent("public/homealias/index.html", `Alias OK.`)
+				b.AssertFileContent("public/page/1/index.html", `Alias OK.`)
+				b.AssertFileContent("public/page/2/index.html", `Page OK.`)
+				if multilingual {
+					b.AssertFileContent("public/sitemap.xml", `SitemapIndex OK: sitemapindex`)
+				} else {
+					b.AssertFileContent("public/sitemap.xml", `Sitemap OK.`)
+				}
 			}
 		})
 	}
@@ -181,7 +179,7 @@ func TestPageTableOfContentsInShortcode(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = 'http://example.com/'
 disableKinds = ["taxonomy", "term"]
 -- content/p1.md --
@@ -191,9 +189,9 @@ title: "P1"
 {{< toc >}}
 
 # Heading 1
--- layouts/shortcodes/toc.html --
+-- layouts/_shortcodes/toc.html --
 {{ page.TableOfContents }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -208,7 +206,7 @@ func TestFromStringRunning(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableLiveReload = true
--- layouts/index.html --
+-- layouts/home.html --
 {{ with resources.FromString "foo" "{{ seq 3 }}" }}
 {{ with resources.ExecuteAsTemplate "bar" $ . }}
 	{{ .Content | safeHTML }}

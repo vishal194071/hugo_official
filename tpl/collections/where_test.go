@@ -17,13 +17,15 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/htesting"
 )
 
 func TestWhere(t *testing.T) {
@@ -176,35 +178,35 @@ func TestWhere(t *testing.T) {
 				{1: "a", 2: "m"},
 			},
 		},
-		// Case insensitive maps.Params
+		// Case insensitive hmaps.Params
 		// Slice of structs
 		{
-			seq: []TstParams{{params: maps.Params{"i": 0, "color": "indigo"}}, {params: maps.Params{"i": 1, "color": "blue"}}, {params: maps.Params{"i": 2, "color": "green"}}, {params: maps.Params{"i": 3, "color": "blue"}}},
+			seq: []TstParams{{params: hmaps.Params{"i": 0, "color": "indigo"}}, {params: hmaps.Params{"i": 1, "color": "blue"}}, {params: hmaps.Params{"i": 2, "color": "green"}}, {params: hmaps.Params{"i": 3, "color": "blue"}}},
 			key: ".Params.COLOR", match: "blue",
-			expect: []TstParams{{params: maps.Params{"i": 1, "color": "blue"}}, {params: maps.Params{"i": 3, "color": "blue"}}},
+			expect: []TstParams{{params: hmaps.Params{"i": 1, "color": "blue"}}, {params: hmaps.Params{"i": 3, "color": "blue"}}},
 		},
 		{
-			seq: []TstParams{{params: maps.Params{"nested": map[string]any{"color": "indigo"}}}, {params: maps.Params{"nested": map[string]any{"color": "blue"}}}},
+			seq: []TstParams{{params: hmaps.Params{"nested": map[string]any{"color": "indigo"}}}, {params: hmaps.Params{"nested": map[string]any{"color": "blue"}}}},
 			key: ".Params.NEsTED.COLOR", match: "blue",
-			expect: []TstParams{{params: maps.Params{"nested": map[string]any{"color": "blue"}}}},
+			expect: []TstParams{{params: hmaps.Params{"nested": map[string]any{"color": "blue"}}}},
 		},
 		{
-			seq: []TstParams{{params: maps.Params{"i": 0, "color": "indigo"}}, {params: maps.Params{"i": 1, "color": "blue"}}, {params: maps.Params{"i": 2, "color": "green"}}, {params: maps.Params{"i": 3, "color": "blue"}}},
+			seq: []TstParams{{params: hmaps.Params{"i": 0, "color": "indigo"}}, {params: hmaps.Params{"i": 1, "color": "blue"}}, {params: hmaps.Params{"i": 2, "color": "green"}}, {params: hmaps.Params{"i": 3, "color": "blue"}}},
 			key: ".Params", match: "blue",
 			expect: []TstParams{},
 		},
 		// Slice of maps
 		{
-			seq: []maps.Params{
+			seq: []hmaps.Params{
 				{"a": "a1", "b": "b1"}, {"a": "a2", "b": "b2"},
 			},
 			key: "B", match: "b2",
-			expect: []maps.Params{
+			expect: []hmaps.Params{
 				{"a": "a2", "b": "b2"},
 			},
 		},
 		{
-			seq: []maps.Params{
+			seq: []hmaps.Params{
 				{
 					"a": map[string]any{
 						"b": "b1",
@@ -217,7 +219,7 @@ func TestWhere(t *testing.T) {
 				},
 			},
 			key: "A.B", match: "b2",
-			expect: []maps.Params{
+			expect: []hmaps.Params{
 				{
 					"a": map[string]any{
 						"b": "b2",
@@ -622,14 +624,14 @@ func TestWhere(t *testing.T) {
 		},
 		{
 			seq: map[string]any{
-				"foo": []any{maps.Params{"a": 1, "b": 2}},
-				"bar": []any{maps.Params{"a": 3, "b": 4}},
-				"zap": []any{maps.Params{"a": 5, "b": 6}},
+				"foo": []any{hmaps.Params{"a": 1, "b": 2}},
+				"bar": []any{hmaps.Params{"a": 3, "b": 4}},
+				"zap": []any{hmaps.Params{"a": 5, "b": 6}},
 			},
 			key: "B", op: ">", match: 3,
 			expect: map[string]any{
-				"bar": []any{maps.Params{"a": 3, "b": 4}},
-				"zap": []any{maps.Params{"a": 5, "b": 6}},
+				"bar": []any{hmaps.Params{"a": 3, "b": 4}},
+				"zap": []any{hmaps.Params{"a": 5, "b": 6}},
 			},
 		},
 	} {
@@ -690,13 +692,21 @@ func TestCheckCondition(t *testing.T) {
 		isError bool
 	}
 
-	for i, test := range []struct {
+	type testCase struct {
 		value reflect.Value
 		match reflect.Value
 		op    string
 		expect
-	}{
+	}
+
+	tests := []testCase{
 		{reflect.ValueOf(123), reflect.ValueOf(123), "", expect{true, false}},
+		{reflect.ValueOf(uint64(1<<53 + 1)), reflect.ValueOf(uint8(1)), ">", expect{true, false}},
+		{reflect.ValueOf(int64(1<<53 + 1)), reflect.ValueOf(float64(1 << 53)), "", expect{false, false}},
+		{reflect.ValueOf(int64(1<<53 + 1)), reflect.ValueOf(float64(1 << 53)), ">", expect{true, false}},
+		{reflect.ValueOf(int64(1<<53 + 1)), reflect.ValueOf(uint64(1<<53 + 1)), "", expect{true, false}},
+		{reflect.ValueOf(-1), reflect.ValueOf(uint64(math.MaxUint64)), "<", expect{true, false}},
+		{reflect.ValueOf(uint64(math.MaxUint64)), reflect.ValueOf(uint8(1)), ">", expect{true, false}},
 		{reflect.ValueOf("foo"), reflect.ValueOf("foo"), "", expect{true, false}},
 		{
 			reflect.ValueOf(time.Date(2015, time.May, 26, 19, 18, 56, 12345, time.UTC)),
@@ -762,6 +772,19 @@ func TestCheckCondition(t *testing.T) {
 		},
 		{reflect.ValueOf(123), reflect.ValueOf([]int{45, 678}), "not in", expect{true, false}},
 		{reflect.ValueOf(123), reflect.ValueOf([]int{}), "not in", expect{true, false}},
+		// Numbers match across types in "in" and "not in".
+		{reflect.ValueOf(int64(123)), reflect.ValueOf([]int{123}), "in", expect{true, false}},
+		{reflect.ValueOf(uint64(123)), reflect.ValueOf([]int{123}), "in", expect{true, false}},
+		{reflect.ValueOf(123.0), reflect.ValueOf([]int{123}), "in", expect{true, false}},
+		{reflect.ValueOf(123), reflect.ValueOf([]float64{123}), "in", expect{true, false}},
+		{reflect.ValueOf(123), reflect.ValueOf([]any{123.0}), "in", expect{true, false}},
+		{reflect.ValueOf(123.5), reflect.ValueOf([]int{123}), "in", expect{false, false}},
+		{reflect.ValueOf(int64(123)), reflect.ValueOf([]string{"123"}), "in", expect{false, false}},
+		{reflect.ValueOf(int64(123)), reflect.ValueOf([]string{"123"}), "not in", expect{true, false}},
+		{reflect.ValueOf(int64(1<<53 + 1)), reflect.ValueOf([]float64{1 << 53}), "in", expect{false, false}},
+		{reflect.ValueOf(int64(1<<53 + 1)), reflect.ValueOf([]any{float64(1 << 53)}), "not in", expect{true, false}},
+		{reflect.ValueOf(uint64(math.MaxUint64)), reflect.ValueOf([]any{uint64(math.MaxUint64)}), "in", expect{true, false}},
+		{reflect.ValueOf(uint64(math.MaxUint64)), reflect.ValueOf([]any{-1}), "in", expect{false, false}},
 		{reflect.ValueOf("foo"), reflect.ValueOf([]string{"bar", "baz"}), "not in", expect{true, false}},
 		{
 			reflect.ValueOf(time.Date(2015, time.May, 26, 19, 18, 56, 12345, time.UTC)),
@@ -793,7 +816,18 @@ func TestCheckCondition(t *testing.T) {
 		{reflect.ValueOf([]string{"a"}), reflect.ValueOf([]any{"a", "b"}), "intersect", expect{true, false}},
 		{reflect.ValueOf([]any{1, 2}), reflect.ValueOf([]int{1}), "intersect", expect{true, false}},
 		{reflect.ValueOf([]int{1}), reflect.ValueOf([]any{1, 2}), "intersect", expect{true, false}},
-	} {
+	}
+
+	if !htesting.Is32Bit() {
+		big := int64(1<<53 + 1)
+		tests = append(tests, []testCase{
+			{reflect.ValueOf(big), reflect.ValueOf(int(big)), "", expect{true, false}},
+			{reflect.ValueOf(big), reflect.ValueOf(int(big - 1)), ">", expect{true, false}},
+			{reflect.ValueOf(big), reflect.ValueOf([]int{int(big)}), "in", expect{true, false}},
+		}...)
+	}
+
+	for i, test := range tests {
 		result, err := ns.checkCondition(test.value, test.match, test.op)
 		if test.expect.isError {
 			if err == nil {
@@ -886,34 +920,38 @@ func BenchmarkWhereOps(b *testing.B) {
 	}
 
 	b.Run("eq", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			runOps(b, "eq", "bar")
 		}
 	})
 
 	b.Run("ne", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			runOps(b, "ne", "baz")
 		}
 	})
 
 	b.Run("like", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			runOps(b, "like", "^bar")
 		}
 	})
 }
 
-func BenchmarkWhereMap(b *testing.B) {
+func BenchmarkWhereSliceOfStructPointersWithMethod(b *testing.B) {
+	// TstRv2
 	ns := newNs()
-	seq := map[string]string{}
+	seq := []*TstX{}
 
 	for i := range 1000 {
-		seq[fmt.Sprintf("key%d", i)] = "value"
+		seq = append(seq, &TstX{A: "foo", B: "bar"})
+		if i%2 == 0 {
+			seq = append(seq, &TstX{A: "baz", B: "qux"})
+		}
 	}
 
-	for i := 0; i < b.N; i++ {
-		_, err := ns.Where(context.Background(), seq, "key", "eq", "value")
+	for b.Loop() {
+		_, err := ns.Where(context.Background(), seq, "TstRv2", "eq", "bar")
 		if err != nil {
 			b.Fatal(err)
 		}

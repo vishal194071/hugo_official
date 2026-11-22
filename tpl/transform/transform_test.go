@@ -29,9 +29,7 @@ type tstNoStringer struct{}
 
 func TestEmojify(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -39,8 +37,9 @@ func TestEmojify(t *testing.T) {
 		s      any
 		expect any
 	}{
-		{":notamoji:", template.HTML(":notamoji:")},
-		{"I :heart: Hugo", template.HTML("I ❤️ Hugo")},
+		{":notamoji:", ":notamoji:"},
+		{"I :heart: Hugo", "I ❤️ Hugo"},
+		{template.HTML("I :heart: <b>Hugo</b>"), template.HTML("I ❤️ <b>Hugo</b>")},
 		// errors
 		{tstNoStringer{}, false},
 	} {
@@ -59,9 +58,7 @@ func TestEmojify(t *testing.T) {
 
 func TestHighlight(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -104,9 +101,7 @@ func TestCanHighlight(t *testing.T) {
 
 func TestHTMLEscape(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -134,9 +129,7 @@ func TestHTMLEscape(t *testing.T) {
 
 func TestHTMLUnescape(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -164,9 +157,7 @@ func TestHTMLUnescape(t *testing.T) {
 
 func TestMarkdownify(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -194,9 +185,7 @@ func TestMarkdownify(t *testing.T) {
 // Issue #3040
 func TestMarkdownifyBlocksOfText(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -215,14 +204,13 @@ And then some.
 	result, err := ns.Markdownify(context.Background(), text)
 	b.Assert(err, qt.IsNil)
 	b.Assert(result, qt.Equals, template.HTML(
-		"<p>#First</p>\n<p>This is some <em>bold</em> text.</p>\n<h2 id=\"second\">Second</h2>\n<p>This is some more text.</p>\n<p>And then some.</p>\n"))
+		"<p>#First</p>\n<p>This is some <em>bold</em> text.</p>\n<h2 id=\"second\">Second</h2>\n<p>This is some more text.</p>\n<p>And then some.</p>\n",
+	))
 }
 
 func TestPlainify(t *testing.T) {
 	t.Parallel()
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t},
-	).Build()
+	b := hugolib.Test(t, "")
 
 	ns := transform.New(b.H.Deps)
 
@@ -232,6 +220,7 @@ func TestPlainify(t *testing.T) {
 	}{
 		{"<em>Note:</em> blah <b>blah</b>", "Note: blah blah"},
 		{"<div data-action='click->my-controller#doThing'>qwe</div>", "qwe"},
+		{template.HTML("<em>Note:</em> A &amp; B"), template.HTML("Note: A &amp; B")},
 		// errors
 		{tstNoStringer{}, false},
 	} {
@@ -244,6 +233,6 @@ func TestPlainify(t *testing.T) {
 		}
 
 		b.Assert(err, qt.IsNil)
-		b.Assert(result, qt.Equals, template.HTML(test.expect.(string)))
+		b.Assert(result, qt.Equals, test.expect)
 	}
 }

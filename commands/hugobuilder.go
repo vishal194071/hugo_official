@@ -27,13 +27,15 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bep/debounce"
 	"github.com/bep/simplecobra"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstrings"
 	"github.com/gohugoio/hugo/common/htime"
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/common/loggers"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/common/terminal"
 	"github.com/gohugoio/hugo/common/types"
@@ -43,9 +45,11 @@ import (
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/hugolib/filesystems"
 	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/internal/warpc"
 	"github.com/gohugoio/hugo/livereload"
 	"github.com/gohugoio/hugo/resources/page"
 	"github.com/gohugoio/hugo/watcher"
+	"github.com/spf13/afero"
 	"github.com/spf13/fsync"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -54,8 +58,9 @@ import (
 type hugoBuilder struct {
 	r *rootCommand
 
-	confmu sync.Mutex
-	conf   *commonConfig
+	confmu  sync.Mutex
+	confOld *commonConfig
+	conf    *commonConfig
 
 	// May be nil.
 	s *serverCommand
@@ -92,11 +97,51 @@ func (c *hugoBuilder) withConf(fn func(conf *commonConfig)) {
 	fn(c.conf)
 }
 
+func (c *hugoBuilder) withConfOrOldConf(fn func(conf *commonConfig)) {
+	c.confmu.Lock()
+	defer c.confmu.Unlock()
+	if c.conf != nil {
+		fn(c.conf)
+	} else if c.confOld != nil {
+		fn(c.confOld)
+	}
+}
+
+func (c *hugoBuilder) withConfOrOldConfE(fn func(conf *commonConfig) error) error {
+	c.confmu.Lock()
+	defer c.confmu.Unlock()
+	if c.conf != nil {
+		return fn(c.conf)
+	} else if c.confOld != nil {
+		return fn(c.confOld)
+	}
+	return errConfigNotSet
+}
+
 type hugoBuilderErrState struct {
 	mu       sync.Mutex
 	paused   bool
 	builderr error
 	waserr   bool
+
+	// Set when a full rebuild was triggered to recover from a broken WASM instance.
+	recovering bool
+}
+
+// shouldRecover reports whether the result of a rebuild means that we need to
+// recreate the HugoSites object and do a full rebuild, see warpc.ErrBroken.
+// To avoid a rebuild loop when the failure is deterministic, we don't recover
+// if the failing build was itself a recovery rebuild. Any other build result
+// resets this, so we recover again from later, unrelated failures.
+func (e *hugoBuilderErrState) shouldRecover(err error) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !errors.Is(err, warpc.ErrBroken) || e.recovering {
+		e.recovering = false
+		return false
+	}
+	e.recovering = true
+	return true
 }
 
 func (e *hugoBuilderErrState) setPaused(p bool) {
@@ -142,7 +187,7 @@ func (c *hugoBuilder) getDirList() ([]string, error) {
 		return nil, err
 	}
 
-	return helpers.UniqueStringsSorted(h.PathSpec.BaseFs.WatchFilenames()), nil
+	return hstrings.UniqueStringsSorted(h.PathSpec.BaseFs.WatchFilenames()), nil
 }
 
 func (c *hugoBuilder) initCPUProfile() (func(), error) {
@@ -155,6 +200,7 @@ func (c *hugoBuilder) initCPUProfile() (func(), error) {
 		return nil, fmt.Errorf("failed to create CPU profile: %w", err)
 	}
 	if err := pprof.StartCPUProfile(f); err != nil {
+		f.Close()
 		return nil, fmt.Errorf("failed to start CPU profile: %w", err)
 	}
 	return func() {
@@ -170,12 +216,12 @@ func (c *hugoBuilder) initMemProfile() {
 
 	f, err := os.Create(c.r.memprofile)
 	if err != nil {
-		c.r.logger.Errorf("could not create memory profile: ", err)
+		c.r.logger.Errorf("could not create memory profile: %s", err)
 	}
 	defer f.Close()
 	runtime.GC() // get up-to-date statistics
 	if err := pprof.WriteHeapProfile(f); err != nil {
-		c.r.logger.Errorf("could not write memory profile: ", err)
+		c.r.logger.Errorf("could not write memory profile: %s", err)
 	}
 }
 
@@ -342,7 +388,7 @@ func (c *hugoBuilder) newWatcher(pollIntervalStr string, dirList ...string) (*wa
 			case changes := <-c.r.changesFromBuild:
 				unlock, err := h.LockBuild()
 				if err != nil {
-					c.r.logger.Errorln("Failed to acquire a build lock: %s", err)
+					c.r.logger.Errorf("Failed to acquire a build lock: %s", err)
 					return
 				}
 				c.changeDetector.PrepareNew()
@@ -362,7 +408,7 @@ func (c *hugoBuilder) newWatcher(pollIntervalStr string, dirList ...string) (*wa
 			case evs := <-watcher.Events:
 				unlock, err := h.LockBuild()
 				if err != nil {
-					c.r.logger.Errorln("Failed to acquire a build lock: %s", err)
+					c.r.logger.Errorf("Failed to acquire a build lock: %s", err)
 					return
 				}
 				c.handleEvents(watcher, staticSyncer, evs, configSet)
@@ -427,11 +473,7 @@ func (c *hugoBuilder) buildSites(noBuildLock bool) (err error) {
 }
 
 func (c *hugoBuilder) copyStatic() (map[string]uint64, error) {
-	m, err := c.doWithPublishDirs(c.copyStaticTo)
-	if err == nil || herrors.IsNotExist(err) {
-		return m, nil
-	}
-	return m, err
+	return c.doWithPublishDirs(c.copyStaticTo)
 }
 
 func (c *hugoBuilder) copyStaticTo(sourceFs *filesystems.SourceFilesystem) (uint64, error) {
@@ -445,40 +487,93 @@ func (c *hugoBuilder) copyStaticTo(sourceFs *filesystems.SourceFilesystem) (uint
 	fs := &countingStatFs{Fs: sourceFs.Fs}
 
 	syncer := fsync.NewSyncer()
+	var clean config.CleanDestinationDir
 	c.withConf(func(conf *commonConfig) {
 		syncer.NoTimes = conf.configs.Base.NoTimes
 		syncer.NoChmod = conf.configs.Base.NoChmod
 		syncer.ChmodFilter = chmodFilter
 
 		syncer.DestFs = conf.fs.PublishDirStatic
-		// Now that we are using a unionFs for the static directories
-		// We can effectively clean the publishDir on initial sync
-		syncer.Delete = conf.configs.Base.CleanDestinationDir
+		clean = conf.configs.Base.Build.CleanDestinationDir
 	})
 
 	syncer.SrcFs = fs
 
-	if syncer.Delete {
-		infol.Logf("removing all files from destination that don't exist in static dirs")
-
-		syncer.DeleteFilter = func(f fsync.FileInfo) bool {
-			return f.IsDir() && strings.HasPrefix(f.Name(), ".")
-		}
-	}
 	start := time.Now()
 
 	// because we are using a baseFs (to get the union right).
 	// set sync src to root
-	err := syncer.Sync(publishDir, helpers.FilePathSeparator)
-	if err != nil {
+	if _, err := fs.Stat(helpers.FilePathSeparator); err == nil {
+		if err := syncer.Sync(publishDir, helpers.FilePathSeparator); err != nil {
+			return 0, err
+		}
+	} else if !herrors.IsNotExist(err) {
 		return 0, err
 	}
+
+	if clean.Enable {
+		infol.Logf("removing stale files from destination")
+		if err := removeStale(syncer.DestFs, sourceFs.Fs, publishDir, helpers.FilePathSeparator, clean.Keep); err != nil {
+			return 0, err
+		}
+	}
+
 	loggers.TimeTrackf(infol, start, nil, "syncing static files to %s", publishDir)
 
 	// Sync runs Stat 2 times for every source file.
 	numFiles := fs.statCounter / 2
 
-	return numFiles, err
+	return numFiles, nil
+}
+
+// removeStale removes entries in dstDir on dst that keep reports as false and
+// that don't exist in srcDir on src. Unlike fsync's delete pass, it applies
+// keep at every level, so kept files survive inside stale directories.
+// keep gets the slash separated path relative to srcDir's root, e.g. "dir/.gitignore".
+func removeStale(dst, src afero.Fs, dstDir, srcDir string, keep func(path string, isDir bool) bool) error {
+	entries, err := afero.ReadDir(dst, dstDir)
+	if err != nil {
+		if herrors.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		dstPath := filepath.Join(dstDir, entry.Name())
+		srcPath := filepath.Join(srcDir, entry.Name())
+		if keep(strings.TrimPrefix(filepath.ToSlash(srcPath), "/"), entry.IsDir()) {
+			continue
+		}
+		if _, err := src.Stat(srcPath); err == nil {
+			if entry.IsDir() {
+				if err := removeStale(dst, src, dstPath, srcPath, keep); err != nil {
+					return err
+				}
+			}
+			continue
+		} else if !herrors.IsNotExist(err) {
+			return err
+		}
+		if entry.IsDir() {
+			if err := removeStale(dst, src, dstPath, srcPath, keep); err != nil {
+				return err
+			}
+			remaining, err := afero.ReadDir(dst, dstPath)
+			if err != nil {
+				if herrors.IsNotExist(err) {
+					continue
+				}
+				return err
+			}
+			if len(remaining) > 0 {
+				continue
+			}
+		}
+		if err := dst.RemoveAll(dstPath); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *hugoBuilder) doWithPublishDirs(f func(sourceFs *filesystems.SourceFilesystem) (uint64, error)) (map[string]uint64, error) {
@@ -515,6 +610,21 @@ func (c *hugoBuilder) doWithPublishDirs(f func(sourceFs *filesystems.SourceFiles
 	return langCount, nil
 }
 
+func (c *hugoBuilder) progressIntermediate() {
+	terminal.ReportProgress(c.r.StdOut, terminal.ProgressIntermediate, 0, "")
+}
+
+func (c *hugoBuilder) progressHidden() {
+	terminal.ReportProgress(c.r.StdOut, terminal.ProgressHidden, 0, "")
+}
+
+// progressInterrupted reports idle, as recommended for interrupted programs in OSC 7501.
+func (c *hugoBuilder) progressInterrupted() {
+	if terminal.PrintANSIColors(os.Stdout) {
+		c.progressHidden()
+	}
+}
+
 func (c *hugoBuilder) fullBuild(noBuildLock bool) error {
 	var (
 		g         errgroup.Group
@@ -549,7 +659,7 @@ func (c *hugoBuilder) fullBuild(noBuildLock bool) error {
 	// and it does so at the end of copyStatic() call.
 	var cleanDestinationDir bool
 	c.withConf(func(conf *commonConfig) {
-		cleanDestinationDir = conf.configs.Base.CleanDestinationDir
+		cleanDestinationDir = conf.configs.Base.Build.CleanDestinationDir.Enable
 	})
 	if cleanDestinationDir {
 		if err := copyStaticFunc(); err != nil {
@@ -633,6 +743,7 @@ func (c *hugoBuilder) fullRebuild(changeType string) {
 				return
 			}
 			err = c.buildSites(false)
+			c.recoverIfBroken(err)
 			if err != nil {
 				c.r.logger.Errorln(err)
 			} else if c.s != nil && c.s.doLiveReload {
@@ -640,6 +751,18 @@ func (c *hugoBuilder) fullRebuild(changeType string) {
 			}
 		}
 	}()
+}
+
+// recoverIfBroken triggers a full rebuild with a new HugoSites object (and
+// new WASM instances) if a rebuild failed because of a broken WASM instance.
+func (c *hugoBuilder) recoverIfBroken(err error) {
+	if !c.errState.shouldRecover(err) {
+		return
+	}
+	c.r.logger.Warnln("A WebAssembly module crashed or timed out; recreating it and rebuilding.")
+	// This needs to run in its own goroutine, as we may be
+	// holding the full rebuild semaphore.
+	go c.fullRebuild("")
 }
 
 func (c *hugoBuilder) handleBuildErr(err error, msg string) {
@@ -818,7 +941,7 @@ func (c *hugoBuilder) handleEvents(watcher *watcher.Batcher,
 			continue
 		}
 
-		walkAdder := func(path string, f hugofs.FileMetaInfo) error {
+		walkAdder := func(ctx context.Context, path string, f hugofs.FileMetaInfo) error {
 			if f.IsDir() {
 				c.r.logger.Println("adding created directory to watchlist", path)
 				if err := watcher.Add(path); err != nil {
@@ -842,9 +965,11 @@ func (c *hugoBuilder) handleEvents(watcher *watcher.Batcher,
 			})
 		}
 
-		if staticSyncer.isStatic(h, ev.Name) {
+		isStatic := staticSyncer.isStatic(h, ev.Name)
+		if isStatic {
 			staticEvents = append(staticEvents, ev)
-		} else {
+		}
+		if !isStatic || h.BaseFs.Assets.Contains(ev.Name) {
 			dynamicEvents = append(dynamicEvents, ev)
 		}
 	}
@@ -896,7 +1021,8 @@ func (c *hugoBuilder) handleEvents(watcher *watcher.Batcher,
 	if len(dynamicEvents) > 0 {
 		partitionedEvents := partitionDynamicEvents(
 			h.BaseFs.SourceFilesystems,
-			dynamicEvents)
+			dynamicEvents,
+		)
 
 		onePageName := pickOneWriteOrCreatePath(h.Conf.ContentTypes(), partitionedEvents.ContentEvents)
 
@@ -1027,28 +1153,31 @@ func (c *hugoBuilder) hugoTry() *hugolib.HugoSites {
 }
 
 func (c *hugoBuilder) loadConfig(cd *simplecobra.Commandeer, running bool) error {
+	if terminal.PrintANSIColors(os.Stdout) {
+		var shown atomic.Bool
+		defer func() {
+			if shown.Load() {
+				c.progressHidden()
+			}
+		}()
+		// If the configuration takes a while to load, we want to show some progress.
+		// This is typically loading of external modules.
+		d := debounce.New(500 * time.Millisecond)
+		d(func() {
+			shown.Store(true)
+			c.progressIntermediate()
+		})
+		defer d(func() {})
+	}
+
 	cfg := config.New()
 	cfg.Set("renderToMemory", c.r.renderToMemory)
 	watch := c.r.buildWatch || (c.s != nil && c.s.serverWatch)
-	if c.r.environment == "" {
-		// We need to set the environment as early as possible because we need it to load the correct config.
-		// Check if the user has set it in env.
-		if env := os.Getenv("HUGO_ENVIRONMENT"); env != "" {
-			c.r.environment = env
-		} else if env := os.Getenv("HUGO_ENV"); env != "" {
-			c.r.environment = env
-		} else {
-			if c.s != nil {
-				// The server defaults to development.
-				c.r.environment = hugo.EnvironmentDevelopment
-			} else {
-				c.r.environment = hugo.EnvironmentProduction
-			}
-		}
-	}
+	// We need to set the environment as early as possible because we need it to load the correct config.
+	c.r.resolveEnvironment(c.s != nil)
 	cfg.Set("environment", c.r.environment)
 
-	cfg.Set("internal", maps.Params{
+	cfg.Set("internal", hmaps.Params{
 		"running":        running,
 		"watch":          watch,
 		"verbose":        c.r.isVerbose(),
@@ -1060,12 +1189,8 @@ func (c *hugoBuilder) loadConfig(cd *simplecobra.Commandeer, running bool) error
 		return err
 	}
 
-	if len(conf.configs.LoadingInfo.ConfigFiles) == 0 {
-		//lint:ignore ST1005 end user message.
-		return errors.New("Unable to locate config file or config directory. Perhaps you need to create a new site.\nRun `hugo help new` for details.")
-	}
-
 	c.conf = conf
+	c.confOld = conf
 	if c.onConfigLoaded != nil {
 		if err := c.onConfigLoaded(false); err != nil {
 			return err
@@ -1092,6 +1217,7 @@ func (c *hugoBuilder) printChangeDetected(typ string) {
 func (c *hugoBuilder) rebuildSites(events []fsnotify.Event) (err error) {
 	defer func() {
 		c.errState.setBuildErr(err)
+		c.recoverIfBroken(err)
 	}()
 	if err := c.errState.buildErr(); err != nil {
 		ferrs := herrors.UnwrapFileErrorsWithErrorContext(err)
@@ -1111,6 +1237,7 @@ func (c *hugoBuilder) rebuildSites(events []fsnotify.Event) (err error) {
 func (c *hugoBuilder) rebuildSitesForChanges(ids []identity.Identity) (err error) {
 	defer func() {
 		c.errState.setBuildErr(err)
+		c.recoverIfBroken(err)
 	}()
 
 	var h *hugolib.HugoSites
@@ -1129,8 +1256,9 @@ func (c *hugoBuilder) reloadConfig() error {
 	c.r.resetLogs()
 	c.r.configVersionID.Add(1)
 
-	if err := c.withConfE(func(conf *commonConfig) error {
+	if err := c.withConfOrOldConfE(func(conf *commonConfig) error {
 		oldConf := conf
+		c.conf = nil
 		newConf, err := c.r.ConfigFromConfig(configKey{counter: c.r.configVersionID.Load()}, conf)
 		if err != nil {
 			return err

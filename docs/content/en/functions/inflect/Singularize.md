@@ -1,6 +1,6 @@
 ---
 title: inflect.Singularize
-description: Singularizes the given word according to a set of common English singularization rules.
+description: Returns the singular form of the given word according to a set of common English singularization rules.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [singularize]
     returnType: string
     signatures: [inflect.Singularize INPUT]
-aliases: [/functions/singularize]
 ---
 
 ```go-html-template

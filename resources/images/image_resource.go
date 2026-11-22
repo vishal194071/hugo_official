@@ -16,7 +16,7 @@ package images
 import (
 	"image"
 
-	"github.com/gohugoio/hugo/resources/images/exif"
+	"github.com/gohugoio/hugo/resources/images/meta"
 	"github.com/gohugoio/hugo/resources/resource"
 )
 
@@ -32,6 +32,9 @@ type ImageResourceOps interface {
 
 	// Width returns the width of the Image.
 	Width() int
+
+	// FrameCount returns the number of frames in the Image, 1 for still images.
+	FrameCount() int
 
 	// Process applies the given image processing options to the image.
 	Process(spec string) (ImageResource, error)
@@ -59,7 +62,11 @@ type ImageResourceOps interface {
 	Filter(filters ...any) (ImageResource, error)
 
 	// Exif returns an ExifInfo object containing Image metadata.
-	Exif() *exif.ExifInfo
+	// Deprecated: Use Meta() instead.
+	Exif() *meta.ExifInfo
+
+	// Meta returns a MetaInfo object containing Image metadata from all sources (EXIF, IPTC, XMP).
+	Meta() *meta.MetaInfo
 
 	// Colors returns a slice of the most dominant colors in an image
 	// using a simple histogram method.

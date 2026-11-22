@@ -30,9 +30,7 @@ LOOP:
 			return lexFrontMatterJSON
 		case r == '#':
 			return lexFrontMatterOrgMode
-		case r == byteOrderMark:
-			l.emit(TypeIgnore)
-		case !isSpace(r) && !isEndOfLine(r):
+		case !isASCIISpace(r) && !isEndOfLine(r):
 			break LOOP
 		}
 	}

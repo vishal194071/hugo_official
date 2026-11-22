@@ -164,7 +164,7 @@ func (e *escaper) escape(c context, n parse.Node) context {
 	panic("escaping " + n.String() + " is unimplemented")
 }
 
-// var debugAllowActionJSTmpl = godebug.New("jstmpllitinterp")
+var htmlmetacontenturlescape = true
 
 // escapeAction escapes an action template node.
 func (e *escaper) escapeAction(c context, n *parse.ActionNode) context {
@@ -222,6 +222,12 @@ func (e *escaper) escapeAction(c context, n *parse.ActionNode) context {
 			}
 		default:
 			panic(c.urlPart.String())
+		}
+	case stateMetaContent:
+		// Handled below in delim check.
+	case stateMetaContentURL:
+		if htmlmetacontenturlescape {
+			s = append(s, "_html_template_urlfilter")
 		}
 	case stateJS:
 		s = append(s, "_html_template_jsvalescaper")
@@ -509,7 +515,7 @@ func (e *escaper) escapeBranch(c context, n *parse.BranchNode, nodeName string) 
 	if nodeName == "range" {
 		e.rangeContext = &rangeContext{outer: e.rangeContext}
 	}
-	c0 := e.escapeList(c, n.List)
+	c0 := e.escapeList(c.clone(), n.List)
 	if nodeName == "range" {
 		if c0.state != stateError {
 			c0 = joinRange(c0, e.rangeContext)
@@ -540,7 +546,7 @@ func (e *escaper) escapeBranch(c context, n *parse.BranchNode, nodeName string) 
 			return c0
 		}
 	}
-	c1 := e.escapeList(c, n.ElseList)
+	c1 := e.escapeList(c.clone(), n.ElseList)
 	return join(c0, c1, n, nodeName)
 }
 

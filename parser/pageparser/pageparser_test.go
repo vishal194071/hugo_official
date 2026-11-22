@@ -22,6 +22,33 @@ import (
 	"github.com/gohugoio/hugo/parser/metadecoders"
 )
 
+func FuzzParse(f *testing.F) {
+	samples := []string{
+		`{{< foo >}}`,
+		`{{% foo %}}`,
+		`{{< foo >}} {{< bar >}}`,
+		`---
+title: "Front Matters"
+---
+
+This is some summary. This is some summary. This is some summary. This is some summary.
+
+ <!--more-->
+
+ Foo bars.
+		 
+		`,
+	}
+	for _, s := range samples {
+		f.Add([]byte(s))
+	}
+
+	f.Fuzz(func(t *testing.T, b []byte) {
+		cfg := Config{}
+		_, _ = parseBytes(b, cfg, lexIntroSection)
+	})
+}
+
 func BenchmarkParse(b *testing.B) {
 	start := `
 
@@ -40,8 +67,7 @@ This is some summary. This is some summary. This is some summary. This is some s
 	input := []byte(start + strings.Repeat(strings.Repeat("this is text", 30)+"{{< myshortcode >}}This is some inner content.{{< /myshortcode >}}", 10))
 	cfg := Config{}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if _, err := parseBytes(input, cfg, lexIntroSection); err != nil {
 			b.Fatal(err)
 		}
@@ -90,13 +116,13 @@ func BenchmarkHasShortcode(b *testing.B) {
 	withShortcode := strings.Repeat("this is text", 30) + "{{< myshortcode >}}This is some inner content.{{< /myshortcode >}}" + strings.Repeat("this is text", 30)
 	withoutShortcode := strings.Repeat("this is text", 30) + "This is some inner content." + strings.Repeat("this is text", 30)
 	b.Run("Match", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			HasShortcode(withShortcode)
 		}
 	})
 
 	b.Run("NoMatch", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			HasShortcode(withoutShortcode)
 		}
 	})
@@ -111,4 +137,14 @@ func TestSummaryDividerStartingFromMain(t *testing.T) {
 
 	c.Assert(items, qt.HasLen, 4)
 	c.Assert(items[1].Type, qt.Equals, TypeLeadSummaryDivider)
+}
+
+func TestIdeographicAfterSummaryDivider(t *testing.T) {
+	c := qt.New(t)
+
+	input := []byte(`aaa <!--more-->   　bbb`)
+	items, err := collectStringMain(string(input))
+	c.Assert(err, qt.IsNil)
+	c.Assert(items, qt.HasLen, 4)
+	c.Assert(items[2].ValStr(input), qt.Equals, "\u3000bbb")
 }

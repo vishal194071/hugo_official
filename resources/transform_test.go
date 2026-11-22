@@ -216,9 +216,9 @@ func TestTransform(t *testing.T) {
 
 			if i == 0 {
 				// There is currently a hardcoded list of transformations that we
-				// persist to disk (tocss, postcss).
+				// persist to disk (tocss-dart, postcss).
 				transformation = &testTransformation{
-					name: "tocss",
+					name: "tocss-dart",
 					transform: func(ctx *resources.ResourceTransformationCtx) error {
 						in := helpers.ReaderToString(ctx.From)
 						in = strings.Replace(in, "blue", "green", 1)
@@ -234,9 +234,9 @@ func TestTransform(t *testing.T) {
 			} else {
 				// Force read from file cache.
 				transformation = &testTransformation{
-					name: "tocss",
+					name: "tocss-dart",
 					transform: func(ctx *resources.ResourceTransformationCtx) error {
-						return herrors.ErrFeatureNotAvailable
+						return herrors.ErrExecNotFound
 					},
 				}
 			}
@@ -386,15 +386,15 @@ func TestTransform(t *testing.T) {
 		resizedPublished1, err := img.Resize("40x40")
 		c.Assert(err, qt.IsNil)
 		c.Assert(resizedPublished1.Height(), qt.Equals, 40)
-		c.Assert(resizedPublished1.RelPermalink(), qt.Equals, "/gopher.changed_hu_85920388a7ff96fa.png")
-		assertShouldExist(c, spec, "public/gopher.changed_hu_85920388a7ff96fa.png", true)
+		c.Assert(resizedPublished1.RelPermalink(), qt.Equals, "/gopher.changed_hu_dbaf8010a3fe3487.png")
+		assertShouldExist(c, spec, "public/gopher.changed_hu_dbaf8010a3fe3487.png", true)
 
 		// Permalink called.
 		resizedPublished2, err := img.Resize("30x30")
 		c.Assert(err, qt.IsNil)
 		c.Assert(resizedPublished2.Height(), qt.Equals, 30)
-		c.Assert(resizedPublished2.Permalink(), qt.Equals, "https://example.com/gopher.changed_hu_c8d8163c08643a7f.png")
-		assertShouldExist(c, spec, "public/gopher.changed_hu_c8d8163c08643a7f.png", true)
+		c.Assert(resizedPublished2.Permalink(), qt.Equals, "https://example.com/gopher.changed_hu_83657b4754113fc4.png")
+		assertShouldExist(c, spec, "public/gopher.changed_hu_83657b4754113fc4.png", true)
 
 		assertNoDuplicateWrites(c, spec)
 	})

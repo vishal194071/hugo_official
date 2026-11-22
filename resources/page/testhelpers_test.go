@@ -27,8 +27,9 @@ import (
 
 	"github.com/gohugoio/hugo/navigation"
 
-	"github.com/gohugoio/hugo/common/hugo"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstore"
+	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/hugofs"
@@ -59,8 +60,9 @@ func newTestPageWithFile(filename string) *testPage {
 		"en",
 		"UTC",
 		langs.LanguageConfig{
-			LanguageName: "English",
+			Label: "English",
 		},
+		loggers.NewDefault(),
 	)
 	if err != nil {
 		panic(err)
@@ -74,7 +76,7 @@ func newTestPageWithFile(filename string) *testPage {
 		currentSection: &testPage{
 			sectionEntries: []string{"a", "b", "c"},
 		},
-		site: testSite{l: l},
+		site: &testSite{l: l},
 	}
 }
 
@@ -85,7 +87,7 @@ type testPage struct {
 	linkTitle   string
 	lang        string
 	section     string
-	site        testSite
+	site        *testSite
 
 	content string
 
@@ -170,6 +172,14 @@ func (p *testPage) Description() string {
 	return ""
 }
 
+func (p *testPage) RawSummary() string {
+	return ""
+}
+
+func (p *testPage) IsRootParam(key string) bool {
+	return false
+}
+
 func (p *testPage) ContentWithoutSummary(ctx context.Context) (template.HTML, error) {
 	return "", nil
 }
@@ -247,7 +257,7 @@ func (p *testPage) HasShortcode(name string) bool {
 	panic("testpage: not implemented")
 }
 
-func (p *testPage) Hugo() hugo.HugoInfo {
+func (p *testPage) Hugo() HugoInfo {
 	panic("testpage: not implemented")
 }
 
@@ -276,6 +286,10 @@ func (p *testPage) IsMenuCurrent(menuID string, inme *navigation.MenuEntry) bool
 }
 
 func (p *testPage) IsNode() bool {
+	panic("testpage: not implemented")
+}
+
+func (p *testPage) IsBranch() bool {
 	panic("testpage: not implemented")
 }
 
@@ -397,7 +411,7 @@ func (p *testPage) Param(key any) (any, error) {
 	return resource.Param(p, nil, key)
 }
 
-func (p *testPage) Params() maps.Params {
+func (p *testPage) Params() hmaps.Params {
 	return p.params
 }
 
@@ -477,7 +491,7 @@ func (p *testPage) RelRefFrom(argsm map[string]any, source any) (string, error) 
 	return "", nil
 }
 
-func (p *testPage) Render(ctx context.Context, layout ...string) (template.HTML, error) {
+func (p *testPage) Render(ctx context.Context, args ...any) (template.HTML, error) {
 	panic("testpage: not implemented")
 }
 
@@ -493,15 +507,15 @@ func (p *testPage) Resources() resource.Resources {
 	panic("testpage: not implemented")
 }
 
-func (p *testPage) Scratch() *maps.Scratch {
+func (p *testPage) Scratch() *hstore.Scratch {
 	panic("testpage: not implemented")
 }
 
-func (p *testPage) Store() *maps.Scratch {
+func (p *testPage) Store() *hstore.Scratch {
 	panic("testpage: not implemented")
 }
 
-func (p *testPage) RelatedKeywords(cfg related.IndexConfig) ([]related.Keyword, error) {
+func (p *testPage) RelatedKeywords(cfg related.IndexConfig) ([]string, error) {
 	v, err := p.Param(cfg.Name)
 	if err != nil {
 		return nil, err
@@ -527,6 +541,9 @@ func (p *testPage) SectionsPath() string {
 }
 
 func (p *testPage) Site() Site {
+	if p.site == nil {
+		panic(fmt.Sprintf("testpage: site is nil for %q", p.path))
+	}
 	return p.site
 }
 

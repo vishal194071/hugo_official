@@ -11,9 +11,7 @@ When a project _deprecates_ something, they are telling its users:
 1. Use Thing Two instead.
 1. We're going to remove Thing One at some point in the future.
 
-[reasons for deprecation]: https://en.wikipedia.org/wiki/Deprecation
-
-Common [reasons for deprecation]:
+Common [reasons for deprecation][]:
 
 - A feature has been replaced by a more powerful alternative.
 - A feature contains a design flaw.
@@ -34,18 +32,20 @@ The project team will:
 1. Remove the code six or more minor releases after Hugo begins logging ERROR messages and failing the build. At that point, Hugo will throw an error, but the error message will no longer mention the deprecation.
 1. Remove the corresponding documentation two years after the deprecation date.
 
-To see the INFO messages, you must use the `--logLevel` command line flag:
+To see the INFO messages, you must use the `--logLevel` command-line flag:
 
-```text
-hugo --logLevel info
+```sh
+hugo build --logLevel info
 ```
 
 To limit the output to deprecation notices:
 
-```text
-hugo --logLevel info | grep deprecate
+```sh
+hugo build --logLevel info | grep deprecate
 ```
 
 Run the above command every time you upgrade Hugo.
 
 [^1]: For example, v0.1.1 => v0.2.0 is a minor release.
+
+[reasons for deprecation]: https://en.wikipedia.org/wiki/Deprecation

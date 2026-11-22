@@ -1,6 +1,6 @@
 ---
 title: Sitemap
-description: Returns the sitemap settings for the given page as defined in front matter, falling back to the sitemap settings as defined in the site configuration.
+description: Returns the sitemap settings for the given page as defined in front matter, falling back to the sitemap settings as defined in your project configuration.
 categories: []
 keywords: []
 params:
@@ -9,39 +9,36 @@ params:
     signatures: [PAGE.Sitemap]
 ---
 
-Access to the `Sitemap` method on a `Page` object is restricted to [sitemap templates].
+Access to the `Sitemap` method on a `Page` object is restricted to [sitemap templates][].
 
 ## Methods
 
-### ChangeFreq
+Use these methods on the `Sitemap` object.
 
-(`string`) How frequently a page is likely to change. Valid values are `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `never`. With the default value of `""` Hugo will omit this field from the sitemap. See&nbsp;[details](https://www.sitemaps.org/protocol.html#changefreqdef).
+`ChangeFreq`
+: (`string`) How frequently a page is likely to change. Valid values are `always`, `hourly`, `daily`, `weekly`, `monthly`, `yearly`, and `never`. With the default value of `""` Hugo will omit this field from the sitemap. See [details][changefreqdef].
 
-```go-html-template
-{{ .Sitemap.ChangeFreq }}
-```
+  ```go-html-template
+  {{ .Sitemap.ChangeFreq }}
+  ```
 
-### Disable
+`Disable`
+: (`bool`) Whether to disable page inclusion. Default is `false`. Set to `true` in front matter to exclude the page.
 
-{{< new-in 0.125.0 />}}
+  ```go-html-template
+  {{ .Sitemap.Disable }}
+  ```
 
-(`bool`) Whether to disable page inclusion. Default is `false`. Set to `true` in front matter to exclude the page.
+`Priority`
+: (`float`) The priority of a page relative to any other page on the site. Valid values range from 0.0 to 1.0. With the default value of `-1` Hugo will omit this field from the sitemap. See [details][prioritydef].
 
-```go-html-template
-{{ .Sitemap.Disable }}
-```
-
-### Priority
-
-(`float`) The priority of a page relative to any other page on the site. Valid values range from 0.0 to 1.0. With the default value of `-1` Hugo will omit this field from the sitemap. See&nbsp;[details](https://www.sitemaps.org/protocol.html#prioritydef).
-
-```go-html-template
-{{ .Sitemap.Priority }}
-```
+  ```go-html-template
+  {{ .Sitemap.Priority }}
+  ```
 
 ## Example
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 [sitemap]
@@ -78,4 +75,6 @@ And this simplistic sitemap template:
 
 The change frequency will be `hourly` for the news page, and `monthly` for other pages.
 
+[changefreqdef]: https://www.sitemaps.org/protocol.html#changefreqdef
+[prioritydef]: https://www.sitemaps.org/protocol.html#prioritydef
 [sitemap templates]: /templates/sitemap/

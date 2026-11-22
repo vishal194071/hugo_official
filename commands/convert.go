@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/bep/simplecobra"
+	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/hugofs"
@@ -200,6 +202,56 @@ func (c *convertCommand) convertAndSavePage(p page.Page, site *hugolib.Site, tar
 	return nil
 }
 
+func (c *convertCommand) copyContentDirsForOutput(pagesBackedByFile page.Pages) error {
+	contentDirs := make(map[string]bool)
+	for _, p := range pagesBackedByFile {
+		filename := p.File().Filename()
+		contentDir := strings.TrimSuffix(filename, p.File().Path())
+		if contentDir == filename {
+			continue
+		}
+		contentDirs[filepath.Clean(contentDir)] = true
+	}
+
+	var contentDirList []string
+	for contentDir := range contentDirs {
+		contentDirList = append(contentDirList, contentDir)
+	}
+	slices.Sort(contentDirList)
+
+	outputDirAbs, err := filepath.Abs(c.outputDir)
+	if err != nil {
+		return fmt.Errorf("failed to resolve output path %q: %w", c.outputDir, err)
+	}
+
+	for _, contentDir := range contentDirList {
+		outputContentDirAbs := filepath.Join(outputDirAbs, filepath.Base(contentDir))
+
+		skipDirs := make(map[string]bool)
+		relToOutputDir, err := filepath.Rel(contentDir, outputDirAbs)
+		if err == nil && relToOutputDir != ".." && !strings.HasPrefix(relToOutputDir, ".."+string(filepath.Separator)) {
+			skipDirs[filepath.Clean(outputDirAbs)] = true
+		}
+		relToOutputContentDir, err := filepath.Rel(contentDir, outputContentDirAbs)
+		if err == nil && relToOutputContentDir != ".." && !strings.HasPrefix(relToOutputContentDir, ".."+string(filepath.Separator)) {
+			skipDirs[filepath.Clean(outputContentDirAbs)] = true
+		}
+
+		var shouldCopy func(filename string) bool
+		if len(skipDirs) > 0 {
+			shouldCopy = func(filename string) bool {
+				return !skipDirs[filepath.Clean(filename)]
+			}
+		}
+
+		if err := hugio.CopyDir(hugofs.Os, contentDir, outputContentDirAbs, shouldCopy); err != nil {
+			return fmt.Errorf("failed to copy %q to %q: %w", contentDir, outputContentDirAbs, err)
+		}
+	}
+
+	return nil
+}
+
 func (c *convertCommand) convertContents(format metadecoders.Format) error {
 	if c.outputDir == "" && !c.unsafe {
 		return newUserError("Unsafe operation not allowed, use --unsafe or set a different output path")
@@ -211,16 +263,50 @@ func (c *convertCommand) convertContents(format metadecoders.Format) error {
 
 	site := c.h.Sites[0]
 
-	var pagesBackedByFile page.Pages
-	for _, p := range site.AllPages() {
+	workingDir := c.h.Sites[0].Deps.Conf.WorkingDir() + string(filepath.Separator)
+
+	isConvertible := func(p page.Page) bool {
+		// Skip pages not backed by a content file.
 		if p.File() == nil {
+			return false
+		}
+		// Skip content adapters.
+		if p.File().IsContentAdapter() {
+			return false
+		}
+		// Skip content files provided by modules, including vendored modules.
+		if !p.File().FileInfo().Meta().IsProject {
+			return false
+		}
+		// Skip content files in project mounts outside the working directory.
+		if !strings.HasPrefix(p.File().Filename(), workingDir) {
+			return false
+		}
+		return true
+	}
+
+	seen := make(map[string]bool)
+	var pagesBackedByFile page.Pages
+	for _, p := range c.h.Pages() {
+		if !isConvertible(p) {
 			continue
 		}
+		filename := p.File().Filename()
+		if seen[filename] {
+			continue
+		}
+		seen[filename] = true
 		pagesBackedByFile = append(pagesBackedByFile, p)
 	}
 
+	if c.outputDir != "" {
+		if err := c.copyContentDirsForOutput(pagesBackedByFile); err != nil {
+			return err
+		}
+	}
+
 	site.Log.Println("processing", len(pagesBackedByFile), "content files")
-	for _, p := range site.AllPages() {
+	for _, p := range pagesBackedByFile {
 		if err := c.convertAndSavePage(p, site, format); err != nil {
 			return err
 		}

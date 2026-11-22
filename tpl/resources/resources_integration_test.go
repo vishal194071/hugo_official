@@ -14,23 +14,23 @@
 package resources_test
 
 import (
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/hugolib"
 	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/dartsass"
-	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/scss"
 )
 
 func TestCopy(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = "http://example.com/blog"
 -- assets/images/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/index.html --
+-- layouts/home.html --
 {{/* Image resources */}}
 {{ $img := resources.Get "images/pixel.png" }}
 {{ $imgCopy1 := $img | resources.Copy "images/copy.png"  }}
@@ -60,14 +60,13 @@ Copy3: {{ $copy3.RelPermalink}}|{{ $copy3.MediaType }}|{{ $copy3.Content | safeJ
 
 	b.AssertFileContent("public/index.html", `
 Image Orig:  /blog/images/pixel.png|image/png|1|1|
-Image Copy1:  /blog/images/copy_hu_1d9addfff177f388.png|image/png|3|4|
-Image Copy2:  /blog/images/copy2.png|image/png|3|4
+Image Copy1:  /blog/images/copy_hu_e592d810de530dee.png|image/png|3|4|
+Image Copy2:  /blog/images/copy2.png|image/png|3|4|
 Image Copy3:  image/png|3|4|
 Orig: /blog/js/foo.js|text/javascript|let foo;|
 Copy1: /blog/js/copies/bar.js|text/javascript|let foo;|
 Copy2: /blog/js/copies/baz.a677329fc6c4ad947e0c7116d91f37a2.js|text/javascript|let foo;|
 Copy3: /blog/js/copies/moo.a677329fc6c4ad947e0c7116d91f37a2.min.js|text/javascript|let foo|
-
 		`)
 
 	b.AssertFileExists("public/images/copy2.png", true)
@@ -79,18 +78,14 @@ func TestCopyPageShouldFail(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
--- layouts/index.html --
+-- hugo.toml --
+-- layouts/home.html --
 {{/* This is currently not supported. */}}
 {{ $copy := .Copy "copy.md" }}
 
 	`
 
-	b, err := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		}).BuildE()
+	b, err := hugolib.TestE(t, files)
 
 	b.Assert(err, qt.IsNotNil)
 }
@@ -99,11 +94,11 @@ func TestGet(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = "http://example.com/blog"
 -- assets/images/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/index.html --
+-- layouts/home.html --
 {{ with resources.Get "images/pixel.png" }}Image OK{{ else }}Image not found{{ end }}
 {{ with resources.Get "" }}Failed{{ else }}Empty string not found{{ end }}
 
@@ -123,11 +118,11 @@ func TestResourcesGettersShouldNotNormalizePermalinks(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = "http://example.com/"
 -- assets/401K Prospectus.txt --
 Prospectus.
--- layouts/index.html --
+-- layouts/home.html --
 {{ $name := "401K Prospectus.txt" }}
 Get: {{ with resources.Get $name }}{{ .RelPermalink }}|{{ .Permalink }}|{{ end }}
 GetMatch: {{ with resources.GetMatch $name }}{{ .RelPermalink }}|{{ .Permalink }}|{{ end }}
@@ -156,7 +151,7 @@ disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 I am a.txt
 -- assets/b.txt --
 I am b.txt
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ with resources.ByType "text" }}
   {{ with .Get "a.txt" }}
@@ -188,7 +183,7 @@ I am b.txt
 I am c.txt
 -- assets/files/C.txt --
 I am C.txt
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 {{ with resources.ByType "text" }}
   {{ with .Get "files/a.txt" }}
@@ -245,40 +240,95 @@ match /files/C*: 2|
 func TestDartSassVars(t *testing.T) {
 	t.Parallel()
 
-	if !scss.Supports() || !dartsass.Supports() {
+	if !dartsass.Supports() {
 		t.Skip()
 	}
 
 	files := `
 -- hugo.toml --
 disableKinds = ['page','section','rss','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $opts := dict "transpiler" "dartsass" "outputStyle" "compressed" "vars" (dict "color" "red") }}
 {{ with resources.Get "dartsass.scss" | css.Sass $opts }}
   {{ .Content }}
 {{ end }}
 
-{{ $opts := dict "transpiler" "libsass" "outputStyle" "compressed" "vars" (dict "color" "blue") }}
-{{ with resources.Get "libsass.scss" | css.Sass $opts }}
-  {{ .Content }}
-{{ end }}
 -- assets/dartsass.scss --
 @use "hugo:vars" as v;
 .dartsass {
   color: v.$color;
 }
--- assets/libsass.scss --
-@import "hugo:vars";
-.libsass {
-  color: $color;
-}
 `
 
 	b := hugolib.Test(t, files, hugolib.TestOptWarn())
 
-	b.AssertFileContent("public/index.html",
+	b.AssertFileContent(
+		"public/index.html",
 		".dartsass{color:red}",
-		".libsass{color:blue}",
 	)
 	b.AssertLogContains("! WARN  Dart Sass: hugo:vars")
+}
+
+// See issue 15208.
+func TestPublish(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ["taxonomy", "term", "section", "RSS", "sitemap", "robotsTXT", "404"]
+-- assets/js/main.js --
+let foo;
+-- layouts/home.html --
+{{ $r := resources.Get "js/main.js" | minify | resources.Publish }}
+Name: {{ $r.Name }}|
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "Name: /js/main.js|")
+	b.AssertFileExists("public/js/main.min.js", true)
+}
+
+// See issue 15546.
+func TestConcatSliceOfAny(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','taxonomy','term','sitemap']
+-- assets/a.js --
+let a;
+-- assets/b.js --
+let b;
+-- layouts/home.html --
+{{ $sr := collections.Apply (slice "a.js" "b.js") "resources.Get" "." }}
+{{ $r := resources.Concat "bundle.js" $sr }}
+{{ $r.RelPermalink }}|{{ $r.Content }}|
+`
+
+	b := hugolib.Test(t, files)
+	b.AssertFileContent("public/index.html", "/bundle.js|let a;\nlet b;|")
+
+	files = strings.Replace(files, `$r := resources.Concat "bundle.js" $sr`, `$r := resources.Concat "bundle.js" ($sr | append 42)`, 1)
+	b, err := hugolib.TestE(t, files)
+	b.Assert(err, qt.ErrorMatches, `(?s).*expected slice of Resource objects, received int in slice at index 2.*`)
+}
+
+// See issue 15086.
+func TestPostProcessDeprecated(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ["taxonomy", "term", "section", "RSS", "sitemap", "robotsTXT", "404"]
+-- assets/css/main.css --
+body { color: red; }
+-- layouts/home.html --
+{{ $r := resources.Get "css/main.css" | minify | resources.PostProcess }}
+{{ $r.RelPermalink }}
+`
+
+	b := hugolib.Test(t, files, hugolib.TestOptInfo())
+
+	b.AssertLogContains("resources.PostProcess was deprecated in Hugo v0.164.0")
 }

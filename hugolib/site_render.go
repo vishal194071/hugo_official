@@ -21,7 +21,8 @@ import (
 	"sync"
 
 	"github.com/bep/logg"
-	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/go-radix"
+	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/hugolib/doctree"
 	"github.com/gohugoio/hugo/tpl/tplimpl"
 
@@ -85,20 +86,19 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 
 	cfg := ctx.cfg
 
-	w := &doctree.NodeShiftTreeWalker[contentNodeI]{
+	w := &doctree.NodeShiftTreeWalker[contentNode]{
 		Tree: s.pageMap.treePages,
-		Handle: func(key string, n contentNodeI, match doctree.DimensionFlag) (bool, error) {
+		Handle: func(key string, n contentNode) (radix.WalkFlag, error) {
 			if p, ok := n.(*pageState); ok {
 				if cfg.shouldRender(ctx.infol, p) {
 					select {
 					case <-s.h.Done():
-						return true, nil
-					default:
-						pages <- p
+						return radix.WalkStop, nil
+					case pages <- p:
 					}
 				}
 			}
-			return false, nil
+			return radix.WalkContinue, nil
 		},
 	}
 
@@ -114,7 +114,7 @@ func (s *Site) renderPages(ctx *siteRenderContext) error {
 
 	err := <-errs
 	if err != nil {
-		return fmt.Errorf("failed to render pages: %w", herrors.ImproveRenderErr(err))
+		return fmt.Errorf("%v failed to render pages: %w", s.resolveDimensionNames(), err)
 	}
 	return nil
 }
@@ -128,15 +128,42 @@ func pageRenderer(
 ) {
 	defer wg.Done()
 
+	sendErr := func(err error) bool {
+		select {
+		case results <- err:
+			return true
+		case <-s.h.Done():
+			return false
+		}
+	}
+
 	for p := range pages {
+
 		if p.m.isStandalone() && !ctx.shouldRenderStandalonePage(p.Kind()) {
 			continue
 		}
 
 		if p.m.pageConfig.Build.PublishResources {
 			if err := p.renderResources(); err != nil {
-				s.SendError(p.errorf(err, "failed to render page resources"))
-				continue
+				if sendErr(p.errorf(err, "failed to render resources")) {
+					continue
+				} else {
+					return
+				}
+			}
+		}
+
+		if !s.conf.DisableAliases && !s.h.BuildState.IsRebuild() && p.render {
+			of := p.outputFormat()
+			if of.IsHTML && of.Permalinkable {
+				// Render any aliases for this page.
+				if err := s.renderAliasesForPage(p); err != nil {
+					if sendErr(err) {
+						continue
+					} else {
+						return
+					}
+				}
 			}
 		}
 
@@ -147,8 +174,11 @@ func pageRenderer(
 
 		templ, found, err := p.resolveTemplate()
 		if err != nil {
-			s.SendError(p.errorf(err, "failed to resolve template"))
-			continue
+			if sendErr(p.errorf(err, "failed to resolve template")) {
+				continue
+			} else {
+				return
+			}
 		}
 
 		if !found {
@@ -178,13 +208,31 @@ func pageRenderer(
 			d = s.h.Sites
 		}
 
-		if err := s.renderAndWritePage(&s.PathSpec.ProcessingStats.Pages, "page "+p.Title(), targetPath, p, d, templ); err != nil {
-			results <- err
+		if err := s.renderAndWritePage(&s.PathSpec.ProcessingStats.Pages, targetPath, p, d, templ); err != nil {
+			if sendErr(err) {
+				continue
+			} else {
+				return
+			}
+		}
+
+		if of := p.outputFormat(); p.IsHome() && of.IsHTML && s.isDefault() && (of.Path != "" || of.Name == "html") {
+			if err = s.renderDefaultSiteRedirect(p); err != nil {
+				if sendErr(err) {
+					continue
+				} else {
+					return
+				}
+			}
 		}
 
 		if p.paginator != nil && p.paginator.current != nil {
 			if err := s.renderPaginator(p, templ); err != nil {
-				results <- err
+				if sendErr(err) {
+					continue
+				} else {
+					return
+				}
 			}
 		}
 	}
@@ -256,7 +304,6 @@ func (s *Site) renderPaginator(p *pageState, templ *tplimpl.TemplInfo) error {
 
 		if err := s.renderAndWritePage(
 			&s.PathSpec.ProcessingStats.PaginatorPages,
-			p.Title(),
 			targetPaths.TargetFilename, p, p, templ); err != nil {
 			return err
 		}
@@ -266,100 +313,73 @@ func (s *Site) renderPaginator(p *pageState, templ *tplimpl.TemplInfo) error {
 	return nil
 }
 
-// renderAliases renders shell pages that simply have a redirect in the header.
-func (s *Site) renderAliases() error {
-	w := &doctree.NodeShiftTreeWalker[contentNodeI]{
-		Tree: s.pageMap.treePages,
-		Handle: func(key string, n contentNodeI, match doctree.DimensionFlag) (bool, error) {
-			p := n.(*pageState)
-
-			// We cannot alias a page that's not rendered.
-			if p.m.noLink() || p.skipRender() {
-				return false, nil
-			}
-
-			if len(p.Aliases()) == 0 {
-				return false, nil
-			}
-
-			pathSeen := make(map[string]bool)
-			for _, of := range p.OutputFormats() {
-				if !of.Format.IsHTML {
-					continue
-				}
-
-				f := of.Format
-
-				if pathSeen[f.Path] {
-					continue
-				}
-				pathSeen[f.Path] = true
-
-				plink := of.Permalink()
-
-				for _, a := range p.Aliases() {
-					isRelative := !strings.HasPrefix(a, "/")
-
-					if isRelative {
-						// Make alias relative, where "." will be on the
-						// same directory level as the current page.
-						basePath := path.Join(p.targetPaths().SubResourceBaseLink, "..")
-						a = path.Join(basePath, a)
-
-					} else {
-						// Make sure AMP and similar doesn't clash with regular aliases.
-						a = path.Join(f.Path, a)
-					}
-
-					if s.conf.C.IsUglyURLSection(p.Section()) && !strings.HasSuffix(a, ".html") {
-						a += ".html"
-					}
-
-					lang := p.Language().Lang
-
-					if s.h.Configs.IsMultihost && !strings.HasPrefix(a, "/"+lang) {
-						// These need to be in its language root.
-						a = path.Join(lang, a)
-					}
-
-					err := s.writeDestAlias(a, plink, f, p)
-					if err != nil {
-						return true, err
-					}
-				}
-			}
-			return false, nil
-		},
+func (s *Site) renderAliasesForPage(p *pageState) error {
+	po := p.pageOutput
+	f := po.f
+	plink := p.Permalink()
+	for _, a := range p.Aliases() {
+		err := s.writeDestAlias(a, plink, f, p)
+		if err != nil {
+			return err
+		}
 	}
-	return w.Walk(context.TODO())
+	return nil
 }
 
-// renderMainLanguageRedirect creates a redirect to the main language home,
+// renderDefaultSiteRedirect creates a redirect to the default site's home,
 // depending on if it lives in sub folder (e.g. /en) or not.
-func (s *Site) renderMainLanguageRedirect() error {
-	if s.conf.DisableDefaultLanguageRedirect {
-		return nil
-	}
-	if s.h.Conf.IsMultihost() || !(s.h.Conf.DefaultContentLanguageInSubdir() || s.h.Conf.IsMultilingual()) {
-		// No need for a redirect
+// The default site is the site is the combination of defaultContentLanguage,
+// defaultContentVersion and defaultContentRole.
+func (s *Site) renderDefaultSiteRedirect(home *pageState) error {
+	if s.conf.DisableDefaultLanguageRedirect || s.conf.DisableDefaultSiteRedirect {
 		return nil
 	}
 
-	html, found := s.conf.OutputFormats.Config.GetByName("html")
-	if found {
-		mainLang := s.conf.DefaultContentLanguage
-		if s.conf.DefaultContentLanguageInSubdir {
-			mainLangURL := s.PathSpec.AbsURL(mainLang+"/", false)
-			s.Log.Debugf("Write redirect to main language %s: %s", mainLang, mainLangURL)
-			if err := s.publishDestAlias(true, "/", mainLangURL, html, nil); err != nil {
-				return err
-			}
-		} else {
-			mainLangURL := s.PathSpec.AbsURL("", false)
-			s.Log.Debugf("Write redirect to main language %s: %s", mainLang, mainLangURL)
-			if err := s.publishDestAlias(true, mainLang, mainLangURL, html, nil); err != nil {
-				return err
-			}
+	addRedirectInRoot := s.conf.DefaultContentLanguageInSubdir && !s.Conf.IsMultihost()
+	addRedirectInRoot = addRedirectInRoot || s.conf.DefaultContentVersionInSubdir || s.conf.DefaultContentRoleInSubdir
+
+	homeLink := home.pageOutput.targetPaths().Link // This doesn't have any baseURL paths in it.
+
+	of := home.outputFormat()
+	homePermalink := home.Permalink()
+
+	var ps []string
+	if of.Path != "" {
+		if addRedirectInRoot {
+			// For OutputFormats with a path, creating more than one alias will easily create path clashes without much value.
+			ps = []string{paths.AddLeadingAndTrailingSlash(of.Path)}
+		}
+	} else {
+		if addRedirectInRoot {
+			ps = append(ps, "/")
+		}
+
+		if s.Conf.IsMultilingual() && !s.conf.DefaultContentLanguageInSubdir && !s.Conf.IsMultihost() {
+			// Create redirect from e.g. /en => /
+			ps = append(ps, homeLink+s.Lang()+"/")
+		}
+
+		// /guest/v1.0.0/en/
+		//    /,/guest/,/guest/v1.0.0  = /guest/v1.0.0/en/
+		// /guest/v1.0.0/
+		//    /,/guest/ =  /guest/v1.0.0/
+		parts := strings.Split(strings.Trim(homeLink, "/"), "/")
+
+		for i := 0; i < len(parts)-1; i++ {
+			ps = append(ps, paths.AddLeadingAndTrailingSlash(strings.Join(parts[0:i+1], "/")))
+		}
+	}
+
+	if s.h.Configs.IsMultihost {
+		prefix := "/" + s.LanguagePrefix()
+		for i, p := range ps {
+			ps[i] = path.Join(prefix, p)
+		}
+	}
+
+	for _, p := range ps {
+		if err := s.publishDestAlias(true, p, homePermalink, of, home); err != nil {
+			return err
 		}
 	}
 

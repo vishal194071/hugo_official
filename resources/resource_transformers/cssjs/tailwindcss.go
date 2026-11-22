@@ -15,6 +15,7 @@ package cssjs
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"regexp"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/gohugoio/hugo/common/hexec"
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/common/loggers"
+	"github.com/gohugoio/hugo/config/security"
 	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/internal"
 	"github.com/gohugoio/hugo/resources/resource"
@@ -104,14 +106,21 @@ func (t *tailwindcssTransformation) Transform(ctx *resources.ResourceTransformat
 	stderr := io.MultiWriter(infow, &errBuf)
 	cmdArgs = append(cmdArgs, hexec.WithStderr(stderr))
 	cmdArgs = append(cmdArgs, hexec.WithStdout(ctx.To))
+	cmdArgs = append(cmdArgs, hexec.WithDir(workingDir))
 	cmdArgs = append(cmdArgs, hexec.WithEnviron(hugo.GetExecEnviron(workingDir, t.rs.Cfg, t.rs.BaseFs.Assets.Fs)))
 
 	cmd, err := ex.Npx(binaryName, cmdArgs...)
 	if err != nil {
-		if hexec.IsNotFound(err) {
-			// This may be on a CI server etc. Will fall back to pre-built assets.
-			return &herrors.FeatureNotAvailableError{Cause: err}
+		var accessDeniedErr *security.AccessDeniedError
+		if errors.As(err, &accessDeniedErr) {
+			if t.rs.Cfg.IgnoreTailwindCSSSecurityError() {
+				// This construct is here so the Hugo theme checker can build TailwindCSS sites with default security config without errors.
+				// Add some dummy CSS to the output so we can continue the build.
+				ctx.To.Write([]byte(".tailwindcss-security-error-ignored { display: none; }"))
+				return nil
+			}
 		}
+
 		return err
 	}
 
@@ -123,6 +132,7 @@ func (t *tailwindcssTransformation) Transform(ctx *resources.ResourceTransformat
 	src := ctx.From
 
 	imp := newImportResolver(
+		ctx.Ctx,
 		ctx.From,
 		ctx.InPath,
 		options.InlineImports,
@@ -143,10 +153,8 @@ func (t *tailwindcssTransformation) Transform(ctx *resources.ResourceTransformat
 
 	err = cmd.Run()
 	if err != nil {
-		if hexec.IsNotFound(err) {
-			return &herrors.FeatureNotAvailableError{
-				Cause: err,
-			}
+		if herrors.IsExecNotFoundError(err) {
+			return err
 		}
 		s := errBuf.String()
 		if options.InlineImports.DisableInlineImports && strings.Contains(s, "Can't resolve") {

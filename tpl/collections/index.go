@@ -20,7 +20,8 @@ import (
 
 	"github.com/spf13/cast"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hreflect"
 )
 
 // Index returns the result of indexing its first argument by the following
@@ -62,7 +63,7 @@ func (ns *Namespace) doIndex(item any, args ...any) (any, error) {
 		indices = args
 	}
 
-	lowerm, ok := item.(maps.Params)
+	lowerm, ok := item.(hmaps.Params)
 	if ok {
 		return lowerm.GetNested(cast.ToStringSlice(indices)...), nil
 	}
@@ -70,7 +71,7 @@ func (ns *Namespace) doIndex(item any, args ...any) (any, error) {
 	for _, i := range indices {
 		index := reflect.ValueOf(i)
 		var isNil bool
-		if v, isNil = indirect(v); isNil {
+		if v, isNil = hreflect.Indirect(v); isNil {
 			// See issue 10489
 			// This used to be an error.
 			return nil, nil
@@ -137,7 +138,7 @@ func prepareArg(value reflect.Value, argType reflect.Type) (reflect.Value, error
 // Copied from Go stdlib src/text/template/exec.go.
 func canBeNil(typ reflect.Type) bool {
 	switch typ.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
 		return true
 	}
 	return false

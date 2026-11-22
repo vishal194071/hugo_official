@@ -1,16 +1,15 @@
 ---
 title: collections.Append
-description: Appends one or more elements to a slice and returns the resulting slice.
+description: Returns a slice by adding one or more elements, or an entire second slice, to the end of the given slice.
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [append]
-    returnType: any
+    returnType: '[]any'
     signatures:
-      - collections.Append ELEMENT [ELEMENT...] COLLECTION
-      - collections.Append COLLECTION1 COLLECTION2
-aliases: [/functions/append]
+      - collections.Append ELEMENT [ELEMENT...] SLICE
+      - collections.Append SLICE1 SLICE2
 ---
 
 This function appends all elements, excluding the last, to the last element. This allows [pipe](g) constructs as shown below.
@@ -59,6 +58,19 @@ Start with an empty slice:
 
 {{ $s = $s | append (slice "d" "e") }}
 {{ $s }} → [a b c d e]
+```
+
+Appending an empty slice leaves the original slice unchanged, so later appends still work as expected:
+
+```go-html-template
+{{ $s := slice "a" "b" }}
+{{ $s }} → [a b]
+
+{{ $s = $s | append slice }}
+{{ $s }} → [a b]
+
+{{ $s = $s | append (slice "c" "d") }}
+{{ $s }} → [a b c d]
 ```
 
 If you start with a slice of a slice:

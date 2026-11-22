@@ -20,12 +20,14 @@ import (
 	"fmt"
 	"html/template"
 
+	"github.com/gohugoio/hugo/hugolib/roles"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 	"github.com/gohugoio/hugo/markup/converter"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
 
 	"github.com/gohugoio/hugo/config"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hstore"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/compare"
 
@@ -112,7 +114,7 @@ type ContentRenderer interface {
 	// For internal use only.
 	ParseContent(ctx context.Context, content []byte) (converter.ResultParse, bool, error)
 	// For internal use only.
-	RenderContent(ctx context.Context, content []byte, doc any) (converter.ResultRender, bool, error)
+	RenderContent(ctx context.Context, content []byte, sourceInfo, doc any) (converter.ResultRender, bool, error)
 }
 
 // FileProvider provides the source file.
@@ -185,13 +187,15 @@ type PageMetaResource interface {
 	resource.Resource
 }
 
+type PageMetaLanguageResource interface {
+	PageMetaResource
+	resource.LanguageProvider
+}
+
 // PageMetaProvider provides page metadata, typically provided via front matter.
 type PageMetaProvider interface {
 	// The 4 page dates
 	resource.Dated
-
-	// Aliases forms the base for redirects generation.
-	Aliases() []string
 
 	// BundleType returns the bundle type: `leaf`, `branch` or an empty string.
 	BundleType() string
@@ -214,18 +218,18 @@ type PageMetaProvider interface {
 	// The configured layout to use to render this page. Typically set in front matter.
 	Layout() string
 
+	// RawSummary returns the summary as set in front matter, without any processing.
+	RawSummary() string
+
 	// The title used for links.
 	LinkTitle() string
 
-	// IsNode returns whether this is an item of one of the list types in Hugo,
-	// i.e. not a regular content
-	IsNode() bool
+	// IsBranch returns whether this is a branch node, i.e. a node that
+	// can have descendants (home, section, taxonomy or term).
+	IsBranch() bool
 
 	// IsPage returns whether this is a regular content
 	IsPage() bool
-
-	// Param looks for a param in Page and then in Site config.
-	Param(key any) (any, error)
 
 	// Path gets the relative path, including file name and extension if relevant,
 	// to the source of this Page. It will be relative to any content root.
@@ -233,9 +237,6 @@ type PageMetaProvider interface {
 
 	// The slug, typically defined in front matter.
 	Slug() string
-
-	// This page's language code. Will be the same as the site's.
-	Lang() string
 
 	// IsSection returns whether this is a section
 	IsSection() bool
@@ -254,13 +255,22 @@ type PageMetaProvider interface {
 	// The configured weight, used as the first sort value in the default
 	// page sort if non-zero.
 	Weight() int
+
+	DeprecatedPageMetaProvider
+}
+
+type DeprecatedPageMetaProvider interface {
+	// IsNode returns whether this is a branch node (e.g. a section).
+	//
+	// Deprecated: Use IsBranch or "not IsPage" instead.
+	IsNode() bool
 }
 
 // NamedPageMetaValue returns a named metadata value from a PageMetaResource.
 // This is currently only used to generate keywords for related content.
 // If nameLower is not one of the metadata interface methods, we
 // look in Params.
-func NamedPageMetaValue(p PageMetaResource, nameLower string) (any, bool, error) {
+func NamedPageMetaValue(p PageMetaLanguageResource, nameLower string) (any, bool, error) {
 	var (
 		v   any
 		err error
@@ -277,8 +287,6 @@ func NamedPageMetaValue(p PageMetaResource, nameLower string) (any, bool, error)
 		v = p.Section()
 	case "lang":
 		v = p.Lang()
-	case "aliases":
-		v = p.Aliases()
 	case "name":
 		v = p.Name()
 	case "keywords":
@@ -322,12 +330,15 @@ func NamedPageMetaValue(p PageMetaResource, nameLower string) (any, bool, error)
 type PageMetaInternalProvider interface {
 	// This is for internal use only.
 	PathInfo() *paths.Path
+
+	RootParamProvider
 }
 
 // PageRenderProvider provides a way for a Page to render content.
 type PageRenderProvider interface {
-	// Render renders the given layout with this Page as context.
-	Render(ctx context.Context, layout ...string) (template.HTML, error)
+	// Render renders the given view (a layout template) with this Page as
+	// the data context, or, if given, the second argument CONTEXT.
+	Render(ctx context.Context, args ...any) (template.HTML, error)
 	// RenderString renders the first value in args with the content renderer defined
 	// for this Page.
 	// It takes an optional map as a second argument:
@@ -344,7 +355,11 @@ type PageWithoutContent interface {
 	RenderShortcodesProvider
 	resource.Resource
 	PageMetaProvider
+
+	Param(key any) (any, error)
+	Aliases() []string
 	PageMetaInternalProvider
+
 	resource.LanguageProvider
 
 	// For pages backed by a file.
@@ -374,6 +389,7 @@ type PageWithoutContent interface {
 	resource.TranslationKeyProvider
 	TranslationsProvider
 
+	SiteProvider
 	SitesProvider
 
 	// Helper methods
@@ -384,9 +400,9 @@ type PageWithoutContent interface {
 	// Note that this Scratch gets reset on server rebuilds. See Store() for a variant that survives.
 	// Scratch returns a "scratch pad" that can be used to store state.
 	// Deprecated: From Hugo v0.138.0 this is just an alias for Store.
-	Scratch() *maps.Scratch
+	Scratch() *hstore.Scratch
 
-	maps.StoreProvider
+	hstore.StoreProvider
 
 	RelatedKeywordsProvider
 
@@ -400,18 +416,16 @@ type PageWithoutContent interface {
 	HeadingsFiltered(context.Context) tableofcontents.Headings
 }
 
+type SiteDimensionProvider interface {
+	Role() roles.Role
+}
+
 // Positioner provides next/prev navigation.
 type Positioner interface {
 	// Next points up to the next regular page (sorted by Hugo’s default sort).
 	Next() Page
 	// Prev points down to the previous regular page (sorted by Hugo’s default sort).
 	Prev() Page
-
-	// Deprecated: Use Prev. Will be removed in Hugo 0.57
-	PrevPage() Page
-
-	// Deprecated: Use Next. Will be removed in Hugo 0.57
-	NextPage() Page
 }
 
 // RawContentProvider provides the raw, unprocessed content of the page.
@@ -444,7 +458,7 @@ type RefProvider interface {
 type RelatedKeywordsProvider interface {
 	// Make it indexable as a related.Document
 	// RelatedKeywords is meant for internal usage only.
-	RelatedKeywords(cfg related.IndexConfig) ([]related.Keyword, error)
+	RelatedKeywords(cfg related.IndexConfig) ([]string, error)
 }
 
 // ShortcodeInfoProvider provides info about the shortcodes in a Page.
@@ -455,12 +469,30 @@ type ShortcodeInfoProvider interface {
 	HasShortcode(name string) bool
 }
 
+type nopHugoSitesProvider struct{}
+
+func (nopHugoSitesProvider) Sites() Sites {
+	return nil
+}
+
+func (nopHugoSitesProvider) Data() map[string]any {
+	return nil
+}
+
 // SitesProvider provide accessors to get sites.
 type SitesProvider interface {
-	// Site returns the current site.
-	Site() Site
-	// Sites returns all sites.
+	// Sites returns all sites for all dimensions.
 	Sites() Sites
+}
+
+// DataProvider provides access to the data directory.
+type DataProvider interface {
+	Data() map[string]any
+}
+
+// SiteProvider provides access to the current site.
+type SiteProvider interface {
+	Site() Site
 }
 
 // TableOfContentsProvider provides the table of contents for a Page.
@@ -529,6 +561,28 @@ type TreeProvider interface {
 
 	// SectionsPath is SectionsEntries joined with a /.
 	SectionsPath() string
+}
+
+// SiteVectorProvider provides the dimensions of a Page.
+type SiteVectorProvider interface {
+	SiteVector() sitesmatrix.Vector
+}
+
+// GetSiteVector returns the site vector for a Page,
+// or the zero value if the Page does not implement SiteVectorProvider.
+func GetSiteVector(p Page) sitesmatrix.Vector {
+	if sp, ok := p.(SiteVectorProvider); ok {
+		return sp.SiteVector()
+	}
+	return sitesmatrix.Vector{}
+}
+
+// LookupSiteVector returns the site vector for a Page and whether it was found.
+func LookupSiteVector(p Page) (sitesmatrix.Vector, bool) {
+	if sp, ok := p.(SiteVectorProvider); ok {
+		return sp.SiteVector(), true
+	}
+	return sitesmatrix.Vector{}, false
 }
 
 // PageWithContext is a Page with a context.Context.

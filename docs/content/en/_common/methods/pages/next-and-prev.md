@@ -6,21 +6,16 @@ Hugo determines the _next_ and _previous_ page by sorting the page collection ac
 
 Field|Precedence|Sort direction
 :--|:--|:--
-[`weight`]|1|descending
-[`date`]|2|descending
-[`linkTitle`]|3|descending
-[`path`]|4|descending
-
-[`date`]: /methods/page/date/
-[`weight`]: /methods/page/weight/
-[`linkTitle`]: /methods/page/linktitle/
-[`path`]: /methods/page/path/
+[`weight`][]|1|descending
+[`date`][]|2|descending
+[`linkTitle`][]|3|descending
+[`path`][]|4|descending
 
 The sorted page collection used to determine the _next_ and _previous_ page is independent of other page collections, which may lead to unexpected behavior.
 
 For example, with this content structure:
 
-```text
+```tree
 content/
 ├── pages/
 │   ├── _index.md
@@ -55,7 +50,7 @@ When you visit page-2:
 - The `Prev` method points to page-3
 - The `Next` method points to page-1
 
-To reverse the meaning of _next_ and _previous_ you can chain the [`Reverse`] method to the page collection definition:
+To reverse the meaning of _next_ and _previous_ you can chain the [`Reverse`][] method to the page collection definition:
 
 ```go-html-template {file="layouts/page.html"}
 {{ $pages := .CurrentSection.Pages.ByWeight.Reverse }}
@@ -69,4 +64,12 @@ To reverse the meaning of _next_ and _previous_ you can chain the [`Reverse`] me
 {{ end }}
 ```
 
+> [!TIP]
+> If you also need the page's position within the collection, use the [`IndexOf`][] method instead. For example, use it to render "post 2 of 3" alongside the previous and next links.
+
+[`IndexOf`]: /methods/pages/indexof/
 [`Reverse`]: /methods/pages/reverse/
+[`date`]: /methods/page/date/
+[`linkTitle`]: /methods/page/linktitle/
+[`path`]: /methods/page/path/
+[`weight`]: /methods/page/weight/

@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/parser"
 	"github.com/gohugoio/hugo/parser/metadecoders"
 
@@ -78,24 +78,24 @@ func TestMerge(t *testing.T) {
 			"params dst",
 			[]any{
 				map[string]any{"a": 42, "c": 3},
-				maps.Params{"a": 1, "b": 2},
+				hmaps.Params{"a": 1, "b": 2},
 			},
-			maps.Params{"a": int(1), "b": int(2), "c": int(3)},
+			hmaps.Params{"a": int(1), "b": int(2), "c": int(3)},
 			false,
 		},
 		{
 			"params dst, upper case src",
 			[]any{
 				map[string]any{"a": 42, "C": 3},
-				maps.Params{"a": 1, "b": 2},
+				hmaps.Params{"a": 1, "b": 2},
 			},
-			maps.Params{"a": int(1), "b": int(2), "c": int(3)},
+			hmaps.Params{"a": int(1), "b": int(2), "c": int(3)},
 			false,
 		},
 		{
 			"params src",
 			[]any{
-				maps.Params{"a": 42, "c": 3},
+				hmaps.Params{"a": 42, "c": 3},
 				map[string]any{"a": 1, "c": 2},
 			},
 			map[string]any{"a": int(1), "c": int(2)},
@@ -104,7 +104,7 @@ func TestMerge(t *testing.T) {
 		{
 			"params src, upper case dst",
 			[]any{
-				maps.Params{"a": 42, "c": 3},
+				hmaps.Params{"a": 42, "c": 3},
 				map[string]any{"a": 1, "C": 2},
 			},
 			map[string]any{"a": int(1), "C": int(2)},
@@ -114,9 +114,9 @@ func TestMerge(t *testing.T) {
 			"nested, params dst",
 			[]any{
 				map[string]any{"a": 42, "c": 3, "b": map[string]any{"d": 55, "e": 66, "f": 3}},
-				maps.Params{"a": 1, "b": maps.Params{"d": 1, "e": 2}},
+				hmaps.Params{"a": 1, "b": hmaps.Params{"d": 1, "e": 2}},
 			},
-			maps.Params{"a": 1, "b": maps.Params{"d": 1, "e": 2, "f": 3}, "c": 3},
+			hmaps.Params{"a": 1, "b": hmaps.Params{"d": 1, "e": 2, "f": 3}, "c": 3},
 			false,
 		},
 		{
@@ -129,6 +129,36 @@ func TestMerge(t *testing.T) {
 			map[string]any{"k": map[string]any{"k2": "v2"}},
 			false,
 		},
+		{
+			// https://github.com/gohugoio/hugo/issues/15499
+			"map of strings",
+			[]any{
+				map[string]string{"a": "1", "b": "2", "c": "5"},
+				map[string]string{"a": "3", "b": "4"},
+			},
+			map[string]string{"a": "3", "b": "4", "c": "5"},
+			false,
+		},
+		{
+			// https://github.com/gohugoio/hugo/issues/15499
+			"nested map of strings",
+			[]any{
+				map[string]any{"x": map[string]string{"a": "1", "b": "2"}},
+				map[string]any{"x": map[string]string{"a": "3"}},
+			},
+			map[string]any{"x": map[string]string{"a": "3", "b": "2"}},
+			false,
+		},
+		{
+			// https://github.com/gohugoio/hugo/issues/15499
+			"map of maps of strings",
+			[]any{
+				map[string]map[string]string{"x": {"a": "1", "b": "2"}},
+				map[string]map[string]string{"x": {"a": "3"}},
+			},
+			map[string]map[string]string{"x": {"a": "3", "b": "2"}},
+			false,
+		},
 		{"src nil", []any{nil, simpleMap}, simpleMap, false},
 		// Error cases.
 		{"dst not a map", []any{nil, "not a map"}, nil, true},
@@ -136,10 +166,6 @@ func TestMerge(t *testing.T) {
 		{"different map types", []any{map[int]any{32: "a"}, simpleMap}, nil, true},
 		{"all nil", []any{nil, nil}, nil, true},
 	} {
-
-		test := test
-		i := i
-
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			errMsg := qt.Commentf("[%d] %v", i, test)
@@ -162,7 +188,7 @@ func TestMerge(t *testing.T) {
 func BenchmarkMerge(b *testing.B) {
 	ns := newNs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		ns.Merge(
 			map[string]any{"a": 42, "c": 3, "e": 11},
 			map[string]any{"a": 1, "b": 2},

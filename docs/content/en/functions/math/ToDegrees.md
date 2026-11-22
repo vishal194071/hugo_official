@@ -1,6 +1,6 @@
 ---
 title: math.ToDegrees
-description: ToDegrees converts radians into degrees.
+description: Returns the given radian value converted to degrees.
 categories: []
 keywords: []
 params:
@@ -9,8 +9,6 @@ params:
     returnType: float64
     signatures: [math.ToDegrees VALUE]
 ---
-
-{{< new-in 0.130.0 />}}
 
 ```go-html-template
 {{ math.ToDegrees 1.5707963267948966 }} → 90

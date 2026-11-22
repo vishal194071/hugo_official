@@ -17,21 +17,12 @@ package herrors
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"regexp"
 	"runtime"
-	"runtime/debug"
 	"strings"
 	"time"
 )
-
-// PrintStackTrace prints the current stacktrace to w.
-func PrintStackTrace(w io.Writer) {
-	buf := make([]byte, 1<<16)
-	runtime.Stack(buf, true)
-	fmt.Fprintf(w, "%s", buf)
-}
 
 // ErrorSender is a, typically, non-blocking error handler.
 type ErrorSender interface {
@@ -45,7 +36,9 @@ type ErrorSender interface {
 func Recover(args ...any) {
 	if r := recover(); r != nil {
 		fmt.Println("ERR:", r)
-		args = append(args, "stacktrace from panic: \n"+string(debug.Stack()), "\n")
+		buf := make([]byte, 64<<10)
+		buf = buf[:runtime.Stack(buf, false)]
+		args = append(args, "stacktrace from panic: \n"+string(buf), "\n")
 		fmt.Println(args...)
 	}
 }
@@ -82,32 +75,29 @@ func (e *errMessage) Unwrap() error {
 	return e.err
 }
 
-// IsFeatureNotAvailableError returns true if the given error is or contains a FeatureNotAvailableError.
-func IsFeatureNotAvailableError(err error) bool {
-	return errors.Is(err, &FeatureNotAvailableError{})
+// IsExecNotFoundError returns true if the given error is or contains an ExecNotFoundError.
+func IsExecNotFoundError(err error) bool {
+	return errors.Is(err, &ExecNotFoundError{})
 }
 
-// ErrFeatureNotAvailable denotes that a feature is unavailable.
-//
-// We will, at least to begin with, make some Hugo features (SCSS with libsass) optional,
-// and this error is used to signal those situations.
-var ErrFeatureNotAvailable = &FeatureNotAvailableError{Cause: errors.New("this feature is not available in your current Hugo version, see https://goo.gl/YMrWcn for more information")}
+// ErrExecNotFound denotes that a required executable was not found.
+var ErrExecNotFound = &ExecNotFoundError{Cause: errors.New("executable not found")}
 
-// FeatureNotAvailableError is an error type used to signal that a feature is not available.
-type FeatureNotAvailableError struct {
+// ExecNotFoundError is an error type used to signal that a required executable was not found.
+type ExecNotFoundError struct {
 	Cause error
 }
 
-func (e *FeatureNotAvailableError) Unwrap() error {
+func (e *ExecNotFoundError) Unwrap() error {
 	return e.Cause
 }
 
-func (e *FeatureNotAvailableError) Error() string {
+func (e *ExecNotFoundError) Error() string {
 	return e.Cause.Error()
 }
 
-func (e *FeatureNotAvailableError) Is(target error) bool {
-	_, ok := target.(*FeatureNotAvailableError)
+func (e *ExecNotFoundError) Is(target error) bool {
+	_, ok := target.(*ExecNotFoundError)
 	return ok
 }
 
@@ -184,4 +174,15 @@ func improveIfNilPointerMsg(inErr error) string {
 	receiver := strings.Join(parts[:len(parts)-1], ".")
 	s := fmt.Sprintf("– %s is nil; wrap it in if or with: {{ with %s }}{{ .%s }}{{ end }}", receiverName, receiver, field)
 	return nilPointerErrRe.ReplaceAllString(inErr.Error(), s)
+}
+
+// Or returns the first non-nil error from the given list of errors.
+// If all errors are nil, it returns nil.
+func Or(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

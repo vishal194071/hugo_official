@@ -1,6 +1,6 @@
 ---
 title: collections.KeyVals
-description: Returns a KeyVals struct.
+description: Returns a KeyVals struct by pairing a given key and values.
 categories: []
 keywords: []
 params:
@@ -8,14 +8,11 @@ params:
     aliases: [keyVals]
     returnType: types.KeyValues
     signatures: [collections.KeyVals KEY VALUE...]
-aliases: [/functions/keyvals]
 ---
 
-The primary application for this function is the definition of the `namedSlices` value in the options map passed to the [`Related`] method on the `Pages` object.
+The primary application for this function is the definition of the `namedSlices` value in the options map passed to the [`Related`][] method on the `Pages` object.
 
-[`Related`]: /methods/pages/related/
-
-See [related content](/content-management/related-content/).
+See [related content][].
 
 ```go-html-template
 {{ $kv := keyVals "foo" "a" "b" "c" }}
@@ -40,3 +37,6 @@ To extract the key and values:
 {{ $kv.Key }} → foo
 {{ $kv.Values }} → [a b c]
 ```
+
+[`Related`]: /methods/pages/related/
+[related content]: /content-management/related-content/

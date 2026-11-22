@@ -1,6 +1,6 @@
 ---
 title: css.TailwindCSS
-description: Processes the given resource with the Tailwind CSS CLI.
+description: Returns a resource created by processing the given resource with the Tailwind CSS CLI.
 categories: []
 keywords: []
 params:
@@ -10,34 +10,34 @@ params:
     signatures: ['css.TailwindCSS [OPTIONS] RESOURCE']
 ---
 
-{{< new-in 0.128.0 />}}
-
 Use the `css.TailwindCSS` function to process your Tailwind CSS files. This function uses the Tailwind CSS CLI to:
 
 1. Scan your templates for Tailwind CSS utility class usage.
 1. Compile those utility classes into standard CSS.
 1. Generate an optimized CSS output file.
 
-> [!note]
-> Use this function with Tailwind CSS v4.0 and later, which require a relatively [modern browser] to render correctly.
-
-[modern browser]: https://tailwindcss.com/docs/compatibility#browser-support
+> [!NOTE]
+> Use this function with Tailwind CSS v4.0 and later, which require a relatively [modern browser][] to render correctly.
 
 ## Setup
 
 Step 1
-: Install the Tailwind CSS CLI v4.0 or later:
+: Install Tailwind CSS v4.0 or later:
 
   ```sh {copy=true}
-  npm install --save-dev tailwindcss @tailwindcss/cli
+  npm install --save-dev tailwindcss @tailwindcss/cli @tailwindcss/typography
   ```
 
-  The Tailwind CSS CLI is also available as a [standalone executable]. You must install it outside of your project directory and ensure its path is included in your system's `PATH` environment variable.
+  <!-- TODO
+  Remove the admonition below somewhere after v0.176.0, 15 minor releases
+  after deprecation.
+  -->
 
-  [standalone executable]: https://github.com/tailwindlabs/tailwindcss/releases/latest
+  > [!NOTE]
+  > As of v0.161.0, Hugo no longer supports the Tailwind [standalone binary][]. You must now install the Tailwind CSS CLI via `npm` as shown above.
 
 Step 2
-: Add this to your site configuration:
+: Add this to your project configuration:
 
   {{< code-toggle file=hugo copy=true >}}
   [build]
@@ -57,6 +57,8 @@ Step 2
       disableWatch = true
       source = 'hugo_stats.json'
       target = 'assets/notwatching/hugo_stats.json'
+  [security.exec]
+    allow = ['^(dart-)?sass$', '^go$', '^git$', '^node$', '^postcss$', '^tailwindcss$']
   {{< /code-toggle >}}
 
 Step 3
@@ -64,6 +66,7 @@ Step 3
 
   ```css {file="assets/css/main.css" copy=true}
   @import "tailwindcss";
+  @plugin "@tailwindcss/typography";
   @source "hugo_stats.json";
   ```
 
@@ -88,29 +91,64 @@ Step 4
   ```
 
 Step 5
-: Call the _partial_ template from your base template, deferring template execution until after all sites and output formats have been rendered:
+: Call the _partial_ template from your _base_ template, deferring template execution until after all sites and output formats have been rendered:
 
   ```go-html-template {file="layouts/baseof.html" copy=true}
   <head>
-    ...
     {{ with (templates.Defer (dict "key" "global")) }}
       {{ partial "css.html" . }}
     {{ end }}
-    ...
   </head>
   ```
 
+## File system access
+
+{{% include "/_common/functions/node-permissions/node-tools.md" %}}
+
 ## Options
 
-minify
-: (`bool`) Whether to optimize and minify the output. Default is `false`.
+The `css.TailwindCSS` function accepts an options map.
 
-optimize
-: (`bool`) Whether to optimize the output without minifying. Default is `false`.
-
-disableInlineImports
+`disableInlineImports`
 : {{< new-in 0.147.4 />}}
 : (`bool`) Whether to disable inlining of `@import` statements. Inlining is performed recursively, but currently once only per file. It is not possible to import the same file in different scopes (root, media query, etc.). Note that this import routine does not care about the CSS specification, so you can have `@import` statements anywhere in the file. Default is `false`.
 
-skipInlineImportsNotFound
+`importContext`
+: {{< new-in 0.165.0 />}}
+: (`resource.ResourceGetter`) A [resource getter](g) to use when resolving `@import` statements. Hugo searches this context first, matching by the path as written in the statement, before falling back to the file system. Has no effect when [`disableInlineImports`](#disableinlineimports) is `true`.
+
+`minify`
+: (`bool`) Whether to optimize and minify the output. Default is `false`.
+
+`optimize`
+: (`bool`) Whether to optimize the output without minifying. Default is `false`.
+
+`skipInlineImportsNotFound`
 : (`bool`) Whether to allow the build process to continue despite unresolved import statements, preserving the original import declarations. It is important to note that the inline importer does not process URL-based imports or those with media queries, and these will remain unaltered even when this option is disabled. Default is `false`.
+
+## Inject CSS variables
+
+The [`css.Build`][] function has a [`vars`][] option that can be used to inject CSS variables into your stylesheets. This is particularly useful for dynamically setting values based on your site's configuration or other data. To use this with Tailwind CSS, you can use `css.Build` as a preprocessor step before passing the result to `css.TailwindCSS`. Here's how you can do it:
+
+```go-html-template
+{{ with resources.Get "css/styles.css" }}
+  {{ $cssOpts := dict
+    "vars" (dict "favourite-color" "#7f93c9")
+    "externals" (slice "tailwindcss")
+  }}
+  {{ $tailwindOpts := dict "disableInlineImports" true }}
+  {{ with . | css.Build $cssOpts | css.TailwindCSS $tailwindOpts }}
+    <link rel="stylesheet" href="{{ .RelPermalink }}">
+  {{ end }}
+{{ end }}
+```
+
+Some notes to the above:
+
+- Marking `tailwindcss` as an external in the `css.Build` options prevents it from being processed by the build step, allowing it to be correctly handled by the Tailwind CSS CLI in the subsequent step.
+- The `disableInlineImports` option is set to `true` for the Tailwind CSS step as imports are handled by the `css.Build`.
+
+[modern browser]: https://tailwindcss.com/docs/compatibility#browser-support
+[standalone binary]: https://github.com/tailwindlabs/tailwindcss/releases/latest
+[`css.Build`]: /functions/css/build/
+[`vars`]: /functions/css/build/#vars

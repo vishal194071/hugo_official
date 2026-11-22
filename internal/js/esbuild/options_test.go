@@ -27,10 +27,8 @@ func TestToBuildOptions(t *testing.T) {
 	c := qt.New(t)
 
 	opts := Options{
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -39,6 +37,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:         api.ESNext,
 		Format:         api.FormatIIFE,
 		Platform:       api.PlatformBrowser,
+		Charset:        api.CharsetASCII,
 		SourcesContent: 1,
 		Stdin: &api.StdinOptions{
 			Loader: api.LoaderJS,
@@ -46,16 +45,12 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Target:   "es2018",
-			Format:   "cjs",
-			Minify:   true,
-			AvoidTDZ: true,
-		},
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		Target:    []string{"es2018"},
+		Format:    "cjs",
+		Minify:    true,
+		AvoidTDZ:  true,
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -64,6 +59,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:            api.ES2018,
 		Format:            api.FormatCommonJS,
 		Platform:          api.PlatformBrowser,
+		Charset:           api.CharsetASCII,
 		SourcesContent:    1,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
@@ -74,14 +70,10 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Target: "es2018", Format: "cjs", Minify: true,
-			SourceMap: "inline",
-		},
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		Target: []string{"es2018"}, Format: "cjs", Minify: true,
+		SourceMap: "inline",
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -90,6 +82,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:            api.ES2018,
 		Format:            api.FormatCommonJS,
 		Platform:          api.PlatformBrowser,
+		Charset:           api.CharsetASCII,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
 		MinifyWhitespace:  true,
@@ -101,14 +94,10 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Target: "es2018", Format: "cjs", Minify: true,
-			SourceMap: "inline",
-		},
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		Target: []string{"es2018"}, Format: "cjs", Minify: true,
+		SourceMap: "inline",
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -117,6 +106,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:            api.ES2018,
 		Format:            api.FormatCommonJS,
 		Platform:          api.PlatformBrowser,
+		Charset:           api.CharsetASCII,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
 		MinifyWhitespace:  true,
@@ -128,14 +118,10 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Target: "es2018", Format: "cjs", Minify: true,
-			SourceMap: "external",
-		},
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		Target: []string{"es2018"}, Format: "cjs", Minify: true,
+		SourceMap: "external",
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -144,6 +130,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:            api.ES2018,
 		Format:            api.FormatCommonJS,
 		Platform:          api.PlatformBrowser,
+		Charset:           api.CharsetASCII,
 		MinifyIdentifiers: true,
 		MinifySyntax:      true,
 		MinifyWhitespace:  true,
@@ -155,13 +142,9 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			JSX: "automatic", JSXImportSource: "preact",
-		},
-		InternalOptions: InternalOptions{
-			MediaType: media.Builtin.JavascriptType,
-			Stdin:     true,
-		},
+		JSX: "automatic", JSXImportSource: "preact",
+		MediaType: media.Builtin.JavascriptType,
+		Stdin:     true,
 	}
 
 	c.Assert(opts.compile(), qt.IsNil)
@@ -170,6 +153,7 @@ func TestToBuildOptions(t *testing.T) {
 		Target:         api.ESNext,
 		Format:         api.FormatIIFE,
 		Platform:       api.PlatformBrowser,
+		Charset:        api.CharsetASCII,
 		SourcesContent: 1,
 		Stdin: &api.StdinOptions{
 			Loader: api.LoaderJS,
@@ -179,24 +163,18 @@ func TestToBuildOptions(t *testing.T) {
 	})
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Drop: "console",
-		},
+		Drop: "console",
 	}
 	c.Assert(opts.compile(), qt.IsNil)
 	c.Assert(opts.compiled.Drop, qt.Equals, api.DropConsole)
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Drop: "debugger",
-		},
+		Drop: "debugger",
 	}
 	c.Assert(opts.compile(), qt.IsNil)
 	c.Assert(opts.compiled.Drop, qt.Equals, api.DropDebugger)
 
 	opts = Options{
-		ExternalOptions: ExternalOptions{
-			Drop: "adsfadsf",
-		},
+		Drop: "adsfadsf",
 	}
 	c.Assert(opts.compile(), qt.ErrorMatches, `unsupported drop type: "adsfadsf"`)
 }
@@ -217,17 +195,15 @@ func TestToBuildOptionsTarget(t *testing.T) {
 		{"es2021", api.ES2021},
 		{"es2022", api.ES2022},
 		{"es2023", api.ES2023},
+		{"es2024", api.ES2024},
+		{"es2025", api.ES2025},
 		{"", api.ESNext},
 		{"esnext", api.ESNext},
 	} {
 		c.Run(test.target, func(c *qt.C) {
 			opts := Options{
-				ExternalOptions: ExternalOptions{
-					Target: test.target,
-				},
-				InternalOptions: InternalOptions{
-					MediaType: media.Builtin.JavascriptType,
-				},
+				Target:    []string{test.target},
+				MediaType: media.Builtin.JavascriptType,
 			}
 
 			c.Assert(opts.compile(), qt.IsNil)
@@ -257,6 +233,17 @@ func TestDecodeExternalOptions(t *testing.T) {
 		Target:         api.ESNext,
 		Format:         api.FormatIIFE,
 		Platform:       api.PlatformNode,
+		Charset:        api.CharsetASCII,
 		SourcesContent: api.SourcesContentInclude,
 	})
+}
+
+func TestDecodeExternalOptionsLegacyTargetString(t *testing.T) {
+	c := qt.New(t)
+	m := map[string]any{
+		"target": "es2018",
+	}
+	ext, err := DecodeExternalOptions(m)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ext.Target, qt.DeepEquals, []string{"es2018"})
 }

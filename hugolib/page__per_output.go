@@ -14,7 +14,6 @@
 package hugolib
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,7 +21,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/text"
 	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/tpl/tplimpl"
@@ -67,7 +66,7 @@ func newPageContentOutput(po *pageOutput) (*pageContentOutput, error) {
 	cp := &pageContentOutput{
 		po:           po,
 		renderHooks:  &renderHooks{},
-		otherOutputs: maps.NewCache[uint64, *pageContentOutput](),
+		otherOutputs: hmaps.NewCache[uint64, *pageContentOutput](),
 	}
 	return cp, nil
 }
@@ -83,7 +82,7 @@ type pageContentOutput struct {
 
 	// Other pages involved in rendering of this page,
 	// typically included with .RenderShortcodes.
-	otherOutputs *maps.Cache[uint64, *pageContentOutput]
+	otherOutputs *hmaps.Cache[uint64, *pageContentOutput]
 
 	contentRenderedVersion uint32      // Incremented on reset.
 	contentRendered        atomic.Bool // Set on content render.
@@ -105,21 +104,34 @@ func (pco *pageContentOutput) Reset() {
 	pco.renderHooks = &renderHooks{}
 }
 
-func (pco *pageContentOutput) Render(ctx context.Context, layout ...string) (template.HTML, error) {
-	if len(layout) == 0 {
-		return "", errors.New("no layout given")
+func (pco *pageContentOutput) Render(ctx context.Context, args ...any) (template.HTML, error) {
+	if len(args) == 0 {
+		return "", errors.New("no view given")
 	}
-	templ, found, err := pco.po.p.resolveTemplate(layout...)
+	if len(args) > 2 {
+		return "", errors.New("too many arguments, expected VIEW [CONTEXT]")
+	}
+	view, err := cast.ToStringE(args[0])
+	if err != nil {
+		return "", fmt.Errorf("failed to convert view argument to string: %w", err)
+	}
+
+	// Make sure to send the *pageState and not the *pageContentOutput to the template.
+	var data any = pco.po.p
+	if len(args) == 2 {
+		data = args[1]
+	}
+
+	templ, found, err := pco.po.p.resolveTemplate(view)
 	if err != nil {
 		return "", pco.po.p.wrapError(err)
 	}
 
 	if !found {
-		return "", nil
+		return "", fmt.Errorf("template %q not found", view)
 	}
 
-	// Make sure to send the *pageState and not the *pageContentOutput to the template.
-	res, err := executeToString(ctx, pco.po.p.s.GetTemplateStore(), templ, pco.po.p)
+	res, err := executeToString(ctx, pco.po.p.s.GetTemplateStore(), templ, data)
 	if err != nil {
 		return "", pco.po.p.wrapError(fmt.Errorf("failed to execute template %s: %w", templ.Name(), err))
 	}
@@ -244,24 +256,25 @@ func (pco *pageContentOutput) initRenderHooks() error {
 		renderCache := make(map[cacheKey]any)
 		var renderCacheMu sync.Mutex
 
-		resolvePosition := func(ctx any) text.Position {
-			source := pco.po.p.m.content.mustSource()
-			var offset int
-
-			switch v := ctx.(type) {
-			case hooks.PositionerSourceTargetProvider:
-				offset = bytes.Index(source, v.PositionerSourceTarget())
+		resolvePosition := func(renderContext any, pos int) text.Position {
+			rc, ok := renderContext.(converter.RenderContext)
+			var si sourceInfo
+			if ok {
+				si, ok = rc.SourceInfo.(sourceInfo)
 			}
 
-			pos := pco.po.p.posFromInput(source, offset)
-
-			if pos.LineNumber > 0 {
-				// Move up to the code fence delimiter.
-				// This is in line with how we report on shortcodes.
-				pos.LineNumber = pos.LineNumber - 1
+			if pos == -1 || !ok {
+				return text.Position{
+					Filename: pco.po.p.pathOrTitle(),
+				}
+			}
+			offset := resolveSourceOffset(si.sourceMap, pos)
+			filename := si.filename
+			if filename == "" {
+				filename = pco.po.p.pathOrTitle()
 			}
 
-			return pos
+			return posFromInput(filename, si.source, offset)
 		}
 
 		pco.renderHooks.getRenderer = func(tp hooks.RendererType, id any) any {
@@ -352,10 +365,12 @@ func (pco *pageContentOutput) initRenderHooks() error {
 					Path:     base,
 					Category: tplimpl.CategoryMarkup,
 					Desc:     layoutDescriptor,
+					Sites:    pco.po.p.s.siteVector,
 					Consider: consider,
 				}
 
 				v := pco.po.p.s.TemplateStore.LookupPagesLayout(q)
+
 				return v, v != nil
 			}
 
@@ -409,7 +424,10 @@ func (cp *pageContentOutput) ParseAndRenderContent(ctx context.Context, content 
 	if err != nil {
 		return nil, err
 	}
-	return cp.renderContentWithConverter(ctx, c, content, renderTOC)
+	si := sourceInfo{
+		source: content,
+	}
+	return cp.renderContentWithConverter(ctx, c, content, si, renderTOC)
 }
 
 func (pco *pageContentOutput) ParseContent(ctx context.Context, content []byte) (converter.ResultParse, bool, error) {
@@ -431,7 +449,7 @@ func (pco *pageContentOutput) ParseContent(ctx context.Context, content []byte) 
 	return r, ok, err
 }
 
-func (pco *pageContentOutput) RenderContent(ctx context.Context, content []byte, doc any) (converter.ResultRender, bool, error) {
+func (pco *pageContentOutput) RenderContent(ctx context.Context, content []byte, sourceInfo, doc any) (converter.ResultRender, bool, error) {
 	c, err := pco.getContentConverter()
 	if err != nil {
 		return nil, false, err
@@ -443,6 +461,7 @@ func (pco *pageContentOutput) RenderContent(ctx context.Context, content []byte,
 	rctx := converter.RenderContext{
 		Ctx:         ctx,
 		Src:         content,
+		SourceInfo:  sourceInfo,
 		RenderTOC:   true,
 		GetRenderer: pco.renderHooks.getRenderer,
 	}
@@ -450,11 +469,12 @@ func (pco *pageContentOutput) RenderContent(ctx context.Context, content []byte,
 	return r, ok, err
 }
 
-func (pco *pageContentOutput) renderContentWithConverter(ctx context.Context, c converter.Converter, content []byte, renderTOC bool) (converter.ResultRender, error) {
+func (pco *pageContentOutput) renderContentWithConverter(ctx context.Context, c converter.Converter, content []byte, sourceInfo any, renderTOC bool) (converter.ResultRender, error) {
 	r, err := c.Convert(
 		converter.RenderContext{
 			Ctx:         ctx,
 			Src:         content,
+			SourceInfo:  sourceInfo,
 			RenderTOC:   renderTOC,
 			GetRenderer: pco.renderHooks.getRenderer,
 		})

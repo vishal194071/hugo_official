@@ -17,9 +17,7 @@ import (
 	"context"
 
 	"github.com/gohugoio/hugo/deps"
-	"github.com/gohugoio/hugo/tpl/css"
 	"github.com/gohugoio/hugo/tpl/internal"
-	"github.com/gohugoio/hugo/tpl/js"
 )
 
 const name = "resources"
@@ -35,25 +33,44 @@ func init() {
 		ns := &internal.TemplateFuncsNamespace{
 			Name:    name,
 			Context: func(cctx context.Context, args ...any) (any, error) { return ctx, nil },
-			OnCreated: func(m map[string]any) {
-				for _, v := range m {
-					switch v := v.(type) {
-					case *css.Namespace:
-						ctx.cssNs = v
-					case *js.Namespace:
-						ctx.jsNs = v
-					}
-				}
-				if ctx.cssNs == nil {
-					panic("css namespace not found")
-				}
-				if ctx.jsNs == nil {
-					panic("js namespace not found")
-				}
-			},
 		}
 
+		ns.AddMethodMapping(ctx.ByType,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Concat,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Copy,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.ExecuteAsTemplate,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Fingerprint,
+			[]string{"fingerprint"},
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.FromString,
+			nil,
+			[][2]string{},
+		)
+
 		ns.AddMethodMapping(ctx.Get,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Match,
 			nil,
 			[][2]string{},
 		)
@@ -63,15 +80,23 @@ func init() {
 			[][2]string{},
 		)
 
-		// Add aliases for the most common transformations.
-
-		ns.AddMethodMapping(ctx.Fingerprint,
-			[]string{"fingerprint"},
+		ns.AddMethodMapping(ctx.Match,
+			nil,
 			[][2]string{},
 		)
 
 		ns.AddMethodMapping(ctx.Minify,
 			[]string{"minify"},
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.Publish,
+			nil,
+			[][2]string{},
+		)
+
+		ns.AddMethodMapping(ctx.PostProcess,
+			nil,
 			[][2]string{},
 		)
 

@@ -8,14 +8,13 @@ params:
     aliases: [readFile]
     returnType: string
     signatures: [os.ReadFile PATH]
-aliases: [/functions/readfile]
 ---
 
-The `os.ReadFile` function attempts to resolve the path relative to the root of your project directory. If a matching file is not found, it will attempt to resolve the path relative to the [`contentDir`](/configuration/all/#contentdir). A leading path separator (`/`) is optional.
+The `os.ReadFile` function attempts to resolve the path relative to the root of your project directory, then relative to the root of each [module](g). If a matching file is not found, it will attempt to resolve the path relative to the `content` directory of the [unified file system](g). A leading path separator (`/`) is optional.
 
 With a file named README.md in the root of your project directory:
 
-```text
+```md
 This is **bold** text.
 ```
 

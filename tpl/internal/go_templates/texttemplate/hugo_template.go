@@ -19,8 +19,10 @@ import (
 	"io"
 	"iter"
 	"reflect"
+	"slices"
 
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/hreflect"
 
 	"github.com/gohugoio/hugo/tpl/internal/go_templates/texttemplate/parse"
@@ -47,6 +49,9 @@ type ExecHelper interface {
 	GetFunc(ctx context.Context, tmpl Preparer, name string) (reflect.Value, reflect.Value, bool)
 	GetMethod(ctx context.Context, tmpl Preparer, receiver reflect.Value, name string) (method reflect.Value, firstArg reflect.Value)
 	GetMapValue(ctx context.Context, tmpl Preparer, receiver, key reflect.Value) (reflect.Value, bool)
+	// RedirectField returns the name of a field or method to evaluate on receiver
+	// instead of the chain receiver.name.next, and whether to redirect.
+	RedirectField(ctx context.Context, tmpl Preparer, receiver reflect.Value, name, next string) (string, bool)
 	OnCalled(ctx context.Context, tmpl Preparer, name string, args []reflect.Value, result reflect.Value)
 }
 
@@ -98,8 +103,33 @@ func (t *Template) Prepare() (*Template, error) {
 	return t, nil
 }
 
+// ReturnError is the sentinel used by the return keyword
+// to signal an early exit from a template.
+// A bare {{ return }} is trapped at the nearest template boundary,
+// a {{ return <value> }} must be trapped by a partial invocation.
+type ReturnError struct {
+	Value    any
+	HasValue bool
+}
+
+func (r *ReturnError) Error() string {
+	return "return with a value is only supported in partials"
+}
+
 func (t *Template) executeWithState(state *state, value reflect.Value) (err error) {
 	defer errRecover(&err)
+	// Added for Hugo. Trap the return sentinel.
+	defer func() {
+		if r := recover(); r != nil {
+			if rerr, ok := r.(*ReturnError); ok {
+				if rerr.HasValue {
+					err = rerr
+				}
+				return
+			}
+			panic(r)
+		}
+	}()
 	if t.Tree == nil || t.Root == nil {
 		state.errorf("%q is an incomplete or empty template", t.Name())
 	}
@@ -123,9 +153,62 @@ type state struct {
 	depth  int        // the height of the stack of executing templates.
 }
 
+// newReturnError evaluates any return value and creates the return sentinel.
+// Everything after the return keyword is evaluated as a command,
+// so both {{ return $v }} and {{ return add . 42 }} work.
+func (s *state) newReturnError(dot reflect.Value, cmd parse.Node, args []parse.Node, final reflect.Value) *ReturnError {
+	rerr := &ReturnError{}
+
+	toValue := func(v reflect.Value) any {
+		if v.IsValid() && v.Type() == reflectValueType {
+			v = v.Interface().(reflect.Value)
+		}
+		if !v.IsValid() {
+			return nil
+		}
+		return v.Interface()
+	}
+
+	switch {
+	case len(args) > 1:
+		rerr.HasValue = true
+		if _, ok := args[1].(*parse.NilNode); ok && len(args) == 2 && isMissing(final) {
+			// {{ return nil }}
+			break
+		}
+		c := *(cmd.(*parse.CommandNode))
+		c.Args = args[1:]
+		rerr.Value = toValue(s.evalCommand(dot, &c, final))
+	case !isMissing(final):
+		rerr.HasValue = true
+		rerr.Value = toValue(final)
+	}
+
+	return rerr
+}
+
+// walkTemplate traps any bare return so it only ends the execution of the
+// included template.
+func (s *state) walkTemplate(dot reflect.Value, t *parse.TemplateNode) {
+	defer func() {
+		if r := recover(); r != nil {
+			if rerr, ok := r.(*ReturnError); ok && !rerr.HasValue {
+				return
+			}
+			panic(r)
+		}
+	}()
+	s.walkTemplateOld(dot, t)
+}
+
 func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd parse.Node, args []parse.Node, final reflect.Value) reflect.Value {
 	s.at(node)
 	name := node.Ident
+
+	// Added for Hugo.
+	if name == "return" {
+		panic(s.newReturnError(dot, cmd, args, final))
+	}
 
 	var function reflect.Value
 	// Added for Hugo.
@@ -153,6 +236,27 @@ func (s *state) evalFunction(dot reflect.Value, node *parse.IdentifierNode, cmd 
 // evalField evaluates an expression like (.Field) or (.Field arg1 arg2).
 // The 'final' argument represents the return value from the preceding
 // value of the pipeline, if any.
+// evalFieldChain evaluates .X.Y.Z possibly preceded by a non-identifier,
+// allowing the ExecHelper to replace two adjacent identifiers with one.
+func (s *state) evalFieldChain(dot, receiver reflect.Value, node parse.Node, ident []string, args []parse.Node, final reflect.Value) reflect.Value {
+	n := len(ident)
+	for i := 0; i < n-1; i++ {
+		// Added for Hugo.
+		if s.helper != nil {
+			if name, ok := s.helper.RedirectField(s.ctx, s.prep, receiver, ident[i], ident[i+1]); ok {
+				ident = slices.Concat(ident[:i], []string{name}, ident[i+2:])
+				n--
+				if i == n-1 {
+					break
+				}
+			}
+		}
+		receiver = s.evalField(dot, ident[i], node, nil, missingVal, receiver)
+	}
+	// Now if it's a method, it gets the arguments.
+	return s.evalField(dot, ident[n-1], node, args, final, receiver)
+}
+
 func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, args []parse.Node, final, receiver reflect.Value) reflect.Value {
 	if !receiver.IsValid() {
 		if s.tmpl.option.missingKey == mapError { // Treat invalid value as missing map key.
@@ -296,6 +400,9 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	if name == "try" {
 		defer func() {
 			if r := recover(); r != nil {
+				if _, ok := r.(*ReturnError); ok {
+					panic(r)
+				}
 				// Cause: herrors.Cause(err)
 				if err, ok := r.(error); ok {
 					val = reflect.ValueOf(TryValue{Value: nil, Err: newErrorWithCause(err)})
@@ -405,7 +512,7 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	}
 
 	// Added for Hugo
-	for i := 0; i < len(first); i++ {
+	for i := range first {
 		argv[i] = s.validateType(first[i], typ.In(i))
 	}
 
@@ -431,6 +538,55 @@ func (s *state) evalCall(dot, fun reflect.Value, isBuiltin bool, node parse.Node
 	return vv
 }
 
+// validateType guarantees that the value is valid and assignable to the type.
+func (s *state) validateType(value reflect.Value, typ reflect.Type) reflect.Value {
+	if !value.IsValid() {
+		if typ == nil {
+			// An untyped nil interface{}. Accept as a proper nil value.
+			return reflect.ValueOf(nil)
+		}
+		if canBeNil(typ) {
+			// Like above, but use the zero value of the non-nil type.
+			return reflect.Zero(typ)
+		}
+		s.errorf("invalid value; expected %s", typ)
+	}
+	if typ == reflectValueType && value.Type() != typ {
+		return reflect.ValueOf(value)
+	}
+	if typ != nil && !value.Type().AssignableTo(typ) {
+		if value.Kind() == reflect.Interface && !value.IsNil() {
+			value = value.Elem()
+			if value.Type().AssignableTo(typ) {
+				return value
+			}
+			// fallthrough
+		}
+		// Does one dereference or indirection work? We could do more, as we
+		// do with method receivers, but that gets messy and method receivers
+		// are much more constrained, so it makes more sense there than here.
+		// Besides, one is almost always all you need.
+		switch {
+		case value.Kind() == reflect.Pointer && value.Type().Elem().AssignableTo(typ):
+			value = value.Elem()
+			if !value.IsValid() {
+				s.errorf("dereference of nil pointer of type %s", typ)
+			}
+		case reflect.PointerTo(value.Type()).AssignableTo(typ) && value.CanAddr():
+			value = value.Addr()
+		default:
+			// Added for Hugo.
+			if v, ok := hreflect.ConvertIfPossible(value, typ); ok {
+				value = v
+			} else {
+				s.errorf("wrong type for value; expected %s; got %s", typ, value.Type())
+			}
+
+		}
+	}
+	return value
+}
+
 func isTrue(val reflect.Value) (truth, ok bool) {
 	return hreflect.IsTruthfulValue(val), true
 }
@@ -448,4 +604,120 @@ func (t *Template) All() iter.Seq[*Template] {
 			}
 		}
 	}
+}
+
+var (
+	anyType                  = reflect.TypeFor[any]()
+	funcVariadicAnyString    = reflect.TypeFor[func(...any) string]()
+	funcString               = reflect.TypeFor[func() string]()
+	funcCtxVariadicAnyAnyErr = reflect.TypeFor[func(context.Context, ...any) (any, error)]()
+	funcAnyVariadicAnyBool   = reflect.TypeFor[func(any, ...any) bool]()
+	funcParams               = reflect.TypeFor[func() hmaps.Params]()
+	funcAnyAnyBoolErr        = reflect.TypeFor[func(any, any) (bool, error)]()
+	funcAnyStringErr         = reflect.TypeFor[func(any) (string, error)]()
+	funcCtxStringVariadicAny = reflect.TypeFor[func(context.Context, string, ...any) (any, error)]()
+	funcReflectValueBool     = reflect.TypeFor[func(reflect.Value) bool]()
+	funcMap                  = reflect.TypeFor[func() map[string]any]()
+	funcVariadicAnyMapErr    = reflect.TypeFor[func(...any) (map[string]any, error)]()
+	funcAny                  = reflect.TypeFor[func() any]()
+	funcBool                 = reflect.TypeFor[func() bool]()
+	funcStringVariadicAny    = reflect.TypeFor[func(string, ...any) string]()
+	funcAnyVariadicAnyAnyErr = reflect.TypeFor[func(any, ...any) (any, error)]()
+)
+
+// safeCall runs fun with args and returns the result and error, if any.
+// If the call panics, the panic value is returned as an error.
+// This replaces the upstream safeCall and calls the most common function
+// signatures directly, avoiding the allocations in reflect.Value.Call.
+// See issue 15385.
+func safeCall(fun reflect.Value, args []reflect.Value) (val reflect.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = fmt.Errorf("%v", r)
+			}
+		}
+	}()
+
+	switch fun.Type() {
+	case funcVariadicAnyString:
+		f, _ := reflect.TypeAssert[func(...any) string](fun)
+		return reflect.ValueOf(f(anyArgs(args)...)), nil
+	case funcString:
+		f, _ := reflect.TypeAssert[func() string](fun)
+		return reflect.ValueOf(f()), nil
+	case funcCtxVariadicAnyAnyErr:
+		f, _ := reflect.TypeAssert[func(context.Context, ...any) (any, error)](fun)
+		ctx, _ := args[0].Interface().(context.Context)
+		v, err := f(ctx, anyArgs(args[1:])...)
+		return anyValue(v), err
+	case funcAnyVariadicAnyBool:
+		f, _ := reflect.TypeAssert[func(any, ...any) bool](fun)
+		return reflect.ValueOf(f(args[0].Interface(), anyArgs(args[1:])...)), nil
+	case funcParams:
+		f, _ := reflect.TypeAssert[func() hmaps.Params](fun)
+		return reflect.ValueOf(f()), nil
+	case funcAnyAnyBoolErr:
+		f, _ := reflect.TypeAssert[func(any, any) (bool, error)](fun)
+		v, err := f(args[0].Interface(), args[1].Interface())
+		return reflect.ValueOf(v), err
+	case funcAnyStringErr:
+		f, _ := reflect.TypeAssert[func(any) (string, error)](fun)
+		v, err := f(args[0].Interface())
+		return reflect.ValueOf(v), err
+	case funcCtxStringVariadicAny:
+		f, _ := reflect.TypeAssert[func(context.Context, string, ...any) (any, error)](fun)
+		ctx, _ := args[0].Interface().(context.Context)
+		v, err := f(ctx, args[1].String(), anyArgs(args[2:])...)
+		return anyValue(v), err
+	case funcReflectValueBool:
+		f, _ := reflect.TypeAssert[func(reflect.Value) bool](fun)
+		v, _ := reflect.TypeAssert[reflect.Value](args[0])
+		return reflect.ValueOf(f(v)), nil
+	case funcMap:
+		f, _ := reflect.TypeAssert[func() map[string]any](fun)
+		return reflect.ValueOf(f()), nil
+	case funcVariadicAnyMapErr:
+		f, _ := reflect.TypeAssert[func(...any) (map[string]any, error)](fun)
+		v, err := f(anyArgs(args)...)
+		return reflect.ValueOf(v), err
+	case funcAny:
+		f, _ := reflect.TypeAssert[func() any](fun)
+		return anyValue(f()), nil
+	case funcBool:
+		f, _ := reflect.TypeAssert[func() bool](fun)
+		return reflect.ValueOf(f()), nil
+	case funcStringVariadicAny:
+		f, _ := reflect.TypeAssert[func(string, ...any) string](fun)
+		return reflect.ValueOf(f(args[0].String(), anyArgs(args[1:])...)), nil
+	case funcAnyVariadicAnyAnyErr:
+		f, _ := reflect.TypeAssert[func(any, ...any) (any, error)](fun)
+		v, err := f(args[0].Interface(), anyArgs(args[1:])...)
+		return anyValue(v), err
+	}
+
+	ret := fun.Call(args)
+	if len(ret) == 2 && !ret[1].IsNil() {
+		return ret[0], ret[1].Interface().(error)
+	}
+	return ret[0], nil
+}
+
+func anyArgs(args []reflect.Value) []any {
+	s := make([]any, len(args))
+	for i, arg := range args {
+		s[i] = arg.Interface()
+	}
+	return s
+}
+
+// anyValue returns a valid reflect.Value also for nil, matching what
+// reflect.Value.Call returns for an any result.
+func anyValue(v any) reflect.Value {
+	if v == nil {
+		return reflect.Zero(anyType)
+	}
+	return reflect.ValueOf(v)
 }

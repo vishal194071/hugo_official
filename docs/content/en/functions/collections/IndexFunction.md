@@ -1,14 +1,13 @@
 ---
 title: collections.Index
-description: Returns the object, element, or value associated with the given key or keys.
+description: Returns an element or value from the given slice or map at the specified key(s).
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [index]
     returnType: any
-    signatures: [collections.Index COLLECTION KEY...]
-aliases: [/functions/index,/functions/index-function]
+    signatures: [collections.Index SLICE|MAP KEY...]
 ---
 
 Each indexed item must be a map or a slice:

@@ -8,10 +8,9 @@ params:
     aliases: [htmlEscape]
     returnType: string
     signatures: [transform.HTMLEscape INPUT]
-aliases: [/functions/htmlescape]
 ---
 
-The `transform.HTMLEscape` function escapes five special characters by replacing them with [HTML entities]:
+The `transform.HTMLEscape` function escapes five special characters by replacing them with [HTML entities][]:
 
 - `&` → `&amp;`
 - `<` → `&lt;`
@@ -26,4 +25,4 @@ For example:
 {{ htmlEscape "7 > 6" }} → 7 &gt; 6
 ```
 
-[html entities]: https://developer.mozilla.org/en-US/docs/Glossary/Entity
+[HTML entities]: https://developer.mozilla.org/en-US/docs/Glossary/Entity

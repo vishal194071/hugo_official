@@ -49,6 +49,15 @@ func New(baseURL *url.URL) transform.Transformer {
 			idx += len(ignoredSyntax.Find(b[idx:]))
 			idx += len(tag.Find(b[idx:]))
 		}
+		if idx == 0 {
+			// doctype is required for HTML5, we did not find it,
+			// and neither did we find html or head tags, so
+			// skip injection.
+			// This allows us to render partial HTML documents to be used in
+			// e.g. JS frameworks.
+			ft.To().Write(b)
+			return nil
+		}
 
 		path := strings.TrimSuffix(baseURL.Path, "/")
 
@@ -64,7 +73,7 @@ func New(baseURL *url.URL) transform.Transformer {
 		copy(c[idx+len(script):], b[idx:])
 
 		if _, err := ft.To().Write(c); err != nil {
-			loggers.Log().Warnf("Failed to inject LiveReload script:", err)
+			loggers.Log().Warnf("Failed to inject LiveReload script: %s", err)
 		}
 		return nil
 	}

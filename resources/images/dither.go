@@ -17,7 +17,7 @@ import (
 	"image"
 	"image/draw"
 
-	"github.com/disintegration/gift"
+	"github.com/gohugoio/gift"
 	"github.com/makeworld-the-better-one/dither/v2"
 )
 

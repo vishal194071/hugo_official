@@ -10,7 +10,7 @@ params:
     signatures: [end]
 ---
 
-Use with the [`if`] statement:
+Use with the [`if`][] statement:
 
 ```go-html-template
 {{ $var := "foo" }}
@@ -19,7 +19,7 @@ Use with the [`if`] statement:
 {{ end }}
 ```
 
-Use with the [`with`] statement:
+Use with the [`with`][] statement:
 
 ```go-html-template
 {{ $var := "foo" }}
@@ -28,22 +28,22 @@ Use with the [`with`] statement:
 {{ end }}
 ```
 
-Use with the [`range`] statement:
+Use with the [`range`][] statement:
 
 ```go-html-template
 {{ $var := slice 1 2 3 }}
 {{ range $var }}
-  {{ . }} → 1 2 3 
+  {{ . }} → 1 2 3
 {{ end }}
 ```
 
-Use with the [`block`] statement:
+Use with the [`block`][] statement:
 
 ```go-html-template
 {{ block "main" . }}{{ end }}
 ```
 
-Use with the [`define`] statement:
+Use with the [`define`][] statement:
 
 ```go-html-template
 {{ define "main" }}

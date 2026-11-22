@@ -14,8 +14,6 @@
 package helpers_test
 
 import (
-	"reflect"
-	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -68,6 +66,22 @@ func TestFirstUpper(t *testing.T) {
 	}
 }
 
+func TestFirstLower(t *testing.T) {
+	c := qt.New(t)
+	for _, this := range []struct {
+		in     string
+		expect string
+	}{
+		{"Foo", "foo"},
+		{"Foo Bar", "foo Bar"},
+		{"foo bar", "foo bar"},
+		{"", ""},
+		{"Å", "å"},
+	} {
+		c.Assert(helpers.FirstLower(this.in), qt.Equals, this.expect)
+	}
+}
+
 func TestHasStringsPrefix(t *testing.T) {
 	for i, this := range []struct {
 		s      []string
@@ -107,64 +121,6 @@ func TestHasStringsSuffix(t *testing.T) {
 	}
 }
 
-var containsTestText = (`На берегу пустынных волн
-Стоял он, дум великих полн,
-И вдаль глядел. Пред ним широко
-Река неслася; бедный чёлн
-По ней стремился одиноко.
-По мшистым, топким берегам
-Чернели избы здесь и там,
-Приют убогого чухонца;
-И лес, неведомый лучам
-В тумане спрятанного солнца,
-Кругом шумел.
-
-Τη γλώσσα μου έδωσαν ελληνική
-το σπίτι φτωχικό στις αμμουδιές του Ομήρου.
-Μονάχη έγνοια η γλώσσα μου στις αμμουδιές του Ομήρου.
-
-από το Άξιον Εστί
-του Οδυσσέα Ελύτη
-
-Sîne klâwen durh die wolken sint geslagen,
-er stîget ûf mit grôzer kraft,
-ich sih in grâwen tägelîch als er wil tagen,
-den tac, der im geselleschaft
-erwenden wil, dem werden man,
-den ich mit sorgen în verliez.
-ich bringe in hinnen, ob ich kan.
-sîn vil manegiu tugent michz leisten hiez.
-`)
-
-var containsBenchTestData = []struct {
-	v1     string
-	v2     []byte
-	expect bool
-}{
-	{"abc", []byte("a"), true},
-	{"abc", []byte("b"), true},
-	{"abcdefg", []byte("efg"), true},
-	{"abc", []byte("d"), false},
-	{containsTestText, []byte("стремился"), true},
-	{containsTestText, []byte(containsTestText[10:80]), true},
-	{containsTestText, []byte(containsTestText[100:111]), true},
-	{containsTestText, []byte(containsTestText[len(containsTestText)-100 : len(containsTestText)-10]), true},
-	{containsTestText, []byte(containsTestText[len(containsTestText)-20:]), true},
-	{containsTestText, []byte("notfound"), false},
-}
-
-// some corner cases
-var containsAdditionalTestData = []struct {
-	v1     string
-	v2     []byte
-	expect bool
-}{
-	{"", nil, false},
-	{"", []byte("a"), false},
-	{"a", []byte(""), false},
-	{"", []byte(""), false},
-}
-
 func TestSliceToLower(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -186,19 +142,6 @@ func TestSliceToLower(t *testing.T) {
 	}
 }
 
-func TestReaderContains(t *testing.T) {
-	c := qt.New(t)
-	for i, this := range append(containsBenchTestData, containsAdditionalTestData...) {
-		result := helpers.ReaderContains(strings.NewReader(this.v1), this.v2)
-		if result != this.expect {
-			t.Errorf("[%d] got %t but expected %t", i, result, this.expect)
-		}
-	}
-
-	c.Assert(helpers.ReaderContains(nil, []byte("a")), qt.Equals, false)
-	c.Assert(helpers.ReaderContains(nil, nil), qt.Equals, false)
-}
-
 func TestGetTitleFunc(t *testing.T) {
 	title := "somewhere over the Rainbow"
 	c := qt.New(t)
@@ -212,96 +155,6 @@ func TestGetTitleFunc(t *testing.T) {
 	c.Assert(helpers.GetTitleFunc("unknown")(title), qt.Equals, "Somewhere Over the Rainbow")
 	c.Assert(helpers.GetTitleFunc("none")(title), qt.Equals, title)
 	c.Assert(helpers.GetTitleFunc("firstupper")(title), qt.Equals, "Somewhere over the Rainbow")
-}
-
-func BenchmarkReaderContains(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for i, this := range containsBenchTestData {
-			result := helpers.ReaderContains(strings.NewReader(this.v1), this.v2)
-			if result != this.expect {
-				b.Errorf("[%d] got %t but expected %t", i, result, this.expect)
-			}
-		}
-	}
-}
-
-func TestUniqueStrings(t *testing.T) {
-	in := []string{"a", "b", "a", "b", "c", "", "a", "", "d"}
-	output := helpers.UniqueStrings(in)
-	expected := []string{"a", "b", "c", "", "d"}
-	if !reflect.DeepEqual(output, expected) {
-		t.Errorf("Expected %#v, got %#v\n", expected, output)
-	}
-}
-
-func TestUniqueStringsReuse(t *testing.T) {
-	in := []string{"a", "b", "a", "b", "c", "", "a", "", "d"}
-	output := helpers.UniqueStringsReuse(in)
-	expected := []string{"a", "b", "c", "", "d"}
-	if !reflect.DeepEqual(output, expected) {
-		t.Errorf("Expected %#v, got %#v\n", expected, output)
-	}
-}
-
-func TestUniqueStringsSorted(t *testing.T) {
-	c := qt.New(t)
-	in := []string{"a", "a", "b", "c", "b", "", "a", "", "d"}
-	output := helpers.UniqueStringsSorted(in)
-	expected := []string{"", "a", "b", "c", "d"}
-	c.Assert(output, qt.DeepEquals, expected)
-	c.Assert(helpers.UniqueStringsSorted(nil), qt.IsNil)
-}
-
-func BenchmarkUniqueStrings(b *testing.B) {
-	input := []string{"a", "b", "d", "e", "d", "h", "a", "i"}
-
-	b.Run("Safe", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			result := helpers.UniqueStrings(input)
-			if len(result) != 6 {
-				b.Fatalf("invalid count: %d", len(result))
-			}
-		}
-	})
-
-	b.Run("Reuse slice", func(b *testing.B) {
-		b.StopTimer()
-		inputs := make([][]string, b.N)
-		for i := 0; i < b.N; i++ {
-			inputc := make([]string, len(input))
-			copy(inputc, input)
-			inputs[i] = inputc
-		}
-		b.StartTimer()
-		for i := 0; i < b.N; i++ {
-			inputc := inputs[i]
-
-			result := helpers.UniqueStringsReuse(inputc)
-			if len(result) != 6 {
-				b.Fatalf("invalid count: %d", len(result))
-			}
-		}
-	})
-
-	b.Run("Reuse slice sorted", func(b *testing.B) {
-		b.StopTimer()
-		inputs := make([][]string, b.N)
-		for i := 0; i < b.N; i++ {
-			inputc := make([]string, len(input))
-			copy(inputc, input)
-			inputs[i] = inputc
-		}
-		b.StartTimer()
-		for i := 0; i < b.N; i++ {
-			inputc := inputs[i]
-
-			result := helpers.UniqueStringsSorted(inputc)
-			if len(result) != 6 {
-				b.Fatalf("invalid count: %d", len(result))
-			}
-		}
-	})
 }
 
 func TestStringSliceToList(t *testing.T) {

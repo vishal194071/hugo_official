@@ -14,6 +14,7 @@
 package filecache_test
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -43,12 +44,9 @@ assetDir = "assets"
 archetypeDir = "archetypes"
 
 [caches]
-[caches.getJSON]
+[caches.misc]
 maxAge = "10m"
 dir = "/path/to/c1"
-[caches.getCSV]
-maxAge = "11h"
-dir = "/path/to/c2"
 [caches.images]
 dir = "/path/to/c3"
 [caches.getResource]
@@ -61,9 +59,9 @@ dir = "/path/to/c4"
 	decoded := testconfig.GetTestConfigs(fs, cfg).Base.Caches
 	c.Assert(len(decoded), qt.Equals, 7)
 
-	c2 := decoded["getcsv"]
-	c.Assert(c2.MaxAge.String(), qt.Equals, "11h0m0s")
-	c.Assert(c2.DirCompiled, qt.Equals, filepath.FromSlash("/path/to/c2/filecache/getcsv"))
+	c2 := decoded["misc"]
+	c.Assert(c2.MaxAge.String(), qt.Equals, "10m0s")
+	c.Assert(c2.DirCompiled, qt.Equals, filepath.FromSlash("/path/to/c1/filecache/misc"))
 
 	c3 := decoded["images"]
 	c.Assert(c3.MaxAge, qt.Equals, time.Duration(-1))
@@ -90,12 +88,9 @@ archeTypedir = "archetypes"
 
 ignoreCache = true
 [caches]
-[caches.getJSON]
+[caches.misc]
 maxAge = 1234
 dir = "/path/to/c1"
-[caches.getCSV]
-maxAge = 3456
-dir = "/path/to/c2"
 [caches.images]
 dir = "/path/to/c3"
 [caches.getResource]
@@ -132,15 +127,45 @@ func TestDecodeConfigDefault(t *testing.T) {
 	c.Assert(len(decoded), qt.Equals, 7)
 
 	imgConfig := decoded[filecache.CacheKeyImages]
-	jsonConfig := decoded[filecache.CacheKeyGetJSON]
+	miscConfig := decoded[filecache.CacheKeyMisc]
 
 	if runtime.GOOS == "windows" {
 		c.Assert(imgConfig.DirCompiled, qt.Equals, filepath.FromSlash("_gen/images"))
 	} else {
 		c.Assert(imgConfig.DirCompiled, qt.Equals, "_gen/images")
-		c.Assert(jsonConfig.DirCompiled, qt.Equals, "/cache/thecache/hugoproject/filecache/getjson")
+		c.Assert(miscConfig.DirCompiled, qt.Equals, "/cache/thecache/hugoproject/filecache/misc")
 	}
 
 	c.Assert(imgConfig.IsResourceDir, qt.Equals, true)
-	c.Assert(jsonConfig.IsResourceDir, qt.Equals, false)
+	c.Assert(miscConfig.IsResourceDir, qt.Equals, false)
+}
+
+func TestFileCacheConfigMarshalJSON(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := config.New()
+	cfg.Set("cacheDir", "/cache")
+	cfg.Set("workingDir", "/my/project")
+
+	fs := afero.NewMemMapFs()
+	decoded := testconfig.GetTestConfigs(fs, cfg).Base.Caches
+
+	moduleQueriesConfig := decoded[filecache.CacheKeyModuleQueries]
+	c.Assert(moduleQueriesConfig.MaxAge, qt.Equals, 24*time.Hour)
+
+	// Also verify the new moduleGitInfo cache.
+	moduleGitInfoConfig := decoded[filecache.CacheKeyModuleGitInfo]
+	c.Assert(moduleGitInfoConfig.MaxAge, qt.Equals, 24*time.Hour)
+
+	b, err := json.Marshal(moduleQueriesConfig)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(string(b), qt.Contains, `"maxAge":"24h"`)
+	c.Assert(string(b), qt.Not(qt.Contains), "86400000000000")
+	c.Assert(string(b), qt.Not(qt.Contains), "8.64e")
+
+	moduleQueriesConfig.MaxAge = -1
+	b, err = json.Marshal(moduleQueriesConfig)
+	c.Assert(err, qt.IsNil)
+	c.Assert(string(b), qt.Contains, `"maxAge":-1`)
 }

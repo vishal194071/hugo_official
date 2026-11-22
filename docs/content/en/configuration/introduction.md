@@ -6,38 +6,57 @@ keywords: []
 weight: 10
 ---
 
-## Sensible defaults
+## General settings and categories
 
-Hugo offers many configuration options, but its defaults are often sufficient. A new site requires only these settings:
+Each top-level key in the project configuration is either a general setting or a configuration category.
+
+A general setting is a single value. A configuration category groups related, nested settings.
 
 {{< code-toggle file=hugo >}}
 baseURL = 'https://example.org/'
-languageCode = 'en-us'
-title = 'My New Hugo Site'
+locale = 'en-us'
+title = 'ABC Widgets, Inc.'
+[params]
+subtitle = 'The Best Widgets on Earth'
+[imaging]
+resampleFilter = 'lanczos'
+{{< /code-toggle >}}
+
+In this example, [`baseURL`][], [`locale`][], and [`title`][] are general settings, while [`imaging`][] and [`params`][] are configuration categories.
+
+## Sensible defaults
+
+Hugo offers many configuration settings, but its defaults are often sufficient. A typical new project defines only these settings:
+
+{{< code-toggle file=hugo >}}
+baseURL = 'https://example.org/'
+locale = 'en-us'
+title = 'ABC Widgets, Inc.'
 {{< /code-toggle >}}
 
 Only define settings that deviate from the defaults. A smaller configuration file is easier to read, understand, and debug. Keep your configuration concise.
 
-> [!note]
+> [!NOTE]
 > The best configuration file is a short configuration file.
+
+{{< new-in 0.167.0 />}}
+
+Project configuration is optional. Without a [configuration file](#configuration-file) or [configuration directory](#configuration-directory), Hugo uses the default value for every setting. For example, you can build a project that contains only a `layouts/all.html` template.
 
 ## Configuration file
 
-Create a site configuration file in the root of your project directory, naming it `hugo.toml`, `hugo.yaml`, or `hugo.json`, with that order of precedence.
+Create a project configuration file in the root of your project directory, naming it `hugo.toml`, `hugo.yaml`, or `hugo.json`, with that order of precedence.
 
-```text
+```tree
 my-project/
 └── hugo.toml
 ```
-
-> [!note]
-> For versions v0.109.0 and earlier, the site configuration file was named `config`. While you can still use this name, it's recommended to switch to the newer naming convention, `hugo`.
 
 A simple example:
 
 {{< code-toggle file=hugo >}}
 baseURL = 'https://example.org/'
-languageCode = 'en-us'
+locale = 'en-us'
 title = 'ABC Widgets, Inc.'
 [params]
 subtitle = 'The Best Widgets on Earth'
@@ -46,26 +65,28 @@ email = 'info@example.org'
 phone = '+1 202-555-1212'
 {{< /code-toggle >}}
 
-To use a different configuration file when building your site, use the `--config` flag:
+To use a different configuration file when building your project, use the `--config` flag:
 
 ```sh
-hugo --config other.toml
+hugo build --config other.toml
 ```
 
 Combine two or more configuration files, with left-to-right precedence:
 
 ```sh
-hugo --config a.toml,b.yaml,c.json
+hugo build --config a.toml,b.yaml,c.json
 ```
 
-> [!note]
-> See the specifications for each file format: [TOML], [YAML], and [JSON].
+Hugo loads the files in the order listed, and each file recursively overwrites matching keys from the files before it. In other words, for a conflicting key, the value from the last-listed file wins.
+
+> [!NOTE]
+> See the specifications for each file format: [TOML][], [YAML][], and [JSON][].
 
 ## Configuration directory
 
-Instead of a single site configuration file, split your configuration by [environment](g), root configuration key, and language. For example:
+Instead of a single project configuration file, split your configuration by [environment](g), configuration category, and language. Hugo loads the `_default` directory first, then the directory for the current environment, so for a conflicting key, the environment-specific value wins. For example:
 
-```text
+```tree
 my-project/
 └── config/
     ├── _default/
@@ -77,16 +98,13 @@ my-project/
         └── params.toml
 ```
 
-The root configuration keys are {{< root-configuration-keys >}}.
+The configuration categories are {{< configuration-categories >}}.
 
-> [!note]
-> You must define `cascade` tables in the root configuration file. You cannot define `cascade` tables in a dedicated file. See issue [#12899] for details.
+### Omit or include a category
 
-[#12899]: https://github.com/gohugoio/hugo/issues/12899
+{{< new-in 0.162.0 />}}
 
-### Omit the root key
-
-When splitting the configuration by root key, omit the root key in the component file. For example, these are equivalent:
+When splitting the configuration by configuration category, you may omit or include the category name in the component file. For example, these are equivalent:
 
 {{< code-toggle file=config/_default/hugo >}}
 [params]
@@ -97,11 +115,40 @@ foo = 'bar'
 foo = 'bar'
 {{< /code-toggle >}}
 
+This also applies to keys whose values are maps of slices, such as `menus`. For example, these are equivalent:
+
+{{< code-toggle file=config/_default/menus >}}
+[[main]]
+name = 'Home'
+pageRef = '/'
+weight = 10
+{{< /code-toggle >}}
+
+{{< code-toggle file=config/_default/menus >}}
+[[menus.main]]
+name = 'Home'
+pageRef = '/'
+weight = 10
+{{< /code-toggle >}}
+
+For pure slice-typed keys such as `cascade` and `permalinks`, including the category name is required. For example:
+
+{{< code-toggle file=config/_default/cascade >}}
+[[cascade]]
+[cascade.params]
+color = 'red'
+[cascade.target]
+path = '/articles/**'
+{{< /code-toggle >}}
+
+> [!NOTE]
+> Hugo unwraps the category only when it is the sole key in the file and matches the file's basename.
+
 ### Recursive parsing
 
 Hugo parses the `config` directory recursively, allowing you to organize the files into subdirectories. For example:
 
-```text
+```tree
 my-project/
 └── config/
     └── _default/
@@ -113,7 +160,7 @@ my-project/
 
 ### Example
 
-```text
+```tree
 my-project/
 └── config/
     ├── _default/
@@ -129,9 +176,9 @@ my-project/
         └── params.toml
 ```
 
-Considering the structure above, when running `hugo --environment staging`, Hugo will use every setting from `config/_default` and merge `staging`'s on top of those.
+Considering the structure above, when running `hugo build --environment staging`, Hugo uses every setting from `config/_default`, then overwrites matching keys with settings from `staging`.
 
-Let's take an example to understand this better. Let's say you are using Google Analytics for your website. This requires you to specify a [Google tag ID] in your site configuration:
+Let's take an example to understand this better. Let's say you are using Google Analytics for your website. This requires you to specify a [Google tag ID][] in your project configuration:
 
 {{< code-toggle file=hugo >}}
 [services.googleAnalytics]
@@ -148,7 +195,7 @@ Now consider the following scenario:
 To satisfy these requirements, configure your site as follows:
 
 1. `config/_default/hugo.toml`
-    - Exclude the `services.googleAnalytics` section. This will prevent loading of the analytics code when you run `hugo server`.
+    - Exclude the `services.googleAnalytics` section. This prevents Hugo from loading the analytics code when you run `hugo server`.
     - By default, Hugo sets its `environment` to `development` when running `hugo server`. In the absence of a `config/development` directory, Hugo uses the `config/_default` directory.
 1. `config/production/hugo.toml`
     - Include this section only:
@@ -158,8 +205,8 @@ To satisfy these requirements, configure your site as follows:
       ID = 'G-PPPPPPPPP'
       {{< /code-toggle >}}
 
-    - You do not need to include other parameters in this file. Include only those parameters that are specific to your production environment. Hugo will merge these parameters with the default configuration.
-    - By default, Hugo sets its `environment` to `production` when running `hugo`. The analytics code will use the `G-PPPPPPPPP` tag ID.
+    - You do not need to include other parameters in this file. Include only those parameters that are specific to your production environment. Hugo overwrites the default configuration with these parameters.
+    - By default, Hugo sets its `environment` to `production` when running `hugo build`. The analytics code uses the `G-PPPPPPPPP` tag ID.
 
 1. `config/staging/hugo.toml`
 
@@ -170,14 +217,14 @@ To satisfy these requirements, configure your site as follows:
       ID = 'G-SSSSSSSSS'
       {{< /code-toggle >}}
 
-    - You do not need to include other parameters in this file. Include only those parameters that are specific to your staging environment. Hugo will merge these parameters with the default configuration.
-    - To build your staging site, run `hugo --environment staging`. The analytics code will use the `G-SSSSSSSSS` tag ID.
+    - You do not need to include other parameters in this file. Include only those parameters that are specific to your staging environment. Hugo overwrites the default configuration with these parameters.
+    - To build your staging site, run `hugo build --environment staging`. The analytics code uses the `G-SSSSSSSSS` tag ID.
 
 ## Merge configuration settings
 
-Hugo merges configuration settings from themes and modules, prioritizing the project's own settings. Given this simplified project structure with two themes:
+Hugo merges configuration settings from themes and modules, prioritizing the project's own settings. This is distinct from combining configuration files with the `--config` flag, or splitting configuration across a [configuration directory](#configuration-directory), both of which always overwrite keys of the same name. Given this simplified project structure with two themes:
 
-```text
+```tree
 project/
 ├── themes/
 │   ├── theme-a/
@@ -191,7 +238,7 @@ and this project-level configuration:
 
 {{< code-toggle file=hugo >}}
 baseURL = 'https://example.org/'
-languageCode = 'en-us'
+locale = 'en-us'
 title = 'My New Hugo Site'
 theme = ['theme-a','theme-b']
 {{< /code-toggle >}}
@@ -202,22 +249,55 @@ Hugo merges settings in this order:
 1. `theme-a` configuration
 1. `theme-b` configuration
 
-The `_merge` setting within each top-level configuration key controls _which_ settings are merged and _how_ they are merged.
+### Merge strategy
+
+The `_merge` setting within each [configuration category](#general-settings-and-categories) controls _which_ settings are merged and _how_ they are merged.
+
+You can set `_merge` at any level of nesting within a category, not only at its top level. When merging a nested table, Hugo uses the `_merge` value set on that table if present, or inherits the value from its nearest ancestor. For example, to change the merge strategy for a single Goldmark extension without affecting the rest of the `markup` category:
+
+{{< code-toggle file=hugo >}}
+[markup.goldmark.extensions.typographer]
+_merge = 'deep'
+{{< /code-toggle >}}
 
 The value for `_merge` can be one of:
 
-none
-: No merge.
+`none`
+: Do not merge.
 
-shallow
-: Only add values for new keys.
+`shallow`
+: Add values for new keys only.
 
-deep
-: Add values for new keys, merge existing.
+`deep`
+: Add values for new keys, and merge values for existing keys.
 
-Note that you don't need to be so verbose as in the default setup below; a `_merge` value higher up will be inherited if not set.
+You don't need to be as verbose as the default setup below. A `_merge` value set higher up is inherited if not set lower down.
 
 {{< code-toggle file=hugo dataKey="config_helpers.mergeStrategy" skipHeader=true />}}
+
+### Root-level merge strategy
+
+You can also set `_merge` at the root of your project configuration, outside of any configuration category, to change this behavior for the whole project:
+
+{{< code-toggle file=hugo >}}
+_merge = 'none'
+baseURL = 'https://example.org/'
+locale = 'en-us'
+title = 'My New Hugo Site'
+theme = ['theme-a','theme-b']
+{{< /code-toggle >}}
+
+A root-level `_merge` set to `none` disables merging of theme and module configuration entirely, regardless of any `_merge` value set on individual configuration categories. A root-level `_merge` set to `shallow` or `deep` instead changes the default merge strategy for configuration categories that do not specify their own `_merge` value.
+
+> [!NOTE]
+> Hugo can merge map configuration values from modules and themes into the project configuration, but cannot merge slice values. This applies to slice-typed configuration categories such as `menus`, as well as to map keys whose values are slices, such as the per-kind format lists in `outputs`.
+
+### Security implications
+
+Most configuration categories default to a `none` merge strategy specifically to protect your project from third-party themes and modules.
+
+> [!CAUTION]
+> Setting `_merge` to `shallow` or `deep` removes that protection, whether applied directly to a security-sensitive key such as `markup` or `security`, or set at the root of your configuration to change the default for every key. Only use a permissive `_merge` value for these keys if you trust every theme and module in your project.
 
 ## Environment variables
 
@@ -226,42 +306,43 @@ You can also configure settings using operating system environment variables:
 ```sh
 export HUGO_BASEURL=https://example.org/
 export HUGO_ENABLEGITINFO=true
-export HUGO_ENVIRONMENT=staging
 hugo
 ```
 
-The above sets the [`baseURL`], [`enableGitInfo`], and [`environment`] configuration options and then builds your site.
+The above configures the [`baseURL`][] and [`enableGitInfo`][] settings and then builds your site.
 
-> [!note]
-> An environment variable takes precedence over the values set in the configuration file. This means that if you set a configuration value with both an environment variable and in the configuration file, the value in the environment variable will be used.
+> [!NOTE]
+> An environment variable takes precedence over the values set in the configuration file. This means that if you set a configuration value with both an environment variable and in the configuration file, Hugo uses the value from the environment variable.
 
-Environment variables simplify configuration for [CI/CD](g) deployments like GitHub Pages, GitLab Pages, and Netlify by allowing you to set values directly within their respective configuration and workflow files.
+Environment variables simplify configuration for [CI/CD](g) platforms by allowing you to set values directly within their respective configuration and workflow files.
 
-> [!note]
+> [!NOTE]
 > Environment variable names must be prefixed with `HUGO_`.
 >
 > To set custom site parameters, prefix the name with `HUGO_PARAMS_`.
 
-For snake_case variable names, the standard `HUGO_` prefix won't work. Hugo infers the delimiter from the first character following `HUGO`. This allows for variations like `HUGOxPARAMSxAPI_KEY=abcdefgh` using any [permitted delimiter].
+For snake_case variable names, the standard `HUGO_` prefix won't work. Hugo infers the delimiter from the first character following `HUGO`. This allows for variations like `HUGOxPARAMSxAPI_KEY=abcdefgh` using any [permitted delimiter][].
 
 In addition to configuring standard settings, environment variables may be used to override default values for certain internal settings:
 
-DART_SASS_BINARY
+`DART_SASS_BINARY`
 : (`string`) The absolute path to the Dart Sass executable. By default, Hugo searches for the executable in each of the paths in the `PATH` environment variable.
 
-HUGO_FILE_LOG_FORMAT
+`HUGO_ENVIRONMENT`
+: (`string`) The build environment. Default is `production` when running `hugo build` and `development` when running `hugo server`.
+
+`HUGO_FILE_LOG_FORMAT`
 : (`string`) A format string for the file path, line number, and column number displayed when reporting errors, or when calling the `Position` method from a shortcode or Markdown render hook. Valid tokens are `:file`, `:line`, and `:col`. Default is `:file::line::col`.
 
-HUGO_MEMORYLIMIT
-: {{< new-in 0.123.0 />}}
-: (`int`) The maximum amount of system memory, in gigabytes, that Hugo can use while rendering your site. Default is 25% of total system memory. Note that `HUGO_MEMORYLIMIT` is a "best effort" setting. Don't expect Hugo to build a million pages with only 1 GB of memory. You can get more information about how this behaves during the build by building with `hugo --logLevel info` and look for the `dynacache` label.
+`HUGO_MEMORYLIMIT`
+: (`int`) The maximum amount of system memory, in gigabytes, that Hugo can use while rendering your site. Default is 25% of total system memory. Note that `HUGO_MEMORYLIMIT` is a "best effort" setting. Don't expect Hugo to build a million pages with only 1 GB of memory. You can get more information about how this behaves during the build by running `hugo build --logLevel info` and look for the `dynacache` label.
 
-HUGO_NUMWORKERMULTIPLIER
+`HUGO_NUMWORKERMULTIPLIER`
 : (`int`) The number of workers used in parallel processing. Default is the number of logical CPUs.
 
 ## Current configuration
 
-Display the complete site configuration with:
+Display the complete project configuration with:
 
 ```sh
 hugo config
@@ -279,11 +360,14 @@ Display the configured file mounts with:
 hugo config mounts
 ```
 
-[`baseURL`]: /configuration/all#baseurl
-[`enableGitInfo`]: /configuration/all#enablegitinfo
-[`environment`]: /configuration/all#environment
 [Google tag ID]: https://support.google.com/tagmanager/answer/12326985?hl=en
 [JSON]: https://datatracker.ietf.org/doc/html/rfc7159
-[permitted delimiter]: https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html
 [TOML]: https://toml.io/en/latest
 [YAML]: https://yaml.org/spec/
+[`baseURL`]: /configuration/all#baseurl
+[`enableGitInfo`]: /configuration/all#enablegitinfo
+[`imaging`]: /configuration/all#imaging
+[`locale`]: /configuration/all#locale
+[`params`]: /configuration/all#params
+[`title`]: /configuration/all#title
+[permitted delimiter]: https://pubs.opengroup.org/onlinepubs/000095399/basedefs/xbd_chap08.html

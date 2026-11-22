@@ -15,6 +15,11 @@
 package pandoc
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"sync"
+
 	"github.com/gohugoio/hugo/common/hexec"
 	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/identity"
@@ -40,6 +45,9 @@ func (p provider) New(cfg converter.ProviderConfig) (converter.Provider, error) 
 type pandocConverter struct {
 	ctx converter.DocumentContext
 	cfg converter.ProviderConfig
+
+	mathMethodSupportedOnce sync.Once
+	mathMethodSupported     bool
 }
 
 func (c *pandocConverter) Convert(ctx converter.RenderContext) (converter.ResultRender, error) {
@@ -56,14 +64,15 @@ func (c *pandocConverter) Supports(feature identity.Identity) bool {
 
 // getPandocContent calls pandoc as an external helper to convert pandoc markdown to HTML.
 func (c *pandocConverter) getPandocContent(src []byte, ctx converter.DocumentContext) ([]byte, error) {
-	logger := c.cfg.Logger
 	binaryName := getPandocBinaryName()
 	if binaryName == "" {
-		logger.Println("pandoc not found in $PATH: Please install.\n",
-			"                 Leaving pandoc content unrendered.")
-		return src, nil
+		return nil, fmt.Errorf("pandoc not found in $PATH, cannot render %q", ctx.DocumentName)
 	}
-	args := []string{"--mathjax"}
+	mathFlag := "--mathjax"
+	if c.pandocSupportsMathMethod() {
+		mathFlag = mathMethodFlag
+	}
+	args := []string{mathFlag, "--citeproc"}
 	return internal.ExternallyRenderContent(c.cfg, ctx, src, binaryName, args)
 }
 
@@ -74,6 +83,26 @@ func getPandocBinaryName() string {
 		return pandocBinary
 	}
 	return ""
+}
+
+// mathMethodFlag replaces the deprecated --mathjax flag in pandoc 3.11 and later.
+const mathMethodFlag = "--math-method=mathjax"
+
+// pandocSupportsMathMethod reports whether the installed pandoc binary
+// supports the --math-method flag.
+func (c *pandocConverter) pandocSupportsMathMethod() bool {
+	c.mathMethodSupportedOnce.Do(func() {
+		cmd, err := c.cfg.Exec.New(
+			pandocBinary, mathMethodFlag, "--dump-args",
+			hexec.WithStdout(io.Discard),
+			hexec.WithStderr(io.Discard),
+			hexec.WithStdin(bytes.NewReader(nil)),
+		)
+		if err == nil {
+			c.mathMethodSupported = cmd.Run() == nil
+		}
+	})
+	return c.mathMethodSupported
 }
 
 // Supports returns whether Pandoc is installed on this computer.

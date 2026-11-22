@@ -18,22 +18,24 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand"
 	"mime"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
-	gmaps "maps"
+	"github.com/spf13/cast"
 
 	"github.com/gohugoio/httpcache"
 	"github.com/gohugoio/hugo/common/hashing"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/hstrings"
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/common/loggers"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/tasks"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/config"
@@ -109,7 +111,29 @@ var temporaryHTTPStatusCodes = map[int]bool{
 	504: true,
 }
 
-func (c *Client) configurePollingIfEnabled(uri, optionsKey string, getRes func() (*http.Response, error)) {
+// parseRetryAfter returns the duration to wait per the Retry-After header in
+// resp, or 0 if the header is absent or unparseable. Per RFC 7231 the value
+// may be either delta-seconds or an HTTP-date.
+func parseRetryAfter(resp *http.Response) time.Duration {
+	if resp == nil {
+		return 0
+	}
+	h := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	if h == "" {
+		return 0
+	}
+	if n, err := strconv.Atoi(h); err == nil && n >= 0 {
+		return time.Duration(n) * time.Second
+	}
+	if t, err := http.ParseTime(h); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return 0
+}
+
+func (c *Client) configurePollingIfEnabled(uri, optionsKey string, getRes func() (*http.Response, context.CancelFunc, error)) {
 	if c.remoteResourceChecker == nil {
 		return
 	}
@@ -136,7 +160,10 @@ func (c *Client) configurePollingIfEnabled(uri, optionsKey string, getRes func()
 					c.rs.Logger.Debugf("Polled remote resource for changes in %13s. Interval: %4s (low: %4s high: %4s) resource: %q ", duration, interval, pollingConfig.Config.Low, pollingConfig.Config.High, uri)
 				}()
 				// TODO(bep) figure out a ways to remove unused tasks.
-				res, err := getRes()
+				res, cancel, err := getRes()
+				if cancel != nil {
+					defer cancel()
+				}
 				if err != nil {
 					return pollingConfig.Config.High, err
 				}
@@ -172,12 +199,25 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 	}
 
 	method := "GET"
-	if s, _, ok := maps.LookupEqualFold(optionsm, "method"); ok {
+	if s, _, ok := hmaps.LookupEqualFold(optionsm, "method"); ok {
 		method = strings.ToUpper(s.(string))
 	}
 	isHeadMethod := method == "HEAD"
 
-	optionsm = gmaps.Clone(optionsm)
+	optionsm = maps.Clone(optionsm)
+
+	// Extract timeout before computing cache keys: it only affects fetch behaviour,
+	// not the cached content, so it must not influence the cache key.
+	var perRequestTimeout time.Duration
+	if v, k, ok := hmaps.LookupEqualFold(optionsm, "timeout"); ok {
+		d, err := cast.ToDurationE(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid timeout for resource %s: %w", uri, err)
+		}
+		perRequestTimeout = d
+		delete(optionsm, k)
+	}
+
 	userKey, optionsKey := remoteResourceKeys(uri, optionsm)
 
 	// A common pattern is to use the key in the options map as
@@ -196,21 +236,38 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 			return nil, err
 		}
 
-		getRes := func() (*http.Response, error) {
+		getRes := func() (*http.Response, context.CancelFunc, error) {
 			ctx := context.Background()
+			var cancel context.CancelFunc
+			if perRequestTimeout > 0 {
+				ctx, cancel = context.WithTimeout(ctx, perRequestTimeout)
+			}
 			ctx = c.resourceIDDispatcher.Set(ctx, filecacheKey)
 
 			req, err := options.NewRequest(uri)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create request for resource %s: %w", uri, err)
+				if cancel != nil {
+					cancel()
+				}
+				return nil, nil, fmt.Errorf("failed to create request for resource %s: %w", uri, err)
 			}
 
 			req = req.WithContext(ctx)
 
-			return c.httpClient.Do(req)
+			resp, err := c.httpClient.Do(req)
+			if err != nil {
+				if cancel != nil {
+					cancel()
+				}
+				return nil, nil, err
+			}
+			return resp, cancel, nil
 		}
 
-		res, err := getRes()
+		res, cancel, err := getRes()
+		if cancel != nil {
+			defer cancel()
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -220,6 +277,8 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 
 		if res.StatusCode == http.StatusNotFound {
 			// Not found. This matches how lookups for local resources work.
+			// To cache this, we need to make sure the body is read.
+			io.Copy(io.Discard, res.Body)
 			return nil, nil
 		}
 
@@ -267,6 +326,13 @@ func (c *Client) FromRemote(uri string, optionsm map[string]any) (resource.Resou
 			// just use ".txt".
 			if strings.HasPrefix(contentType, "text/plain") {
 				extensionHints = []string{".txt"}
+			} else if mt, found := c.rs.MediaTypes().GetByType(baseContentType(contentType)); found && len(mt.Suffixes()) > 0 {
+				// Prefer Hugo's own media types, as the mime package's
+				// table depends on the OS and on whether the Hugo server
+				// has registered Hugo's media types.
+				for _, suffix := range mt.Suffixes() {
+					extensionHints = append(extensionHints, "."+suffix)
+				}
 			} else {
 				exts, _ := mime.ExtensionsByType(contentType)
 				if exts != nil {
@@ -321,7 +387,7 @@ func (c *Client) validateFromRemoteArgs(uri string, options fromRemoteOptions) e
 
 func remoteResourceKeys(uri string, optionsm map[string]any) (string, string) {
 	var userKey string
-	if key, k, found := maps.LookupEqualFold(optionsm, "key"); found {
+	if key, k, found := hmaps.LookupEqualFold(optionsm, "key"); found {
 		userKey = hashing.HashString(key)
 		delete(optionsm, k)
 	}
@@ -405,6 +471,10 @@ var _ http.RoundTripper = (*transport)(nil)
 type transport struct {
 	Cfg    config.AllProvider
 	Logger loggers.Logger
+
+	// base does the actual round trip. It carries a dial-time hook that
+	// validates the resolved destination address (see New).
+	base http.RoundTripper
 }
 
 func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
@@ -423,7 +493,7 @@ func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 
 	for {
 		resp, retry, err = func() (*http.Response, bool, error) {
-			resp2, err := http.DefaultTransport.RoundTrip(req)
+			resp2, err := t.base.RoundTrip(req)
 			if err != nil {
 				return resp2, false, err
 			}
@@ -437,17 +507,26 @@ func (t *transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 		}()
 
 		if retry {
+			sleep := nextSleep
+			retryAfter := parseRetryAfter(resp)
+			if retryAfter > 0 {
+				sleep = retryAfter
+			}
 			if start.IsZero() {
 				start = time.Now()
-			} else if d := time.Since(start) + nextSleep; d >= t.Cfg.Timeout() {
+			}
+			if d := time.Since(start) + sleep; d >= t.Cfg.Timeout() {
 				msg := "<nil>"
 				if resp != nil {
 					msg = resp.Status
 				}
+				if retryAfter > 0 {
+					msg = fmt.Sprintf("%s (server requested Retry-After: %s)", msg, retryAfter)
+				}
 				err := toHTTPError(fmt.Errorf("retry timeout (configured to %s) fetching remote resource: %s", t.Cfg.Timeout(), msg), resp, req.Method != "HEAD", nil)
 				return resp, err
 			}
-			time.Sleep(nextSleep)
+			time.Sleep(sleep)
 			if nextSleep < nextSleepLimit {
 				nextSleep *= 2
 			}
@@ -466,4 +545,14 @@ func shouldCache(statusCode int) bool {
 		return false
 	}
 	return true
+}
+
+// baseContentType returns the media type part of a Content-Type header value,
+// e.g. "application/rss+xml" for "application/rss+xml; charset=UTF-8".
+func baseContentType(contentType string) string {
+	if mt, _, err := mime.ParseMediaType(contentType); err == nil {
+		return mt
+	}
+	mt, _, _ := strings.Cut(contentType, ";")
+	return strings.TrimSpace(mt)
 }

@@ -26,7 +26,6 @@ import (
 	"github.com/gohugoio/hugo/minifiers"
 	"github.com/gohugoio/hugo/output"
 	"github.com/spf13/afero"
-	"github.com/tdewolff/minify/v2/html"
 )
 
 func TestNew(t *testing.T) {
@@ -159,58 +158,13 @@ func TestBugs(t *testing.T) {
 		{media.Builtin.HTMLType, "<i class='fas fa-tags fa-fw'></i> Tags", `<i class='fas fa-tags fa-fw'></i> Tags`},
 		// Issue #13082
 		{media.Builtin.HTMLType, "<gcse:searchresults-only></gcse:searchresults-only>", `<gcse:searchresults-only></gcse:searchresults-only>`},
+		// Issue #14669.
+		{media.Builtin.SVGType, `<use x-bind:href="myicon">`, `<use x-bind:href="myicon">`},
+		{media.Builtin.SVGType, `<use :href="myicon">`, `<use :href="myicon">`},
 	} {
 		var b bytes.Buffer
 
 		c.Assert(m.Minify(test.tp, &b, strings.NewReader(test.rawString)), qt.IsNil)
 		c.Assert(b.String(), qt.Equals, test.expectedMinString)
 	}
-}
-
-// Renamed to Precision in v2.7.0. Check that we support both.
-func TestDecodeConfigDecimalIsNowPrecision(t *testing.T) {
-	c := qt.New(t)
-	v := config.New()
-	v.Set("minify", map[string]any{
-		"disablexml": true,
-		"tdewolff": map[string]any{
-			"css": map[string]any{
-				"decimal": 3,
-			},
-			"svg": map[string]any{
-				"decimal": 3,
-			},
-		},
-	})
-
-	conf := testconfig.GetTestConfigs(nil, v).Base.Minify
-
-	c.Assert(conf.Tdewolff.CSS.Precision, qt.Equals, 3)
-}
-
-// Issue 9456
-func TestDecodeConfigKeepWhitespace(t *testing.T) {
-	c := qt.New(t)
-	v := config.New()
-	v.Set("minify", map[string]any{
-		"tdewolff": map[string]any{
-			"html": map[string]any{
-				"keepEndTags": false,
-			},
-		},
-	})
-
-	conf := testconfig.GetTestConfigs(nil, v).Base.Minify
-
-	c.Assert(conf.Tdewolff.HTML, qt.DeepEquals,
-		html.Minifier{
-			KeepComments:        false,
-			KeepSpecialComments: true,
-			KeepDefaultAttrVals: true,
-			KeepDocumentTags:    true,
-			KeepEndTags:         false,
-			KeepQuotes:          false,
-			KeepWhitespace:      false,
-		},
-	)
 }

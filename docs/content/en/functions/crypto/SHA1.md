@@ -1,6 +1,6 @@
 ---
 title: crypto.SHA1
-description: Hashes the given input and returns its SHA1 checksum encoded to a hexadecimal string.
+description: Returns the SHA1 checksum of the given input, encoded to a hexadecimal string.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [sha1]
     returnType: string
     signatures: [crypto.SHA1 INPUT]
-aliases: [/functions/sha,/functions/sha1]
 ---
 
 ```go-html-template

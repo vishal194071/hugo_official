@@ -16,6 +16,8 @@ package rst
 
 import (
 	"bytes"
+	"fmt"
+	"os/exec"
 	"runtime"
 
 	"github.com/gohugoio/hugo/common/hexec"
@@ -65,12 +67,15 @@ func (c *rstConverter) getRstContent(src []byte, ctx converter.DocumentContext) 
 	binaryName, binaryPath := getRstBinaryNameAndPath()
 
 	if binaryName == "" {
-		logger.Println("rst2html / rst2html.py not found in $PATH: Please install.\n",
-			"                 Leaving reStructuredText content unrendered.")
-		return src, nil
+		return nil, fmt.Errorf("rst2html / rst2html.py not found in $PATH, cannot render %q", ctx.DocumentName)
 	}
 
 	logger.Infoln("Rendering", ctx.DocumentName, "with", binaryName, "...")
+
+	args := []string{"--leave-comments", "--initial-header-level=2"}
+	if c.cfg.Conf != nil && c.cfg.MarkupConfig().RST.SyntaxHighlight != "long" {
+		args = append(args, "--syntax-highlight="+c.cfg.MarkupConfig().RST.SyntaxHighlight)
+	}
 
 	var result []byte
 	var err error
@@ -81,10 +86,9 @@ func (c *rstConverter) getRstContent(src []byte, ctx converter.DocumentContext) 
 	// handle Windows manually because it doesn't do shebangs
 	if runtime.GOOS == "windows" {
 		pythonBinary, _ := internal.GetPythonBinaryAndExecPath()
-		args := []string{binaryPath, "--leave-comments", "--initial-header-level=2"}
+		args = append([]string{binaryPath}, args...)
 		result, err = internal.ExternallyRenderContent(c.cfg, ctx, src, pythonBinary, args)
 	} else {
-		args := []string{"--leave-comments", "--initial-header-level=2"}
 		result, err = internal.ExternallyRenderContent(c.cfg, ctx, src, binaryName, args)
 	}
 
@@ -128,4 +132,17 @@ func Supports() bool {
 		return true
 	}
 	return hasBin
+}
+
+// SupportsPygments returns whether Pygments is (or should be) installed on this computer.
+func SupportsPygments() bool {
+	for _, python := range []string{"python3", "python"} {
+		if err := exec.Command(python, "-c", "import pygments").Run(); err == nil {
+			return true
+		}
+	}
+	if htesting.SupportsAll() {
+		panic("Pygments not installed")
+	}
+	return false
 }

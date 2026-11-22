@@ -1,6 +1,6 @@
 ---
 title: Err
-description: Applicable to resources returned by the resources.GetRemote function, returns an error message if the HTTP request fails, else nil.
+description: Returns an error message if the HTTP request for a remote resource fails, else nil.
 categories: []
 keywords: []
 params:
@@ -11,50 +11,5 @@ expiryDate: 2027-01-16 # deprecated 2025-01-16 in v0.141.0
 ---
 
 {{< deprecated-in 0.141.0 >}}
-Use the `try` statement instead. See [example].
-
-[example]: /functions/go-template/try/#example
+Use the [`try`](/functions/go-template/try/) statement instead.
 {{< /deprecated-in >}}
-
-The `Err` method on a resource returned by the [`resources.GetRemote`] function returns an error message if the HTTP request fails, else nil. If you do not handle the error yourself, Hugo will fail the build.
-
-[`resources.GetRemote`]: /functions/resources/getremote/
-
-In this example we send an HTTP request to a nonexistent domain:
-
-```go-html-template
-{{ $url := "https://broken-example.org/images/a.jpg" }}
-{{ with resources.GetRemote $url }}
-  {{ with .Err }}
-    {{ errorf "%s" . }}
-  {{ else }}
-    <img src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}" alt="">
-  {{ end }}
-{{ else }}
-  {{ errorf "Unable to get remote resource %q" $url }}
-{{ end }}
-```
-
-The code above captures the error from the HTTP request, then fails the build:
-
-```text
-ERROR error calling resources.GetRemote: Get "https://broken-example.org/images/a.jpg": dial tcp: lookup broken-example.org on 127.0.0.53:53: no such host
-```
-
-To log an error as a warning instead of an error:
-
-```go-html-template
-{{ $url := "https://broken-example.org/images/a.jpg" }}
-{{ with resources.GetRemote $url }}
-  {{ with .Err }}
-    {{ warnf "%s" . }}
-  {{ else }}
-    <img src="{{ .RelPermalink }}" width="{{ .Width }}" height="{{ .Height }}" alt="">
-  {{ end }}
-{{ else }}
-  {{ errorf "Unable to get remote resource %q" $url }}
-{{ end }}
-```
-
-> [!note]
-> An HTTP response with a 404 status code is not an HTTP request error. To handle 404 status codes, code defensively using the nested `with-else-end` construct as shown above.

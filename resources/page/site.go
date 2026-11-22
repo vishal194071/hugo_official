@@ -14,16 +14,22 @@
 package page
 
 import (
+	"slices"
+	"strconv"
 	"time"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstore"
+	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/config/privacy"
 	"github.com/gohugoio/hugo/config/services"
+	"github.com/gohugoio/hugo/hugolib/roles"
+	"github.com/gohugoio/hugo/hugolib/versions"
 	"github.com/gohugoio/hugo/identity"
 
+	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/config"
 
-	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/navigation"
 )
@@ -32,6 +38,15 @@ import (
 type Site interface {
 	// Returns the Language configured for this Site.
 	Language() *langs.Language
+
+	// Returns the Site in one of dimensions language, version or role.
+	Dimension(string) SiteDimension
+
+	// Returns the role configured for this Site.
+	Role() roles.Role
+
+	// Returns the version configured for this Site.
+	Version() versions.Version
 
 	// Returns all the languages configured for all sites.
 	Languages() langs.Languages
@@ -59,29 +74,29 @@ type Site interface {
 	// Returns the configured title for this Site.
 	Title() string
 
-	// Deprecated: Use .Language.LanguageCode instead.
+	// Deprecated: Use .Language.Locale instead.
 	LanguageCode() string
 
 	// Returns the configured copyright information for this Site.
 	Copyright() string
 
-	// Returns all Sites for all languages.
+	// Returns all sites for all dimensions.
 	Sites() Sites
 
 	// Returns Site currently rendering.
 	Current() Site
 
+	// Reports whether this site is the default across all dimensions.
+	IsDefault() bool
+
 	// Returns a struct with some information about the build.
-	Hugo() hugo.HugoInfo
+	Hugo() HugoInfo
 
 	// Returns the BaseURL for this Site.
 	BaseURL() string
 
 	// Returns a taxonomy map.
 	Taxonomies() TaxonomyList
-
-	// Deprecated: Use .Lastmod instead.
-	LastChange() time.Time
 
 	// Returns the last modification date of the content.
 	Lastmod() time.Time
@@ -93,7 +108,7 @@ type Site interface {
 	MainSections() []string
 
 	// Returns the Params configured for this site.
-	Params() maps.Params
+	Params() hmaps.Params
 
 	// Param is a convenience method to do lookups in Params.
 	Param(key any) (any, error)
@@ -101,28 +116,20 @@ type Site interface {
 	// Returns a map of all the data inside /data.
 	Data() map[string]any
 
-	// Returns the site config.
+	// Returns the project config.
 	Config() SiteConfig
-
-	// Deprecated: Use taxonomies instead.
-	Author() map[string]any
-
-	// Deprecated: Use taxonomies instead.
-	Authors() AuthorList
-
-	// Deprecated: Use .Site.Params instead.
-	Social() map[string]string
 
 	// BuildDrafts is deprecated and will be removed in a future release.
 	BuildDrafts() bool
 
-	// Deprecated: Use hugo.IsMultilingual instead.
-	IsMultiLingual() bool
-
 	// LanguagePrefix returns the language prefix for this site.
 	LanguagePrefix() string
 
-	maps.StoreProvider
+	hstore.StoreProvider
+
+	// String returns a string representation of the site.
+	// Note that this representation may change in the future.
+	String() string
 
 	// For internal use only.
 	// This will panic if the site is not fully initialized.
@@ -131,22 +138,22 @@ type Site interface {
 	CheckReady()
 }
 
+// SiteDimension represents a dimension of the site.
+type SiteDimension interface {
+	Name() string
+}
+
 // Sites represents an ordered list of sites (languages).
 type Sites []Site
 
-// Deprecated: Use .Sites.Default instead.
-func (s Sites) First() Site {
-	hugo.Deprecate(".Sites.First", "Use .Sites.Default instead.", "v0.127.0")
-	return s.Default()
-}
-
-// Default is a convenience method to get the site corresponding to the default
-// content language.
+// Default is a convenience method to get the default site.
 func (s Sites) Default() Site {
-	if len(s) == 0 {
-		return nil
+	if idx := slices.IndexFunc(s, func(ss Site) bool {
+		return ss.IsDefault()
+	}); idx != -1 {
+		return s[idx]
 	}
-	return s[0]
+	return nil
 }
 
 // Some additional interfaces implemented by siteWrapper that's not on Site.
@@ -163,23 +170,11 @@ func WrapSite(s Site) Site {
 	return &siteWrapper{s: s}
 }
 
+// Key is used for hashing, e.g. a Site passed as a partialCached variant,
+// and must be unique per site (language, version and role).
 func (s *siteWrapper) Key() string {
-	return s.s.Language().Lang
-}
-
-// Deprecated: Use .Site.Params instead.
-func (s *siteWrapper) Social() map[string]string {
-	return s.s.Social()
-}
-
-// Deprecated: Use taxonomies instead.
-func (s *siteWrapper) Author() map[string]any {
-	return s.s.Author()
-}
-
-// Deprecated: Use taxonomies instead.
-func (s *siteWrapper) Authors() AuthorList {
-	return s.s.Authors()
+	v := s.s.(SiteVectorProvider).SiteVector()
+	return "site/" + strconv.Itoa(v[0]) + "/" + strconv.Itoa(v[1]) + "/" + strconv.Itoa(v[2])
 }
 
 func (s *siteWrapper) GetPage(ref ...string) (Page, error) {
@@ -192,6 +187,18 @@ func (s *siteWrapper) Language() *langs.Language {
 
 func (s *siteWrapper) Languages() langs.Languages {
 	return s.s.Languages()
+}
+
+func (s *siteWrapper) Role() roles.Role {
+	return s.s.Role()
+}
+
+func (s *siteWrapper) Dimension(d string) SiteDimension {
+	return s.s.Dimension(d)
+}
+
+func (s *siteWrapper) Version() versions.Version {
+	return s.s.Version()
 }
 
 func (s *siteWrapper) AllPages() Pages {
@@ -223,7 +230,8 @@ func (s *siteWrapper) Title() string {
 }
 
 func (s *siteWrapper) LanguageCode() string {
-	return s.s.LanguageCode()
+	hugo.DeprecateWithLogger(".Site.LanguageCode", "Use .Site.Language.Locale instead.", "v0.158.0", s.s.Language().Logger())
+	return s.s.Language().Locale()
 }
 
 func (s *siteWrapper) Copyright() string {
@@ -238,11 +246,15 @@ func (s *siteWrapper) Current() Site {
 	return s.s.Current()
 }
 
+func (s *siteWrapper) IsDefault() bool {
+	return s.s.IsDefault()
+}
+
 func (s *siteWrapper) Config() SiteConfig {
 	return s.s.Config()
 }
 
-func (s *siteWrapper) Hugo() hugo.HugoInfo {
+func (s *siteWrapper) Hugo() HugoInfo {
 	return s.s.Hugo()
 }
 
@@ -252,11 +264,6 @@ func (s *siteWrapper) BaseURL() string {
 
 func (s *siteWrapper) Taxonomies() TaxonomyList {
 	return s.s.Taxonomies()
-}
-
-// Deprecated: Use .Site.Lastmod instead.
-func (s *siteWrapper) LastChange() time.Time {
-	return s.s.LastChange()
 }
 
 func (s *siteWrapper) Lastmod() time.Time {
@@ -271,7 +278,7 @@ func (s *siteWrapper) MainSections() []string {
 	return s.s.MainSections()
 }
 
-func (s *siteWrapper) Params() maps.Params {
+func (s *siteWrapper) Params() hmaps.Params {
 	return s.s.Params()
 }
 
@@ -287,17 +294,16 @@ func (s *siteWrapper) BuildDrafts() bool {
 	return s.s.BuildDrafts()
 }
 
-// Deprecated: Use hugo.IsMultilingual instead.
-func (s *siteWrapper) IsMultiLingual() bool {
-	return s.s.IsMultiLingual()
-}
-
 func (s *siteWrapper) LanguagePrefix() string {
 	return s.s.LanguagePrefix()
 }
 
-func (s *siteWrapper) Store() *maps.Scratch {
+func (s *siteWrapper) Store() *hstore.Scratch {
 	return s.s.Store()
+}
+
+func (s *siteWrapper) String() string {
+	return s.s.String()
 }
 
 // For internal use only.
@@ -311,36 +317,16 @@ func (s *siteWrapper) CheckReady() {
 }
 
 type testSite struct {
-	h hugo.HugoInfo
+	h HugoInfo
 	l *langs.Language
 }
 
-// Deprecated: Use taxonomies instead.
-func (s testSite) Author() map[string]any {
-	return nil
-}
-
-// Deprecated: Use taxonomies instead.
-func (s testSite) Authors() AuthorList {
-	return AuthorList{}
-}
-
-// Deprecated: Use .Site.Params instead.
-func (s testSite) Social() map[string]string {
-	return make(map[string]string)
-}
-
-func (t testSite) Hugo() hugo.HugoInfo {
+func (t testSite) Hugo() HugoInfo {
 	return t.h
 }
 
 func (t testSite) ServerPort() int {
 	return 1313
-}
-
-// Deprecated: Use .Site.Lastmod instead.
-func (testSite) LastChange() (t time.Time) {
-	return
 }
 
 func (testSite) Lastmod() (t time.Time) {
@@ -351,8 +337,10 @@ func (t testSite) Title() string {
 	return "foo"
 }
 
+// Deprecated: Use .Language.Locale instead.
 func (t testSite) LanguageCode() string {
-	return t.l.Lang
+	hugo.DeprecateWithLogger(".Site.LanguageCode", "Use .Site.Language.Locale instead.", "v0.158.0", t.l.Logger())
+	return t.l.Locale()
 }
 
 func (t testSite) Copyright() string {
@@ -375,11 +363,19 @@ func (t testSite) Current() Site {
 	return t
 }
 
+func (t testSite) IsDefault() bool {
+	return true
+}
+
 func (s testSite) LanguagePrefix() string {
 	return ""
 }
 
 func (t testSite) Languages() langs.Languages {
+	return nil
+}
+
+func (t testSite) Dimension(d string) SiteDimension {
 	return nil
 }
 
@@ -389,6 +385,14 @@ func (t testSite) MainSections() []string {
 
 func (t testSite) Language() *langs.Language {
 	return t.l
+}
+
+func (t testSite) Role() roles.Role {
+	return nil
+}
+
+func (t testSite) Version() versions.Version {
+	return nil
 }
 
 func (t testSite) Home() Page {
@@ -419,7 +423,7 @@ func (t testSite) BaseURL() string {
 	return ""
 }
 
-func (t testSite) Params() maps.Params {
+func (t testSite) Params() hmaps.Params {
 	return nil
 }
 
@@ -435,17 +439,16 @@ func (s testSite) BuildDrafts() bool {
 	return false
 }
 
-// Deprecated: Use hugo.IsMultilingual instead.
-func (s testSite) IsMultiLingual() bool {
-	return false
-}
-
 func (s testSite) Param(key any) (any, error) {
 	return nil, nil
 }
 
-func (s testSite) Store() *maps.Scratch {
-	return maps.NewScratch()
+func (s testSite) Store() *hstore.Scratch {
+	return hstore.NewScratch()
+}
+
+func (s testSite) String() string {
+	return "testSite"
 }
 
 func (s testSite) CheckReady() {
@@ -453,11 +456,16 @@ func (s testSite) CheckReady() {
 
 // NewDummyHugoSite creates a new minimal test site.
 func NewDummyHugoSite(conf config.AllProvider) Site {
+	opts := HugoInfoOptions{
+		Conf: conf,
+	}
+	l, err := langs.NewLanguage("en", "en", "", langs.LanguageConfig{}, loggers.NewDefault())
+	if err != nil {
+		panic(err)
+	}
 	return testSite{
-		h: hugo.NewInfo(conf, nil),
-		l: &langs.Language{
-			Lang: "en",
-		},
+		h: NewHugoInfo(opts),
+		l: l,
 	}
 }
 

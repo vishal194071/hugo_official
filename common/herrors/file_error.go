@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 
 	"github.com/bep/godartsass/v2"
-	"github.com/bep/golibsass/libsass/libsasserrors"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/common/text"
 	"github.com/pelletier/go-toml/v2"
@@ -110,11 +109,11 @@ func (fe *fileError) UpdateContent(r io.Reader, linematcher LineMatcherFn) FileE
 
 	fe.errorContext = ectx
 
-	if ectx.Position.LineNumber > 0 {
+	if ectx.Position.LineNumber > 0 && ectx.Position.LineNumber > fe.position.LineNumber {
 		fe.position.LineNumber = ectx.Position.LineNumber
 	}
 
-	if ectx.Position.ColumnNumber > 0 {
+	if ectx.Position.ColumnNumber > 0 && ectx.Position.ColumnNumber > fe.position.ColumnNumber {
 		fe.position.ColumnNumber = ectx.Position.ColumnNumber
 	}
 
@@ -151,8 +150,6 @@ func (e *fileError) causeString() string {
 	// Avoid repeating the file info in the error message.
 	case godartsass.SassError:
 		return v.Message
-	case libsasserrors.Error:
-		return v.Message
 	default:
 		return v.Error()
 	}
@@ -177,6 +174,7 @@ func NewFileErrorFromName(err error, name string) FileError {
 	// Filetype is used to determine the Chroma lexer to use.
 	fileType, pos := extractFileTypePos(err)
 	pos.Filename = name
+
 	if fileType == "" {
 		_, fileType = paths.FileAndExtNoDelimiter(filepath.Clean(name))
 	}
@@ -234,7 +232,9 @@ func NewFileErrorFromFile(err error, filename string, fs afero.Fs, linematcher L
 		return NewFileErrorFromName(err, realFilename)
 	}
 	defer f.Close()
-	return NewFileErrorFromName(err, realFilename).UpdateContent(f, linematcher)
+	fe := NewFileErrorFromName(err, realFilename)
+	fe = fe.UpdateContent(f, linematcher)
+	return fe
 }
 
 func openFile(filename string, fs afero.Fs) (afero.File, string, error) {
@@ -285,12 +285,56 @@ func Unwrap(err error) error {
 	return err
 }
 
+// UnwrapFileErrors returns all FileError contained in err.
+func UnwrapFileErrors(err error) []FileError {
+	if err == nil {
+		return nil
+	}
+	errs := Errors(err)
+	var fileErrors []FileError
+	for _, e := range errs {
+		if v, ok := e.(FileError); ok {
+			fileErrors = append(fileErrors, v)
+		}
+		fileErrors = append(fileErrors, UnwrapFileErrors(errors.Unwrap(e))...)
+	}
+	return fileErrors
+}
+
+// UnwrapFileErrorsWithErrorContext tries to unwrap all FileError in err that has an ErrorContext.
+func UnwrapFileErrorsWithErrorContext(err error) []FileError {
+	errs := UnwrapFileErrors(err)
+	var n int
+	for _, e := range errs {
+		if e.ErrorContext() != nil {
+			errs[n] = e
+			n++
+		}
+	}
+	return errs[:n]
+}
+
+// Errors returns the list of errors contained in err.
+func Errors(err error) []error {
+	if err == nil {
+		return nil
+	}
+
+	type unwrapper interface {
+		Unwrap() []error
+	}
+	if u, ok := err.(unwrapper); ok {
+		return u.Unwrap()
+	}
+	return []error{err}
+}
+
 func extractFileTypePos(err error) (string, text.Position) {
 	err = Unwrap(err)
 
 	var fileType string
 
-	// LibSass, DartSass
+	// DartSass
 	if pos := extractPosition(err); pos.LineNumber > 0 || pos.Offset > 0 {
 		_, fileType = paths.FileAndExtNoDelimiter(pos.Filename)
 		return fileType, pos
@@ -321,13 +365,9 @@ func extractFileTypePos(err error) (string, text.Position) {
 	}
 
 	// Look in the error message for the line number.
-	for _, handle := range lineNumberExtractors {
-		lno, col := handle(err)
-		if lno > 0 {
-			pos.ColumnNumber = col
-			pos.LineNumber = lno
-			break
-		}
+	if lno, col := commonLineNumberExtractor(err); lno > 0 {
+		pos.ColumnNumber = col
+		pos.LineNumber = lno
 	}
 
 	if fileType == "" && pos.Filename != "" {
@@ -349,30 +389,6 @@ func UnwrapFileError(err error) FileError {
 		}
 	}
 	return nil
-}
-
-// UnwrapFileErrors tries to unwrap all FileError.
-func UnwrapFileErrors(err error) []FileError {
-	var errs []FileError
-	for err != nil {
-		if v, ok := err.(FileError); ok {
-			errs = append(errs, v)
-		}
-		err = errors.Unwrap(err)
-	}
-	return errs
-}
-
-// UnwrapFileErrorsWithErrorContext tries to unwrap all FileError in err that has an ErrorContext.
-func UnwrapFileErrorsWithErrorContext(err error) []FileError {
-	var errs []FileError
-	for err != nil {
-		if v, ok := err.(FileError); ok && v.ErrorContext() != nil {
-			errs = append(errs, v)
-		}
-		err = errors.Unwrap(err)
-	}
-	return errs
 }
 
 func extractOffsetAndType(e error) (int, string) {
@@ -407,10 +423,6 @@ func extractPosition(e error) (pos text.Position) {
 		pos.Filename = filename
 		pos.Offset = start.Offset
 		pos.ColumnNumber = start.Column
-	case libsasserrors.Error:
-		pos.Filename = v.File
-		pos.LineNumber = v.Line
-		pos.ColumnNumber = v.Column
 	}
 	return
 }

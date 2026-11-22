@@ -4,16 +4,15 @@ linkTitle: Organization
 description: Hugo assumes that the same structure that works to organize your source content is used to organize the rendered site.
 categories: []
 keywords: []
-aliases: [/content/sections/]
 ---
 
 ## Page bundles
 
-Hugo `0.32` announced page-relative images and other resources packaged into `Page Bundles`.
+Hugo supports page-relative images and other resources packaged into `Page Bundles`.
 
-These terms are connected, and you also need to read about [Page Resources](/content-management/page-resources) and [Image Processing](/content-management/image-processing) to get the full picture.
+These terms are connected, and you also need to read about [page resources][] and [image processing][] to get the full picture.
 
-```text
+```tree
 content/
 ├── blog/
 │   ├── hugo-is-cool/
@@ -40,7 +39,7 @@ The file tree above shows three bundles. Note that the home page bundle cannot c
 
 In Hugo, your content should be organized in a manner that reflects the rendered website.
 
-While Hugo supports content nested at any level, the top levels (i.e. `content/<DIRECTORIES>`) are special in Hugo and are considered the content type used to determine layouts etc. To read more about sections, including how to nest them, see [sections].
+While Hugo supports content nested at any level, the top levels (i.e. `content/<DIRECTORIES>`) are special in Hugo and are considered the content type used to determine layouts etc. To read more about sections, including how to nest them, see [sections][].
 
 Without any additional configuration, the following will automatically work:
 
@@ -61,13 +60,13 @@ Without any additional configuration, the following will automatically work:
 
 ## Path breakdown in Hugo
 
-The following demonstrates the relationships between your content organization and the output URL structure for your Hugo website when it renders. These examples assume you are [using pretty URLs][pretty], which is the default behavior for Hugo. The examples also assume a key-value of `baseURL = "https://example.org/"` in your [site's configuration file][config].
+The following demonstrates the relationships between your content organization and the output URL structure for your Hugo website when it renders. These examples assume you are [using pretty URLs][pretty], which is the default behavior for Hugo. The examples also assume a key-value of `baseURL = "https://example.org/"` in your [project configuration][].
 
-### Index pages: `_index.md`
+### Index pages
 
 `_index.md` has a special role in Hugo. It allows you to add front matter and content to `home`, `section`, `taxonomy`, and `term` pages.
 
-> [!note]
+> [!NOTE]
 > Access the content and metadata within an `_index.md` file by invoking the `GetPage` method on a `Site` or `Page` object.
 
 You can create one `_index.md` for your home page and one in each of your content sections, taxonomies, and terms. The following shows typical placement of an `_index.md` that would contain content and front matter for a `posts` section list page on a Hugo website:
@@ -95,11 +94,11 @@ At build, this will output to the following destination with the associated valu
 https://example.org/posts/index.html
 ```
 
-The [sections] can be nested as deeply as you want. The important thing to understand is that to make the section tree fully navigational, at least the lower-most section must include a content file. (i.e. `_index.md`).
+The [sections][] can be nested as deeply as you want. The important thing to understand is that to make the section tree fully navigational, at least the lower-most section must include a content file. (i.e. `_index.md`).
 
 ### Single pages in sections
 
-Single content files in each of your sections will be rendered by a [page template]. Here is an example of a single `post` within `posts`:
+Single content files in each of your sections will be rendered by a [page template][]. Here is an example of a single `post` within `posts`:
 
 ```txt
                    path ("posts/my-first-hugo-post.md")
@@ -126,26 +125,26 @@ https://example.org/posts/my-first-hugo-post/index.html
 
 The following concepts provide more insight into the relationship between your project's organization and the default Hugo behavior when building output for the website.
 
-### `section`
+section
+: A default content type is determined by the section in which a content item is stored. The section is determined by the location within the project's `content` directory. The section cannot be specified or overridden in front matter.
 
-A default content type is determined by the section in which a content item is stored. `section` is determined by the location within the project's `content` directory. `section` cannot be specified or overridden in front matter.
+slug
+: The slug is the last segment of the URL path, defined by the last segment of the page's [logical path](g) and optionally overridden by a `slug` value in front matter. See [URL management][slug] for details.
 
-### `slug`
+path
+: A content's path is determined by the section's path to the file. The file path:
 
-The `slug` is the last segment of the URL path, defined by the file name and optionally overridden by a `slug` value in front matter. See [URL Management](/content-management/urls/#slug) for details.
+  - Is based on the path to the content's location AND
+  - Does not include the slug
 
-### `path`
+url
+: The url is the entire URL path, defined by the file path and optionally overridden by a `url` value in front matter. See [URL management][url] for details.
 
-A content's `path` is determined by the section's path to the file. The file `path`:
-
-- Is based on the path to the content's location AND
-- Does not include the slug
-
-### `url`
-
-The `url` is the entire URL path, defined by the file path and optionally overridden by a `url` value in front matter. See [URL Management](/content-management/urls/#slug) for details.
-
-[config]: /configuration/
-[pretty]: /content-management/urls/#appearance
-[sections]: /content-management/sections/
+[image processing]: /content-management/image-processing/
+[page resources]: /content-management/page-resources/
 [page template]: /templates/types/#page
+[pretty]: /content-management/urls/#appearance
+[project configuration]: /configuration/
+[sections]: /content-management/sections/
+[slug]: /content-management/urls/#slug
+[url]: /content-management/urls/#url

@@ -21,6 +21,7 @@ import (
 	"html/template"
 	"time"
 
+	"github.com/gohugoio/hugo/hugolib/roles"
 	"github.com/gohugoio/hugo/markup/converter"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
 
@@ -28,8 +29,8 @@ import (
 
 	"github.com/gohugoio/hugo/navigation"
 
-	"github.com/gohugoio/hugo/common/hugo"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hstore"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/source"
 
@@ -122,6 +123,14 @@ func (p *nopPage) Description() string {
 	return ""
 }
 
+func (p *nopPage) RawSummary() string {
+	return ""
+}
+
+func (p *nopPage) IsRootParam(key string) bool {
+	return false
+}
+
 func (p *nopPage) RefFrom(argsm map[string]any, source any) (string, error) {
 	return "", nil
 }
@@ -194,7 +203,7 @@ func (p *nopPage) HasShortcode(name string) bool {
 	return false
 }
 
-func (p *nopPage) Hugo() (h hugo.HugoInfo) {
+func (p *nopPage) Hugo() (h HugoInfo) {
 	return
 }
 
@@ -226,6 +235,10 @@ func (p *nopPage) IsNode() bool {
 	return false
 }
 
+func (p *nopPage) IsBranch() bool {
+	return false
+}
+
 func (p *nopPage) IsPage() bool {
 	return false
 }
@@ -251,6 +264,10 @@ func (p *nopPage) Lang() string {
 }
 
 func (p *nopPage) Language() *langs.Language {
+	return nil
+}
+
+func (p *nopPage) Role() roles.Role {
 	return nil
 }
 
@@ -314,7 +331,7 @@ func (p *nopPage) Param(key any) (any, error) {
 	return nil, nil
 }
 
-func (p *nopPage) Params() maps.Params {
+func (p *nopPage) Params() hmaps.Params {
 	return nil
 }
 
@@ -366,14 +383,6 @@ func (p *nopPage) NextInSection() Page {
 	return nil
 }
 
-func (p *nopPage) PrevPage() Page {
-	return nil
-}
-
-func (p *nopPage) NextPage() Page {
-	return nil
-}
-
 func (p *nopPage) RawContent() string {
 	return ""
 }
@@ -398,7 +407,7 @@ func (p *nopPage) RelRef(argsm map[string]any) (string, error) {
 	return "", nil
 }
 
-func (p *nopPage) Render(ctx context.Context, layout ...string) (template.HTML, error) {
+func (p *nopPage) Render(ctx context.Context, args ...any) (template.HTML, error) {
 	return "", nil
 }
 
@@ -414,15 +423,15 @@ func (p *nopPage) Resources() resource.Resources {
 	return nil
 }
 
-func (p *nopPage) Scratch() *maps.Scratch {
+func (p *nopPage) Scratch() *hstore.Scratch {
 	return nil
 }
 
-func (p *nopPage) Store() *maps.Scratch {
+func (p *nopPage) Store() *hstore.Scratch {
 	return nil
 }
 
-func (p *nopPage) RelatedKeywords(cfg related.IndexConfig) ([]related.Keyword, error) {
+func (p *nopPage) RelatedKeywords(cfg related.IndexConfig) ([]string, error) {
 	return nil, nil
 }
 
@@ -525,7 +534,7 @@ func (r *nopContentRenderer) ParseContent(ctx context.Context, content []byte) (
 	return nil, false, nil
 }
 
-func (r *nopContentRenderer) RenderContent(ctx context.Context, content []byte, doc any) (converter.ResultRender, bool, error) {
+func (r *nopContentRenderer) RenderContent(ctx context.Context, content []byte, sourceInfo, doc any) (converter.ResultRender, bool, error) {
 	return nil, false, nil
 }
 

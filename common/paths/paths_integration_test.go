@@ -35,9 +35,9 @@ weight = 2
 removePathAccents = true
 -- content/διακριτικός.md --
 -- content/διακριτικός.fr.md --
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Language.Lang }}|Single.
--- layouts/_default/list.html --
+-- layouts/list.html --
 List
 `
 	b := hugolib.Test(t, files)
@@ -64,9 +64,9 @@ disablePathToLower = true
 -- content/MySection/MyPage.fr.md --
 -- content/MySection/MyBundle/index.md --
 -- content/MySection/MyBundle/index.fr.md --
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Language.Lang }}|Single.
--- layouts/_default/list.html --
+-- layouts/list.html --
 {{ .Language.Lang }}|List.
 `
 	b := hugolib.Test(t, files)
@@ -77,6 +77,72 @@ disablePathToLower = true
 	b.AssertFileContent("public/fr/MySection/MyPage/index.html", "fr|Single")
 	b.AssertFileContent("public/en/mysection/mybundle/index.html", "en|Single")
 	b.AssertFileContent("public/fr/MySection/MyBundle/index.html", "fr|Single")
+}
+
+func TestPrefixIdentifiersContent(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ["taxonomy", "term"]
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = true
+[languages]
+[languages.en]
+weight = 1
+[languages.fr]
+weight = 2
+-- content/p1.md --
+---
+title: p1 default
+---
+-- content/p1._language_fr_.md --
+---
+title: p1 french
+---
+-- layouts/single.html --
+{{ .Language.Lang }}|{{ .Title }}|Single.
+-- layouts/list.html --
+List
+`
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/en/p1/index.html", "en|p1 default|Single")
+	b.AssertFileContent("public/fr/p1/index.html", "fr|p1 french|Single")
+}
+
+func TestPrefixIdentifiersLayouts(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ["taxonomy", "term"]
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = true
+[languages]
+[languages.en]
+weight = 1
+[languages.fr]
+weight = 2
+-- content/p1.md --
+---
+title: p1
+---
+-- content/p1.fr.md --
+---
+title: p1 fr
+---
+-- layouts/single.html --
+default|{{ .Title }}|
+-- layouts/single._language_fr_.html --
+french layout|{{ .Title }}|
+-- layouts/list.html --
+List
+`
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/en/p1/index.html", "default|p1|")
+	b.AssertFileContent("public/fr/p1/index.html", "french layout|p1 fr|")
 }
 
 func TestIssue13596(t *testing.T) {

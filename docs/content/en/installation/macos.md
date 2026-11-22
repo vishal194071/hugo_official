@@ -6,11 +6,7 @@ keywords: []
 weight: 10
 ---
 
-## Editions
-
 {{% include "/_common/installation/01-editions.md" %}}
-
-Unless your specific deployment needs require the extended/deploy edition, we recommend the extended edition.
 
 {{% include "/_common/installation/02-prerequisites.md" %}}
 
@@ -18,17 +14,17 @@ Unless your specific deployment needs require the extended/deploy edition, we re
 
 ## Package managers
 
+You can also install Hugo using one of the following package managers.
+
 {{% include "/_common/installation/homebrew.md" %}}
 
 ### MacPorts
 
-[MacPorts] is a free and open-source package manager for macOS. To install the extended edition of Hugo:
+[MacPorts][] is a free and open-source package manager for macOS. To install the extended edition of Hugo:
 
 ```sh
 sudo port install hugo
 ```
-
-[MacPorts]: https://www.macports.org/
 
 {{% include "/_common/installation/04-build-from-source.md" %}}
 
@@ -44,3 +40,5 @@ Latest version available?|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mar
 
 [^1]: Easy if a previous version is still installed.
 [^2]: Possible but requires advanced configuration.
+
+[MacPorts]: https://www.macports.org/

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/hugolib"
 )
 
@@ -27,7 +28,7 @@ func TestHeadingsLevel(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ range .Fragments.HeadingsMap }}
 	{{ printf "%s|%d|%s" .ID .Level .Title }}
 {{ end }}
@@ -52,7 +53,7 @@ func TestToHTMLArgTypes(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['home','section','rss','sitemap','taxonomy','term']
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Fragments.ToHTML .Params.toc.startLevel .Params.toc.endLevel false }}
 -- content/json.md --
 {
@@ -118,6 +119,47 @@ CONTENT
 
 	files = strings.ReplaceAll(files, `2`, `"x"`)
 
-	b, _ = hugolib.TestE(t, files)
-	b.AssertLogMatches(`error calling ToHTML: startLevel: unable to cast "x" of type string`)
+	b, err := hugolib.TestE(t, files)
+	b.Assert(err, qt.Not(qt.IsNil))
+	b.Assert(err.Error(), qt.Contains, `error calling ToHTML: startLevel: unable to cast "x" of type string`)
+}
+
+func TestHeadingsNilpointerIssue11843(t *testing.T) {
+	t.Parallel()
+	files := `
+-- hugo.toml --
+-- layouts/home.html --
+{{ $h := index .Fragments.HeadingsMap "bad_id" }}
+{{ if not $h }}OK{{ end }}
+`
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "OK")
+}
+
+func TestHeadingIDEscaped(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','section','rss','sitemap','taxonomy','term']
+-- layouts/page.html --
+TOC: {{ .TableOfContents }}|
+Fragments: {{ .Fragments.ToHTML 2 3 false }}|
+Content: {{ .Content }}|
+-- content/p1.md --
+---
+title: p1
+---
+## Intro {id="x\"><img src=x onerror=alert(1)><a class=\""}
+## Amp {id="a&b<c>"}
+`
+
+	b := hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html",
+		`<li><a href="#x&#34;&gt;&lt;img src=x onerror=alert(1)&gt;&lt;a class=&#34;">Intro</a></li>`,
+		`<li><a href="#a&amp;b&lt;c&gt;">Amp</a></li>`,
+		`<h2 id="x&quot;&gt;&lt;img src=x onerror=alert(1)&gt;&lt;a class=&quot;">Intro</h2>`,
+	)
+	b.AssertFileContent("public/p1/index.html", "! <img src=x")
 }

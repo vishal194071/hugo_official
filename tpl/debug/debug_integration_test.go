@@ -16,7 +16,6 @@ package debug_test
 import (
 	"testing"
 
-	"github.com/bep/logg"
 	"github.com/gohugoio/hugo/hugolib"
 )
 
@@ -25,7 +24,7 @@ func TestTimer(t *testing.T) {
 -- hugo.toml --
 baseURL = "https://example.org/"
 disableKinds = ["taxonomy", "term"]
--- layouts/index.html --
+-- layouts/home.html --
 {{ range seq 5 }}
 {{ $t := debug.Timer "foo" }}
 {{ seq 1 1000 }}
@@ -33,13 +32,7 @@ disableKinds = ["taxonomy", "term"]
 {{ end }}
 
 `
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			LogLevel:    logg.LevelInfo,
-		},
-	).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptInfo())
 
 	b.AssertLogContains("timer:  name foo count 5 duration")
 }
@@ -61,11 +54,11 @@ date: 2012-03-15
 title: "The First"
 tags: ["a", "b"]
 ---
--- layouts/_default/list.html --
+-- layouts/list.html --
 Dump: {{ debug.Dump . | safeHTML }}
 Dump Site: {{ debug.Dump site }}
 Dum site.Taxonomies: {{ debug.Dump site.Taxonomies | safeHTML }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 Dump: {{ debug.Dump . | safeHTML }}
 
 

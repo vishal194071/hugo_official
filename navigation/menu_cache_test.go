@@ -14,6 +14,7 @@
 package navigation
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -39,8 +40,8 @@ func TestMenuCache(t *testing.T) {
 		m[0].MenuConfig.Title = "changed"
 	}
 
-	var o1 uint64
-	var o2 uint64
+	var o1 atomic.Uint64
+	var o2 atomic.Uint64
 
 	var wg sync.WaitGroup
 
@@ -54,28 +55,26 @@ func TestMenuCache(t *testing.T) {
 	}
 
 	for range 100 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for k, menu := range testMenuSets {
 				l1.Lock()
 				m, ca := c1.get("k1", nil, menu)
-				c.Assert(ca, qt.Equals, !atomic.CompareAndSwapUint64(&o1, uint64(k), uint64(k+1)))
+				c.Assert(ca, qt.Equals, !o1.CompareAndSwap(uint64(k), uint64(k+1)))
 				l1.Unlock()
 				m2, c2 := c1.get("k1", nil, m)
 				c.Assert(c2, qt.Equals, true)
-				c.Assert(menuEqual(m, m2), qt.Equals, true)
-				c.Assert(menuEqual(m, menu), qt.Equals, true)
+				c.Assert(slices.Equal(m, m2), qt.Equals, true)
+				c.Assert(slices.Equal(m, menu), qt.Equals, true)
 				c.Assert(m, qt.Not(qt.IsNil))
 
 				l2.Lock()
 				m3, c3 := c1.get("k2", changeFirst, menu)
-				c.Assert(c3, qt.Equals, !atomic.CompareAndSwapUint64(&o2, uint64(k), uint64(k+1)))
+				c.Assert(c3, qt.Equals, !o2.CompareAndSwap(uint64(k), uint64(k+1)))
 				l2.Unlock()
 				c.Assert(m3, qt.Not(qt.IsNil))
 				c.Assert("changed", qt.Equals, m3[0].Title)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

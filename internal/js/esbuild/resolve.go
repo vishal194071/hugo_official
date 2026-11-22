@@ -18,44 +18,67 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/types/css"
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/identity"
 	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/resource"
+	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/sass"
 	"github.com/spf13/afero"
-	"slices"
 )
 
 const (
 	NsHugoImport            = "ns-hugo-imp"
 	NsHugoImportResolveFunc = "ns-hugo-imp-func"
 	nsHugoParams            = "ns-hugo-params"
+	nsHugoVars              = "ns-hugo-vars"
 	pathHugoConfigParams    = "@params/config"
 
 	stdinImporter = "<stdin>"
 )
 
-var hugoNamespaces = []string{NsHugoImport, NsHugoImportResolveFunc, nsHugoParams}
+var hugoNamespaces = []string{NsHugoImport, NsHugoImportResolveFunc, nsHugoParams, nsHugoVars}
 
 const (
 	PrefixHugoVirtual = "__hu_v"
 	PrefixHugoMemory  = "__hu_m"
 )
 
-var extensionToLoaderMap = map[string]api.Loader{
+var extensionToLoaderMapJS = map[string]api.Loader{
 	".js":   api.LoaderJS,
 	".mjs":  api.LoaderJS,
 	".cjs":  api.LoaderJS,
 	".jsx":  api.LoaderJSX,
 	".ts":   api.LoaderTS,
 	".tsx":  api.LoaderTSX,
-	".css":  api.LoaderCSS,
 	".json": api.LoaderJSON,
 	".txt":  api.LoaderText,
+	".css":  api.LoaderCSS,
+}
+
+var extensionToLoaderMapCSS = map[string]api.Loader{
+	".css": api.LoaderCSS,
+
+	// Common static file extensions that should use the file loader in CSS builds.
+	".png":  api.LoaderFile,
+	".jpg":  api.LoaderFile,
+	".jpeg": api.LoaderFile,
+	".gif":  api.LoaderFile,
+	".svg":  api.LoaderFile,
+	".webp": api.LoaderFile,
+	".avif": api.LoaderFile,
+
+	".woff":  api.LoaderFile,
+	".woff2": api.LoaderFile,
+	".ttf":   api.LoaderFile,
+	".eot":   api.LoaderFile,
+	".otf":   api.LoaderFile,
 }
 
 // This is a common sub-set of ESBuild's default extensions.
@@ -93,6 +116,7 @@ func ResolveComponent[T any](impPath string, resolve func(string) (v T, found, i
 	}
 
 	base := filepath.Base(impPath)
+
 	if base == "index" {
 		// try index.esm.js etc.
 		v, found, _ = findFirst(impPath + ".esm")
@@ -132,21 +156,29 @@ func ResolveResource(impPath string, resourceGetter resource.ResourceGetter) (r 
 }
 
 func newFSResolver(fs afero.Fs) *fsResolver {
-	return &fsResolver{fs: fs, resolved: maps.NewCache[string, *hugofs.FileMeta]()}
+	return &fsResolver{fs: fs, resolved: hmaps.NewCache[string, *hugofs.FileMeta]()}
 }
 
 type fsResolver struct {
 	fs       afero.Fs
-	resolved *maps.Cache[string, *hugofs.FileMeta]
+	resolved *hmaps.Cache[string, *hugofs.FileMeta]
 }
 
-func (r *fsResolver) resolveComponent(impPath string) *hugofs.FileMeta {
+func (r *fsResolver) resolveComponent(impPath string, direct bool) *hugofs.FileMeta {
 	v, _ := r.resolved.GetOrCreate(impPath, func() (*hugofs.FileMeta, error) {
 		resolve := func(name string) (*hugofs.FileMeta, bool, bool) {
 			if fi, err := r.fs.Stat(name); err == nil {
 				return fi.(hugofs.FileMetaInfo).Meta(), true, fi.IsDir()
 			}
 			return nil, false, false
+		}
+		if direct {
+			// Only resolve the path as is, without trying to add extensions etc.
+			v, found, isDir := resolve(impPath)
+			if found && !isDir {
+				return v, nil
+			}
+			return nil, nil
 		}
 		v, _ := ResolveComponent(impPath, resolve)
 		return v, nil
@@ -159,6 +191,8 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 
 	resolveImport := func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 		impPath := args.Path
+		isCSSToken := args.Kind == api.ResolveCSSImportRule || args.Kind == api.ResolveCSSURLToken
+
 		shimmed := false
 		if opts.Shims != nil {
 			override, found := opts.Shims[impPath]
@@ -182,12 +216,12 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 		}
 
 		importer := args.Importer
-
 		isStdin := importer == stdinImporter
 		var relDir string
+
 		if !isStdin {
-			if strings.HasPrefix(importer, PrefixHugoVirtual) {
-				relDir = filepath.Dir(strings.TrimPrefix(importer, PrefixHugoVirtual))
+			if after, ok := strings.CutPrefix(importer, PrefixHugoVirtual); ok {
+				relDir = filepath.Dir(after)
 			} else {
 				rel, found := fs.MakePathRelative(importer, true)
 
@@ -208,23 +242,58 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 			relDir = opts.SourceDir
 		}
 
-		// Imports not starting with a "." is assumed to live relative to /assets.
-		// Hugo makes no assumptions about the directory structure below /assets.
-		if relDir != "" && strings.HasPrefix(impPath, ".") {
-			impPath = filepath.Join(relDir, impPath)
+		var pathsToTry []string
+
+		if relDir != "" {
+			// For JS imports not starting with a "." is assumed to live relative to /assets.
+			// Hugo makes no assumptions about the directory structure below /assets.
+			if strings.HasPrefix(impPath, ".") {
+				pathsToTry = append(pathsToTry, filepath.Join(relDir, impPath))
+			} else if isCSSToken && !strings.HasPrefix(impPath, "/") {
+				// Follow the logic of both ESBuild and WebKit for CSS @import and url() tokens.
+				// First try the relativ path, then the assets relative path.
+				// See https://github.com/evanw/esbuild/issues/469
+				pathsToTry = append(pathsToTry, filepath.Join(relDir, impPath), impPath)
+			} else {
+				// Try only the assets relative path.
+				pathsToTry = append(pathsToTry, impPath)
+			}
 		}
 
-		m := assetsResolver.resolveComponent(impPath)
+		if opts.ImportOnResolveFunc != nil {
+			// Relative imports resolved against the importing file's directory,
+			// e.g. "./foo.css". The path as written was tried above.
+			for _, p := range pathsToTry {
+				if p == impPath {
+					continue
+				}
+				if s := opts.ImportOnResolveFunc(filepath.ToSlash(p), args); s != "" {
+					return api.OnResolveResult{Path: s, Namespace: NsHugoImportResolveFunc}, nil
+				}
+			}
+		}
+
+		var m *hugofs.FileMeta
+		for _, p := range pathsToTry {
+			m = assetsResolver.resolveComponent(p, isCSSToken)
+			if m != nil {
+				break
+			}
+		}
 
 		if m != nil {
 			depsManager.AddIdentity(m.PathInfo)
 
-			// Store the source root so we can create a jsconfig.json
-			// to help IntelliSense when the build is done.
-			// This should be a small number of elements, and when
-			// in server mode, we may get stale entries on renames etc.,
-			// but that shouldn't matter too much.
-			rs.JSConfigBuilder.AddSourceRoot(m.SourceRoot)
+			//  jsconfig.json path mapping has no effect for CSS imports, so skip those.
+			if !isCSSToken {
+				// Store the source root so we can create a jsconfig.json
+				// to help IntelliSense when the build is done.
+				// This should be a small number of elements, and when
+				// in server mode, we may get stale entries on renames etc.,
+				// but that shouldn't matter too much.
+				rs.JSConfigBuilder.AddSourceRoot(m.SourceRoot)
+			}
+
 			return api.OnResolveResult{Path: m.Filename, Namespace: NsHugoImport}, nil
 		}
 
@@ -238,6 +307,16 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 			build.OnResolve(api.OnResolveOptions{Filter: `.*`},
 				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
 					return resolveImport(args)
+				})
+			// Files not found in /assets are resolved and read by ESBuild, which follows
+			// symlinks and knows nothing about the project boundary.
+			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: "file"},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					if err := rs.ExecHelper.CheckReadPath(args.Path); err != nil {
+						return api.OnLoadResult{}, err
+					}
+					// Let ESBuild load it.
+					return api.OnLoadResult{}, nil
 				})
 			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: NsHugoImport},
 				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
@@ -258,7 +337,10 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 				})
 			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: NsHugoImportResolveFunc},
 				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-					c := opts.ImportOnLoadFunc(args)
+					c, err := opts.ImportOnLoadFunc(args)
+					if err != nil {
+						return api.OnLoadResult{}, err
+					}
 					if c == "" {
 						return api.OnLoadResult{}, fmt.Errorf("ImportOnLoadFunc failed to resolve %q", args.Path)
 					}
@@ -319,5 +401,58 @@ func createBuildPlugins(rs *resources.Spec, assetsResolver *fsResolver, depsMana
 		},
 	}
 
-	return []api.Plugin{importResolver, paramsPlugin}, nil
+	varsPlugin := api.Plugin{
+		Name: "hugo-vars-plugin",
+		Setup: func(build api.PluginBuild) {
+			build.OnResolve(api.OnResolveOptions{Filter: `^hugo:vars(/|$)`},
+				func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					return api.OnResolveResult{
+						Path:      args.Path,
+						Namespace: nsHugoVars,
+					}, nil
+				})
+			build.OnLoad(api.OnLoadOptions{Filter: `.*`, Namespace: nsHugoVars},
+				func(args api.OnLoadArgs) (api.OnLoadResult, error) {
+					subPath, _ := sass.HugoVarsSubPath(args.Path)
+					return api.OnLoadResult{
+						Contents: createCSSVarsStyleSheet(opts.Vars, subPath),
+						Loader:   api.LoaderCSS,
+					}, nil
+				})
+		},
+	}
+
+	return []api.Plugin{importResolver, paramsPlugin, varsPlugin}, nil
+}
+
+// createCSSVarsStyleSheet creates a CSS custom properties stylesheet from the given vars.
+// The result is a :root block with CSS custom properties. If subPath is non-empty,
+// vars is navigated using the slash-separated path before emitting properties; nested
+// map values are skipped at the resolved level.
+func createCSSVarsStyleSheet(vars map[string]any, subPath string) *string {
+	resolved := sass.ResolveVars(vars, subPath)
+	if len(resolved) == 0 {
+		// We need to return a non-nil pointer to an empty string to avoid ESBuild treating this as a missing file.
+		s := ""
+		return &s
+	}
+
+	var varsSlice []string
+	for k, v := range resolved {
+		if !strings.HasPrefix(k, "--") {
+			k = "--" + k
+		}
+
+		switch v.(type) {
+		case css.QuotedString:
+			// E.g. Arial, sans-serif.
+			varsSlice = append(varsSlice, fmt.Sprintf("  %s: %q;", k, v))
+		default:
+			varsSlice = append(varsSlice, fmt.Sprintf("  %s: %v;", k, v))
+		}
+	}
+	sort.Strings(varsSlice)
+	s := ":root {\n" + strings.Join(varsSlice, "\n") + "\n}\n"
+
+	return &s
 }

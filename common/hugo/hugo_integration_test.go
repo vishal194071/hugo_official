@@ -35,7 +35,7 @@ baseURL = 'https://en.example.org/'
 ---
 title: home
 ---
--- layouts/index.html --
+-- layouts/home.html --
 multilingual={{ hugo.IsMultilingual }}
 multihost={{ hugo.IsMultihost }}
   `
@@ -74,4 +74,40 @@ multihost={{ hugo.IsMultihost }}
 		"multilingual=false",
 		"multihost=false",
 	)
+}
+
+func TestHugoSites(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+defaultContentLanguage = 'fr'
+defaultContentLanguageInSubdir = true
+defaultContentVersionInSubdir = true
+defaultContentRoleInSubdir = true
+[languages]
+[languages.en]
+weight = 1
+[languages.fr]
+weight = 2
+[languages.de]
+weight = 3
+[roles]
+[roles.guest]
+weight = 1
+[roles.member]
+weight = 2
+[versions]
+[versions.'v1.0.0']
+weight = 1
+[versions.'v2.0.0']
+weight = 2
+-- layouts/home.html --
+{{ range hugo.Sites }}{{ .Language.Name }}-{{ .Role.Name }}-{{ .Version.Name }}|{{ end }}
+  `
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/guest/v1.0.0/en/index.html", "en-guest-v1.0.0|en-member-v1.0.0|en-guest-v2.0.0|en-member-v2.0.0|fr-guest-v1.0.0|fr-member-v1.0.0|fr-guest-v2.0.0|fr-member-v2.0.0|de-guest-v1.0.0|de-member-v1.0.0|de-guest-v2.0.0|de-member-v2.0.0|")
 }

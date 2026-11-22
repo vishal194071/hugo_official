@@ -30,6 +30,7 @@ import (
 	"github.com/gohugoio/hugo/hugolib/filesystems"
 	"github.com/gohugoio/hugo/resources"
 	"github.com/gohugoio/hugo/resources/resource"
+	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/sass"
 	"github.com/spf13/afero"
 
 	"github.com/mitchellh/mapstructure"
@@ -99,7 +100,7 @@ type Client struct {
 
 func (c *Client) ToCSS(res resources.ResourceTransformer, args map[string]any) (resource.Resource, error) {
 	if c.transpiler == nil {
-		return res.Transform(resources.NewFeatureNotAvailableTransformer(transformationName, args))
+		return res.Transform(resources.NewExecNotFoundTransformer(transformationName, args))
 	}
 	return res.Transform(&transform{c: c, optsm: args})
 }
@@ -157,6 +158,10 @@ type Options struct {
 	//     $color: vars.$color;
 	Vars map[string]any
 
+	// User provided import context. If set, imports are looked up here first,
+	// then in the assets filesystem.
+	ImportContext any
+
 	// Deprecations IDs in this slice will be silenced.
 	// The IDs can be found in the Dart Sass log output, e.g. "import" in
 	//    WARN  Dart Sass: DEPRECATED [import].
@@ -177,6 +182,8 @@ func decodeOptions(m map[string]any) (opts Options, err error) {
 	if opts.TargetPath != "" {
 		opts.TargetPath = paths.ToSlashTrimLeading(opts.TargetPath)
 	}
+
+	opts.Vars = sass.PrepareVars(opts.Vars)
 
 	return
 }

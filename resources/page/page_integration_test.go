@@ -21,7 +21,7 @@ import (
 
 func TestGroupByLocalizedDate(t *testing.T) {
 	files := `
--- config.toml --
+-- hugo.toml --
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
 [languages]
@@ -54,17 +54,12 @@ date: "2020-01-01"
 title: "Post 2"
 date: "2020-02-01"
 ---
--- layouts/index.html --
+-- layouts/home.html --
 {{ range $k, $v := site.RegularPages.GroupByDate "January, 2006" }}{{ $k }}|{{ $v.Key }}|{{ $v.Pages }}{{ end }}
 
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-		}).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs())
 
 	b.AssertFileContent("public/en/index.html", "0|February, 2020|Pages(1)1|January, 2020|Pages(1)")
 	b.AssertFileContent("public/fr/index.html", "0|février, 2020|Pages(1)1|janvier, 2020|Pages(1)")
@@ -72,7 +67,7 @@ date: "2020-02-01"
 
 func TestPagesSortCollation(t *testing.T) {
 	files := `
--- config.toml --
+-- hugo.toml --
 defaultContentLanguage = 'en'
 defaultContentLanguageInSubdir = true
 [languages]
@@ -104,7 +99,7 @@ title: "alpha"
 date: "2020-01-01"
 param1: "éclair"
 ---
--- layouts/index.html --
+-- layouts/home.html --
 ByTitle: {{ range site.RegularPages.ByTitle }}{{ .Title }}|{{ end }}
 ByLinkTitle: {{ range site.RegularPages.ByLinkTitle }}{{ .Title }}|{{ end }}
 ByParam: {{ range site.RegularPages.ByParam "param1" }}{{ .Params.param1 }}|{{ end }}
@@ -117,12 +112,7 @@ ByWeight: {{ range site.RegularPages.ByWeight }}{{ .Title }}|{{ end }}
 
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-		}).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs())
 
 	b.AssertFileContent("public/en/index.html", `
 ByTitle: alpha|émotion|zulu|
@@ -159,7 +149,7 @@ title: "D"
 slug: "d"
 ---
 D
--- layouts/_default/single.html --
+-- layouts/single.html --
 RelPermalink: {{ .RelPermalink }}
 
 `

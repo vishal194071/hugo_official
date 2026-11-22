@@ -36,9 +36,7 @@ var _ renderer.SetOptioner = (*hookedRenderer)(nil)
 func newLinkRenderer(cfg goldmark_config.Config) renderer.NodeRenderer {
 	r := &hookedRenderer{
 		linkifyProtocol: []byte(cfg.Extensions.LinkifyProtocol),
-		Config: html.Config{
-			Writer: html.DefaultWriter,
-		},
+		Writer:          html.DefaultWriter,
 	}
 	return r
 }
@@ -48,8 +46,7 @@ func newLinks(cfg goldmark_config.Config) goldmark.Extender {
 }
 
 type linkContext struct {
-	page        any
-	pageInner   any
+	hooks.BaseContext
 	destination string
 	title       string
 	text        hstring.HTML
@@ -59,14 +56,6 @@ type linkContext struct {
 
 func (ctx linkContext) Destination() string {
 	return ctx.destination
-}
-
-func (ctx linkContext) Page() any {
-	return ctx.page
-}
-
-func (ctx linkContext) PageInner() any {
-	return ctx.pageInner
 }
 
 func (ctx linkContext) Text() hstring.HTML {
@@ -83,7 +72,6 @@ func (ctx linkContext) Title() string {
 
 type imageLinkContext struct {
 	linkContext
-	ordinal int
 	isBlock bool
 }
 
@@ -91,26 +79,13 @@ func (ctx imageLinkContext) IsBlock() bool {
 	return ctx.isBlock
 }
 
-func (ctx imageLinkContext) Ordinal() int {
-	return ctx.ordinal
-}
-
 type headingContext struct {
-	page      any
-	pageInner any
+	hooks.BaseContext
 	level     int
 	anchor    string
 	text      hstring.HTML
 	plainText string
 	*attributes.AttributesHolder
-}
-
-func (ctx headingContext) Page() any {
-	return ctx.page
-}
-
-func (ctx headingContext) PageInner() any {
-	return ctx.pageInner
 }
 
 func (ctx headingContext) Level() int {
@@ -188,23 +163,17 @@ func (r *hookedRenderer) renderImage(w util.BufWriter, source []byte, node ast.N
 	// internal attributes before rendering.
 	attrs := r.filterInternalAttributes(n.Attributes())
 
-	page, pageInner := render.GetPageAndPageInner(ctx)
-
 	err := lr.RenderLink(
 		ctx.RenderContext().Ctx,
 		w,
 		imageLinkContext{
-			linkContext: linkContext{
-				page:             page,
-				pageInner:        pageInner,
-				destination:      string(n.Destination),
-				title:            string(n.Title),
-				text:             hstring.HTML(text),
-				plainText:        render.TextPlain(n, source),
-				AttributesHolder: attributes.New(attrs, attributes.AttributesOwnerGeneral),
-			},
-			ordinal: ordinal,
-			isBlock: isBlock,
+			BaseContext:      render.NewBaseContext(ctx, lr, node, source, ordinal),
+			destination:      string(n.Destination),
+			title:            string(n.Title),
+			text:             hstring.HTML(text),
+			plainText:        render.TextPlain(n, source),
+			AttributesHolder: attributes.New(attrs, attributes.AttributesOwnerGeneral),
+			isBlock:          isBlock,
 		},
 	)
 
@@ -230,8 +199,9 @@ func (r *hookedRenderer) renderImageDefault(w util.BufWriter, source []byte, nod
 	}
 	n := node.(*ast.Image)
 	_, _ = w.WriteString("<img src=\"")
-	if r.Unsafe || !html.IsDangerousURL(n.Destination) {
-		_, _ = w.Write(util.EscapeHTML(util.URLEscape(n.Destination, true)))
+	dest := util.URLEscape(n.Destination, true)
+	if r.Unsafe || !html.IsDangerousURL(dest) {
+		_, _ = w.Write(util.EscapeHTML(dest))
 	}
 	_, _ = w.WriteString(`" alt="`)
 	r.renderTexts(w, source, n)
@@ -276,15 +246,13 @@ func (r *hookedRenderer) renderLink(w util.BufWriter, source []byte, node ast.No
 	}
 
 	text := ctx.PopRenderedString()
-
-	page, pageInner := render.GetPageAndPageInner(ctx)
+	ordinal := ctx.GetAndIncrementOrdinal(node.Kind())
 
 	err := lr.RenderLink(
 		ctx.RenderContext().Ctx,
 		w,
 		linkContext{
-			page:             page,
-			pageInner:        pageInner,
+			BaseContext:      render.NewBaseContext(ctx, lr, node, source, ordinal),
 			destination:      string(n.Destination),
 			title:            string(n.Title),
 			text:             hstring.HTML(text),
@@ -375,8 +343,9 @@ func (r *hookedRenderer) renderLinkDefault(w util.BufWriter, source []byte, node
 	n := node.(*ast.Link)
 	if entering {
 		_, _ = w.WriteString("<a href=\"")
-		if r.Unsafe || !html.IsDangerousURL(n.Destination) {
-			_, _ = w.Write(util.EscapeHTML(util.URLEscape(n.Destination, true)))
+		dest := util.URLEscape(n.Destination, true)
+		if r.Unsafe || !html.IsDangerousURL(dest) {
+			_, _ = w.Write(util.EscapeHTML(dest))
 		}
 		_ = w.WriteByte('"')
 		if n.Title != nil {
@@ -418,14 +387,13 @@ func (r *hookedRenderer) renderAutoLink(w util.BufWriter, source []byte, node as
 		url = "mailto:" + url
 	}
 
-	page, pageInner := render.GetPageAndPageInner(ctx)
+	ordinal := ctx.GetAndIncrementOrdinal(n.Kind())
 
 	err := lr.RenderLink(
 		ctx.RenderContext().Ctx,
 		w,
 		linkContext{
-			page:             page,
-			pageInner:        pageInner,
+			BaseContext:      render.NewBaseContext(ctx, lr, node, source, ordinal),
 			destination:      url,
 			text:             hstring.HTML(label),
 			plainText:        label,
@@ -445,12 +413,15 @@ func (r *hookedRenderer) renderAutoLinkDefault(w util.BufWriter, source []byte, 
 	}
 
 	_, _ = w.WriteString(`<a href="`)
-	url := r.autoLinkURL(n, source)
+	url := util.URLEscape(r.autoLinkURL(n, source), false)
+
 	label := n.Label(source)
 	if n.AutoLinkType == ast.AutoLinkEmail && !bytes.HasPrefix(bytes.ToLower(url), []byte("mailto:")) {
 		_, _ = w.WriteString("mailto:")
 	}
-	_, _ = w.Write(util.EscapeHTML(util.URLEscape(url, false)))
+	if r.Unsafe || !html.IsDangerousURL(url) {
+		_, _ = w.Write(util.EscapeHTML(url))
+	}
 	if n.Attributes() != nil {
 		_ = w.WriteByte('"')
 		html.RenderAttributes(w, n, html.LinkAttributeFilter)
@@ -503,15 +474,13 @@ func (r *hookedRenderer) renderHeading(w util.BufWriter, source []byte, node ast
 	if anchori, ok := n.AttributeString("id"); ok {
 		anchor, _ = anchori.([]byte)
 	}
-
-	page, pageInner := render.GetPageAndPageInner(ctx)
+	ordinal := ctx.GetAndIncrementOrdinal(n.Kind())
 
 	err := hr.RenderHeading(
 		ctx.RenderContext().Ctx,
 		w,
 		headingContext{
-			page:             page,
-			pageInner:        pageInner,
+			BaseContext:      render.NewBaseContext(ctx, hr, node, source, ordinal),
 			level:            n.Level,
 			anchor:           string(anchor),
 			text:             hstring.HTML(text),

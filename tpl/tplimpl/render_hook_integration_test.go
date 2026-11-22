@@ -27,10 +27,10 @@ func TestEmbeddedLinkRenderHook(t *testing.T) {
 -- hugo.toml --
 disableKinds = ['rss','sitemap','taxonomy','term']
 [markup.goldmark.renderHooks.link]
-enableDefault = true
--- layouts/_default/list.html --
+useEmbedded = 'always'
+-- layouts/list.html --
 {{ .Content }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 -- assets/a.txt --
 irrelevant
@@ -143,7 +143,7 @@ func TestEmbeddedImageRenderHook(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = 'https://example.org/dir/'
 disableKinds = ['home','rss','section','sitemap','taxonomy','term']
 [markup.goldmark.extensions.typographer]
@@ -153,7 +153,7 @@ wrapStandAloneImageWithinParagraph = false
 [markup.goldmark.parser.attribute]
 block = false
 [markup.goldmark.renderHooks.image]
-enableDefault = true
+useEmbedded = 'always'
 -- content/p1/index.md --
 ![]()
 
@@ -168,7 +168,7 @@ enableDefault = true
 {id="\"><script>alert()</script>"}
 -- content/p1/pixel.png --
 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content }}
 `
 
@@ -253,37 +253,29 @@ custom image render hook: {{ .Text }}|{{ .Destination }}
 		id             string // the test id
 		isMultilingual bool   // whether the site is multilingual single-host
 		hasCustomHooks bool   // whether the site has custom link and image render hooks
-		keyValuePair   string // the enableDefault (deprecated in v0.148.0) or useEmbedded key-value pair
+		keyValuePair   string // the useEmbedded key-value pair
 		want           string // the expected content of public/s1/p1/index.html
 	}{
 		{"01", false, false, "", wantGoldmark},                         // monolingual
-		{"02", false, false, "enableDefault = false", wantGoldmark},    // monolingual, enableDefault = false
-		{"03", false, false, "enableDefault = true", wantEmbedded},     // monolingual, enableDefault = true
-		{"04", false, false, "useEmbedded = 'always'", wantEmbedded},   // monolingual, useEmbedded = 'always'
-		{"05", false, false, "useEmbedded = 'auto'", wantGoldmark},     // monolingual, useEmbedded = 'auto'
-		{"06", false, false, "useEmbedded = 'fallback'", wantEmbedded}, // monolingual, useEmbedded = 'fallback'
-		{"07", false, false, "useEmbedded = 'never'", wantGoldmark},    // monolingual, useEmbedded = 'never'
-		{"08", false, true, "", wantCustom},                            // monolingual, with custom hooks
-		{"09", false, true, "enableDefault = false", wantCustom},       // monolingual, with custom hooks, enableDefault = false
-		{"10", false, true, "enableDefault = true", wantCustom},        // monolingual, with custom hooks, enableDefault = true
-		{"11", false, true, "useEmbedded = 'always'", wantEmbedded},    // monolingual, with custom hooks, useEmbedded = 'always'
-		{"12", false, true, "useEmbedded = 'auto'", wantCustom},        // monolingual, with custom hooks, useEmbedded = 'auto'
-		{"13", false, true, "useEmbedded = 'fallback'", wantCustom},    // monolingual, with custom hooks, useEmbedded = 'fallback'
-		{"14", false, true, "useEmbedded = 'never'", wantCustom},       // monolingual, with custom hooks, useEmbedded = 'never'
-		{"15", true, false, "", wantEmbedded},                          // multilingual
-		{"16", true, false, "enableDefault = false", wantGoldmark},     // multilingual, enableDefault = false
-		{"17", true, false, "enableDefault = true", wantEmbedded},      // multilingual, enableDefault = true
-		{"18", true, false, "useEmbedded = 'always'", wantEmbedded},    // multilingual, useEmbedded = 'always'
-		{"19", true, false, "useEmbedded = 'auto'", wantEmbedded},      // multilingual, useEmbedded = 'auto'
-		{"20", true, false, "useEmbedded = 'fallback'", wantEmbedded},  // multilingual, useEmbedded = 'fallback'
-		{"21", true, false, "useEmbedded = 'never'", wantGoldmark},     // multilingual, useEmbedded = 'never'
-		{"22", true, true, "", wantCustom},                             // multilingual, with custom hooks
-		{"23", true, true, "enableDefault = false", wantCustom},        // multilingual, with custom hooks, enableDefault = false
-		{"24", true, true, "enableDefault = true", wantCustom},         // multilingual, with custom hooks, enableDefault = true
-		{"25", true, true, "useEmbedded = 'always'", wantEmbedded},     // multilingual, with custom hooks, useEmbedded = 'always'
-		{"26", true, true, "useEmbedded = 'auto'", wantCustom},         // multilingual, with custom hooks, useEmbedded = 'auto'
-		{"27", true, true, "useEmbedded = 'fallback'", wantCustom},     // multilingual, with custom hooks, useEmbedded = 'fallback'
-		{"28", true, true, "useEmbedded = 'never'", wantCustom},        // multilingual, with custom hooks, useEmbedded = 'never'
+		{"02", false, false, "useEmbedded = 'always'", wantEmbedded},   // monolingual, useEmbedded = 'always'
+		{"03", false, false, "useEmbedded = 'auto'", wantGoldmark},     // monolingual, useEmbedded = 'auto'
+		{"04", false, false, "useEmbedded = 'fallback'", wantEmbedded}, // monolingual, useEmbedded = 'fallback'
+		{"05", false, false, "useEmbedded = 'never'", wantGoldmark},    // monolingual, useEmbedded = 'never'
+		{"06", false, true, "", wantCustom},                            // monolingual, with custom hooks
+		{"07", false, true, "useEmbedded = 'always'", wantEmbedded},    // monolingual, with custom hooks, useEmbedded = 'always'
+		{"08", false, true, "useEmbedded = 'auto'", wantCustom},        // monolingual, with custom hooks, useEmbedded = 'auto'
+		{"09", false, true, "useEmbedded = 'fallback'", wantCustom},    // monolingual, with custom hooks, useEmbedded = 'fallback'
+		{"10", false, true, "useEmbedded = 'never'", wantCustom},       // monolingual, with custom hooks, useEmbedded = 'never'
+		{"11", true, false, "", wantEmbedded},                          // multilingual
+		{"12", true, false, "useEmbedded = 'always'", wantEmbedded},    // multilingual, useEmbedded = 'always'
+		{"13", true, false, "useEmbedded = 'auto'", wantEmbedded},      // multilingual, useEmbedded = 'auto'
+		{"14", true, false, "useEmbedded = 'fallback'", wantEmbedded},  // multilingual, useEmbedded = 'fallback'
+		{"15", true, false, "useEmbedded = 'never'", wantGoldmark},     // multilingual, useEmbedded = 'never'
+		{"16", true, true, "", wantCustom},                             // multilingual, with custom hooks
+		{"17", true, true, "useEmbedded = 'always'", wantEmbedded},     // multilingual, with custom hooks, useEmbedded = 'always'
+		{"18", true, true, "useEmbedded = 'auto'", wantCustom},         // multilingual, with custom hooks, useEmbedded = 'auto'
+		{"19", true, true, "useEmbedded = 'fallback'", wantCustom},     // multilingual, with custom hooks, useEmbedded = 'fallback'
+		{"20", true, true, "useEmbedded = 'never'", wantCustom},        // multilingual, with custom hooks, useEmbedded = 'never'
 	}
 
 	for _, tt := range tests {
@@ -303,4 +295,207 @@ custom image render hook: {{ .Text }}|{{ .Destination }}
 			b.AssertFileContent(fileToCheck, tt.want)
 		})
 	}
+}
+
+func TestRenderHookMultilingual(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+baseURL = 'https://example.org/'
+defaultContentLanguage = 'en'
+[markup.goldmark.renderHooks.image]
+useEmbedded = 'never'
+[languages.en]
+weight = 1
+[languages.tr]
+weight = 2
+-- content/p1.en.md --
+---
+title: p1
+---
+![alt](img.jpg)
+-- content/p1.tr.md --
+---
+title: p1
+---
+![alt](img.jpg)
+-- layouts/_markup/render-image.tr.html --
+TR-IMAGE
+-- layouts/_default/single.html --
+{{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/p1/index.html", "<img src=\"img.jpg\" alt=\"alt\">")
+	b.AssertFileContent("public/tr/p1/index.html", "TR-IMAGE")
+}
+
+// Hooks:
+// table
+// passthrough
+// link
+// image
+// heading
+// codeblock
+// blockquote
+func TestRenderHooksPosition(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+[markup]
+[markup.goldmark]
+[markup.goldmark.extensions]
+[markup.goldmark.extensions.passthrough]
+enable = true
+[markup.goldmark.extensions.passthrough.delimiters]
+block = [['\[', '\]'], ['$$', '$$']]
+inline = [['\(', '\)']]
+-- layouts/_markup/render-table.html --
+HOOK_CONTENT
+-- layouts/_markup/render-passthrough.html --
+HOOK_CONTENT
+-- layouts/_markup/render-link.html --
+HOOK_CONTENT
+-- layouts/_markup/render-image.html --
+HOOK_CONTENT
+-- layouts/_markup/render-heading.html --
+HOOK_CONTENT
+-- layouts/_markup/render-codeblock.html --
+HOOK_CONTENT
+-- layouts/_markup/render-blockquote.html --
+HOOK_CONTENT
+-- layouts/shortcodes/myheading.html --
+{{ $s := .Get 0 -}}
+
+
+      {{ printf "## %s" $s }}
+-- layouts/shortcodes/mylink.html --
+{{ $s := .Get 0 -}}
+
+A
+
+B
+
+  {{ printf "[%s](%s)" $s $s }}
+
+
+C
+-- layouts/single.html --
+{{ .Content }}
+-- content/p1.md --
+---
+title: "p1"
+---
+
+[p1](/p1)
+ [p2](/p2)
+7
+8
+{{% mylink "p3" %}}
+10
+11
+12
+## My Heading 2
+14
+### My Heading 3
+16
+{{% myheading "h4" %}}
+18
+## Table 1
+20
+| Month | Savings |
+| -------- | ------- |
+| January | $250 |
+| February | $80 |
+| March | $420 |
+
+> blockquote 1
+
+Foo.
+
+> blockquote 2
+
+
+### Code block
+
+§§§go
+fmt.Println("hello")
+§§§
+
+## PassThrough
+
+\[block1\]
+
+ \[block2\]
+
+This is an \(inline\) passthrough element with opening and closing inline delimiters.
+
+
+`
+
+	files = strings.ReplaceAll(files, "HOOK_CONTENT", `
+{{ $pos := .Position }}
+{{ printf "%T" . }}|{{ path.Base $pos.Filename }}|{{ printf "%d:%d" $pos.LineNumber $pos.ColumnNumber }}|{{ $.Ordinal }}|
+`)
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/p1/index.html",
+		"goldmark.linkContext|p1.md|5:1|0|",
+		"goldmark.linkContext|p1.md|6:2|1|",
+		"goldmark.linkContext|p1.md|9:1|2|",
+		"goldmark.headingContext|p1.md|13:1|0|",
+		"goldmark.headingContext|p1.md|15:1|1|",
+		"goldmark.headingContext|p1.md|17:1|2|",
+		"tables.tableContext|p1.md|20:1|0|",
+		"blockquotes.blockquoteContext|p1.md|27:1|0|",
+		"blockquotes.blockquoteContext|p1.md|31:1|1|",
+		"codeblocks.codeBlockContext|p1.md|36:1|0|",
+		"passthrough.passthroughContext|p1.md|42:1|0|",
+		"passthrough.passthroughContext|p1.md|44:2|1|",
+		"passthrough.passthroughContext|p1.md|46:12|2|",
+	)
+}
+
+func TestRenderHooksPositionRenderString(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+-- assets/a.txt --
+
+## Heading
+
+[link](b.txt)
+
+-- assets/b.txt --
+{{% myshortcode %}}
+{{< myshortcode >}}
+
+
+
+  [link](a.txt)
+-- layouts/shortcodes/myshortcode.html --
+My Shortcode.
+# This is a heading in the shortcode.
+Some text.
+-- layouts/_markup/render-link.html --
+{{ $pos := .Position }}
+{{ printf "%T" . }}|{{ path.Join $pos.Filename }}|{{ printf "%d:%d" $pos.LineNumber $pos.ColumnNumber }}|{{ $.Ordinal }}|
+-- layouts/all.html --
+{{ $a := resources.Get "a.txt" }}
+a: {{ .RenderString $a.Content }}
+b: {{ .RenderString (resources.Get "b.txt").Content }}
+-- content/p1.md --
+
+
+`
+
+	b := hugolib.Test(t, files)
+	b.AssertFileContent("public/p1/index.html",
+		"/content/p1.md (rendered from string)|4:1|0|",
+		"/content/p1.md (rendered from string)|6:3|0|",
+	)
 }

@@ -30,7 +30,6 @@ type Config struct {
 	Disqus          Disqus
 	GoogleAnalytics GoogleAnalytics
 	Instagram       Instagram
-	Twitter         Twitter // deprecated in favor of X in v0.141.0
 	Vimeo           Vimeo
 	YouTube         YouTube
 	X               X
@@ -56,19 +55,6 @@ type Instagram struct {
 
 	// If simple mode is enabled, a static and no-JS version of the Instagram
 	// image card will be built.
-	Simple bool
-}
-
-// Twitter holds the privacy configuration settings related to the Twitter shortcode.
-// Deprecated in favor of X in v0.141.0.
-type Twitter struct {
-	Service `mapstructure:",squash"`
-
-	// When set to true, the Tweet and its embedded page on your site are not used
-	// for purposes that include personalized suggestions and personalized ads.
-	EnableDNT bool
-
-	// If simple mode is enabled, a static and no-JS version of the Tweet will be built.
 	Simple bool
 }
 
@@ -112,12 +98,8 @@ type X struct {
 
 // DecodeConfig creates a privacy Config from a given Hugo configuration.
 func DecodeConfig(cfg config.Provider) (pc Config, err error) {
-	if !cfg.IsSet(privacyConfigKey) {
-		return
-	}
-
+	pc.GoogleAnalytics.RespectDoNotTrack = true
 	m := cfg.GetStringMap(privacyConfigKey)
-
 	err = mapstructure.WeakDecode(m, &pc)
 
 	return

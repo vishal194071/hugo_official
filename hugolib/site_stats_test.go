@@ -1,4 +1,4 @@
-// Copyright 2017 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package hugolib
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gohugoio/hugo/helpers"
@@ -28,7 +29,9 @@ func TestSiteStats(t *testing.T) {
 
 	c := qt.New(t)
 
-	siteConfig := `
+	var files strings.Builder
+	files.WriteString(`
+-- hugo.toml --
 baseURL = "http://example.com/blog"
 
 defaultContentLanguage = "nn"
@@ -38,16 +41,24 @@ pagerSize = 1
 
 [languages]
 [languages.nn]
-languageName = "Nynorsk"
+label = "Nynorsk"
 weight = 1
 title = "Hugo på norsk"
 
 [languages.en]
-languageName = "English"
+label = "English"
 weight = 2
 title = "Hugo in English"
+-- layouts/single.html --
+Single|{{ .Title }}|{{ .Content }}
+{{ $img1 := resources.Get "myimage1.png" }}
+{{ $img1 = $img1.Fit "100x100" }}
+-- layouts/list.html --
+List|{{ .Title }}|Pages: {{ .Paginator.TotalPages }}|{{ .Content }}
+-- layouts/terms.html --
+Terms List|{{ .Title }}|{{ .Content }}
 
-`
+`)
 
 	pageTemplate := `---
 title: "T%d"
@@ -60,27 +71,19 @@ aliases: [/Ali%d]
 # Doc
 `
 
-	b := newTestSitesBuilder(t).WithConfigFile("toml", siteConfig)
-
-	b.WithTemplates(
-		"_default/single.html", "Single|{{ .Title }}|{{ .Content }}",
-		"_default/list.html", `List|{{ .Title }}|Pages: {{ .Paginator.TotalPages }}|{{ .Content }}`,
-		"_default/terms.html", "Terms List|{{ .Title }}|{{ .Content }}",
-	)
-
 	for i := range 2 {
 		for j := range 2 {
 			pageID := i + j + 1
-			b.WithContent(fmt.Sprintf("content/sect/p%d.md", pageID),
-				fmt.Sprintf(pageTemplate, pageID, fmt.Sprintf("- tag%d", j), fmt.Sprintf("- category%d", j), pageID))
+			files.WriteString(fmt.Sprintf("\n-- content/p%d.md --\n", pageID))
+			files.WriteString(fmt.Sprintf(pageTemplate, pageID, fmt.Sprintf("- tag%d", j), fmt.Sprintf("- category%d", j), pageID))
 		}
 	}
 
 	for i := range 5 {
-		b.WithContent(fmt.Sprintf("assets/image%d.png", i+1), "image")
+		files.WriteString(fmt.Sprintf("\n-- assets/myimage%d.png --\niVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", i+1))
 	}
 
-	b.Build(BuildCfg{})
+	b := Test(t, files.String())
 	h := b.H
 
 	stats := []*helpers.ProcessingStats{
@@ -91,8 +94,10 @@ aliases: [/Ali%d]
 	var buff bytes.Buffer
 
 	helpers.ProcessingStatsTable(&buff, stats...)
+	s := buff.String()
 
-	c.Assert(buff.String(), qt.Contains, "Pages            │ 21 │  7")
+	c.Assert(s, qt.Contains, "Pages            │ 19 │  7")
+	c.Assert(s, qt.Contains, "Processed images │  1 │")
 }
 
 func TestSiteLastmod(t *testing.T) {
@@ -117,7 +122,7 @@ date: 2023-03-01
 ---
 date: 2023-04-01
 ---
--- layouts/index.html --
+-- layouts/home.html --
 site.Lastmod: {{ .Site.Lastmod.Format "2006-01-02" }}
 home.Lastmod: {{ site.Home.Lastmod.Format "2006-01-02" }}
 

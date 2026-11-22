@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
-	"github.com/gohugoio/hugo/htesting/hqt"
+	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugolib"
 )
 
@@ -28,7 +28,7 @@ func TestCommentShortcode(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 -- content/_index.md --
 ---
@@ -48,7 +48,7 @@ func TestDetailsShortcode(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 -- content/_index.md --
 ---
@@ -116,33 +116,13 @@ title: home
   attr="an _emphasized_ word"
   attrlink="https://example.org/foo"
 >}}
--- layouts/index.html --
+-- layouts/home.html --
 Hash: {{ .Content | hash.XxHash }}
 Content: {{ .Content }}
 `
 
 	b := hugolib.Test(t, files)
-	b.AssertFileContent("public/index.html", "35b077dcb9887a84")
-}
-
-func TestGistShortcode(t *testing.T) {
-	t.Parallel()
-
-	files := `
--- hugo.toml --
-disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
-{{ .Content }}
--- content/_index.md --
----
-title: home
----
-{{< gist jmooring 23932424365401ffa5e9d9810102a477 >}}
-`
-
-	b := hugolib.Test(t, files, hugolib.TestOptWarn())
-	b.AssertFileContent("public/index.html", `<script src="https://gist.github.com/jmooring/23932424365401ffa5e9d9810102a477.js"></script>`)
-	b.AssertLogContains(`WARN  The "gist" shortcode was deprecated in v0.143.0 and will be removed in a future release. See https://gohugo.io/shortcodes/gist for instructions to create a replacement.`)
+	b.AssertFileContent("public/index.html", "c18e12c59a2f9bdb")
 }
 
 func TestHighlightShortcode(t *testing.T) {
@@ -151,7 +131,7 @@ func TestHighlightShortcode(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['home','rss','section','sitemap','taxonomy','term']
--- layouts/_default/single.html --
+-- layouts/single.html --
 Hash: {{ .Content | hash.XxHash }}
 Content: {{ .Content }}
 -- content/p1.md --
@@ -229,12 +209,12 @@ An inline {{< highlight go "hl_inline=true" >}}fmt.Println("Value of i:", i)Hell
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html", "576ee13be18ddba2")
-	b.AssertFileContent("public/p2/index.html", "8774e8b4bf60aa9e")
-	b.AssertFileContent("public/p3/index.html", "7634b47df1859f58")
-	b.AssertFileContent("public/p4/index.html", "385a15e400df4e39")
-	b.AssertFileContent("public/p5/index.html", "b3a73f3eddc6e0c1")
-	b.AssertFileContent("public/p6/index.html", "b3a73f3eddc6e0c1")
+	b.AssertFileContent("public/p1/index.html", "4f7e70e3bc7702fc")
+	b.AssertFileContent("public/p2/index.html", "3f97c98e654f23a2")
+	b.AssertFileContent("public/p3/index.html", "21d109753ff1b086")
+	b.AssertFileContent("public/p4/index.html", "a6df524f21db7044")
+	b.AssertFileContent("public/p5/index.html", "db2d5cc19d163217")
+	b.AssertFileContent("public/p6/index.html", "db2d5cc19d163217")
 	b.AssertFileContent("public/p7/index.html", "f12eeaa4d6d9c7ac")
 }
 
@@ -250,19 +230,19 @@ privacy.instagram.simple = false
 title: home
 ---
 {{< instagram CxOWiQNP2MO >}}
--- layouts/index.html --
+-- layouts/home.html --
 Hash: {{ .Content | hash.XxHash }}
 Content: {{ .Content }}
 `
 
 	// Regular mode
 	b := hugolib.Test(t, files)
-	b.AssertFileContent("public/index.html", "6e93404b93277876")
+	b.AssertFileContent("public/index.html", "336bb64b13c24575")
 
 	// Simple mode
 	files = strings.ReplaceAll(files, "privacy.instagram.simple = false", "privacy.instagram.simple = true")
 	b = hugolib.Test(t, files)
-	b.AssertFileContent("public/index.html", "2c1dce3881be0513")
+	b.AssertFileContent("public/index.html", "4c094707f37b2340")
 }
 
 func TestParamShortcode(t *testing.T) {
@@ -273,7 +253,7 @@ func TestParamShortcode(t *testing.T) {
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 [params]
 b = 2
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 -- content/_index.md --
 ---
@@ -300,7 +280,7 @@ func TestQRShortcode(t *testing.T) {
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 -- content/_index.md --
 ---
@@ -320,13 +300,19 @@ title: home
 {{< qr >}}
 https://gohugo.io"
 {{< /qr >}}
+
+{{< qr text="https://gohugo.io" bgColor="#ffffff00" />}}
+
+{{< qr text="https://gohugo.io" fgColor="#000080" bgColor="#ffffff00" />}}
 `
 
 	b := hugolib.Test(t, files)
 
 	b.AssertFileContent("public/index.html",
-		`<img src="/codes/qr_be5d263c2671bcbd.png" width="148" height="148" alt="QR code linking to https://gohugo.io" class="my-class" id="my-id" title="My Title">`,
-		`<img src="/qr_472aab57ec7a6e3d.png" width="132" height="132">`,
+		`<img src="/codes/qr_217b79ded2a46bfc.png" width="148" height="148" alt="QR code linking to https://gohugo.io" class="my-class" id="my-id" title="My Title">`,
+		`<img src="/qr_9a4e650f45152086.png" width="132" height="132">`,
+		`<img src="/qr_3ecfd7dbbd40fa2.png" width="132" height="132">`,
+		`<img src="/qr_30c639d4c1717d9.png" width="132" height="132">`,
 	)
 }
 
@@ -346,11 +332,11 @@ weight = 1
 weight = 2
 [outputs]
 page = ['html','json']
--- layouts/_default/home.html --
+-- layouts/home.html --
 {{ .Content }}
--- layouts/_default/single.html.html --
+-- layouts/single.html.html --
 {{ .Title }}
--- layouts/_default/single.json.json --
+-- layouts/single.json.json --
 {{ .Title }}
 -- content/_index.en.md --
 ---
@@ -411,11 +397,11 @@ weight = 1
 weight = 2
 [outputs]
 page = ['html','json']
--- layouts/_default/home.html --
+-- layouts/home.html --
 {{ .Content }}
--- layouts/_default/single.html.html --
+-- layouts/single.html.html --
 {{ .Title }}
--- layouts/_default/single.json.json --
+-- layouts/single.json.json --
 {{ .Title }}
 -- content/_index.en.md --
 ---
@@ -471,44 +457,42 @@ privacy.vimeo.simple = false
 ---
 title: p1
 ---
-{{< vimeo 55073825 >}}
+{{< vimeo 19899678 >}}
 -- content/p2.md --
 ---
 title: p2
 ---
-{{< vimeo id=55073825 allowFullScreen=true >}}
+{{< vimeo id=19899678 allowFullScreen=true >}}
 -- content/p3.md --
 ---
 title: p3
 ---
-{{< vimeo id=55073825 allowFullScreen=false >}}
--- layouts/_default/single.html --
+{{< vimeo id=19899678 allowFullScreen=false >}}
+-- layouts/single.html --
 Hash: {{ .Content | hash.XxHash }}
 Content: {{ .Content }}
 `
 
 	// Regular mode
 	b := hugolib.Test(t, files)
-	b.AssertFileContent("public/p1/index.html", "82566e6b8d04b53e")
-	b.AssertFileContent("public/p2/index.html", "82566e6b8d04b53e")
-	b.AssertFileContent("public/p3/index.html", "2b5f9cc3167d1336")
+	b.AssertFileContent("public/p1/index.html", "2144844b57ee39d8")
+	b.AssertFileContent("public/p2/index.html", "2144844b57ee39d8")
+	b.AssertFileContent("public/p3/index.html", "a131e93ce53bc318")
 
 	// Simple mode
 	files = strings.ReplaceAll(files, "privacy.vimeo.simple = false", "privacy.vimeo.simple = true")
 	b = hugolib.Test(t, files)
-	b.AssertFileContent("public/p1/index.html", "04d861fc957ee638")
+	b.AssertFileContent("public/p1/index.html", "582bde2225dc43c0")
 
 	// Simple mode with non-existent id
-	files = strings.ReplaceAll(files, "{{< vimeo 55073825 >}}", "{{< vimeo __id_does_not_exist__ >}}")
+	files = strings.ReplaceAll(files, "{{< vimeo 19899678 >}}", "{{< vimeo __id_does_not_exist__ >}}")
 	b = hugolib.Test(t, files, hugolib.TestOptWarn())
 	b.AssertLogContains(`WARN  The "vimeo" shortcode was unable to retrieve the remote data.`)
 }
 
-// Issue 13214
-// We deprecated the twitter, tweet (alias of twitter), and twitter_simple
-// shortcodes in v0.141.0, replacing them with x and x_simple.
 func TestXShortcodes(t *testing.T) {
 	t.Parallel()
+	htesting.SkipSlowTestUnlessCI(t)
 
 	files := `
 -- hugo.toml --
@@ -523,108 +507,34 @@ title: p1
 ---
 title: p2
 ---
-{{< twitter user="SanDiegoZoo" id="1453110110599868418" >}}
--- content/p3.md --
----
-title: p3
----
-{{< tweet user="SanDiegoZoo" id="1453110110599868418" >}}
--- content/p4.md --
----
-title: p4
----
 {{< x_simple user="SanDiegoZoo" id="1453110110599868418" >}}
--- content/p5.md --
----
-title: p5
----
-{{< twitter_simple user="SanDiegoZoo" id="1453110110599868418" >}}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Content | strings.TrimSpace | safeHTML }}
 --
 `
 
 	b := hugolib.Test(t, files)
 
-	// Test x, twitter, and tweet shortcodes
-	want := `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Owl bet you&#39;ll lose this staring contest 🦉 <a href="https://t.co/eJh4f2zncC">pic.twitter.com/eJh4f2zncC</a></p>&mdash; San Diego Zoo Wildlife Alliance (@sandiegozoo) <a href="https://twitter.com/sandiegozoo/status/1453110110599868418?ref_src=twsrc%5Etfw">October 26, 2021</a></blockquote>
-	<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>`
+	// Test x shortcode
+	want := `<blockquote class="twitter-tweet"><p lang="en" dir="ltr">Owl bet you&#39;ll lose this staring contest 🦉 <a href="https://t.co/eJh4f2zncC">pic.twitter.com/eJh4f2zncC</a></p>&mdash; San Diego Zoo Wildlife Alliance (@sandiegozoo) <a href="https://x.com/sandiegozoo/status/1453110110599868418?ref_src=twsrc%5Etfw">October 26, 2021</a></blockquote>
+<script async src="https://platform.x.com/widgets.js" charset="utf-8"></script>`
 	b.AssertFileContent("public/p1/index.html", want)
 
-	htmlFiles := []string{
-		b.FileContent("public/p1/index.html"),
-		b.FileContent("public/p2/index.html"),
-		b.FileContent("public/p3/index.html"),
-	}
-
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
-
-	// Test x_simple and twitter_simple shortcodes
-	wantSimple := "<style type=\"text/css\">\n      .twitter-tweet {\n        font:\n          14px/1.45 -apple-system,\n          BlinkMacSystemFont,\n          \"Segoe UI\",\n          Roboto,\n          Oxygen-Sans,\n          Ubuntu,\n          Cantarell,\n          \"Helvetica Neue\",\n          sans-serif;\n        border-left: 4px solid #2b7bb9;\n        padding-left: 1.5em;\n        color: #555;\n      }\n      .twitter-tweet a {\n        color: #2b7bb9;\n        text-decoration: none;\n      }\n      blockquote.twitter-tweet a:hover,\n      blockquote.twitter-tweet a:focus {\n        text-decoration: underline;\n      }\n    </style><blockquote class=\"twitter-tweet\"><p lang=\"en\" dir=\"ltr\">Owl bet you&#39;ll lose this staring contest 🦉 <a href=\"https://t.co/eJh4f2zncC\">pic.twitter.com/eJh4f2zncC</a></p>&mdash; San Diego Zoo Wildlife Alliance (@sandiegozoo) <a href=\"https://twitter.com/sandiegozoo/status/1453110110599868418?ref_src=twsrc%5Etfw\">October 26, 2021</a></blockquote>\n--"
-	b.AssertFileContent("public/p4/index.html", wantSimple)
-
-	htmlFiles = []string{
-		b.FileContent("public/p4/index.html"),
-		b.FileContent("public/p5/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
-
-	filesOriginal := files
-
-	// Test privacy.twitter.simple
-	files = strings.ReplaceAll(filesOriginal, "#CONFIG", "privacy.twitter.simple=true")
-	b = hugolib.Test(t, files)
-	htmlFiles = []string{
-		b.FileContent("public/p2/index.html"),
-		b.FileContent("public/p3/index.html"),
-		b.FileContent("public/p5/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
+	// Test x_simple shortcodes
+	wantSimple := "<style type=\"text/css\">\n      .twitter-tweet {\n        font:\n          14px/1.45 -apple-system,\n          BlinkMacSystemFont,\n          \"Segoe UI\",\n          Roboto,\n          Oxygen-Sans,\n          Ubuntu,\n          Cantarell,\n          \"Helvetica Neue\",\n          sans-serif;\n        border-left: 4px solid #2b7bb9;\n        padding-left: 1.5em;\n        color: #555;\n      }\n      .twitter-tweet a {\n        color: #2b7bb9;\n        text-decoration: none;\n      }\n      blockquote.twitter-tweet a:hover,\n      blockquote.twitter-tweet a:focus {\n        text-decoration: underline;\n      }\n    </style><blockquote class=\"twitter-tweet\"><p lang=\"en\" dir=\"ltr\">Owl bet you&#39;ll lose this staring contest 🦉 <a href=\"https://t.co/eJh4f2zncC\">pic.twitter.com/eJh4f2zncC</a></p>&mdash; San Diego Zoo Wildlife Alliance (@sandiegozoo) <a href=\"https://x.com/sandiegozoo/status/1453110110599868418?ref_src=twsrc%5Etfw\">October 26, 2021</a></blockquote>\n--"
+	b.AssertFileContent("public/p2/index.html", wantSimple)
 
 	// Test privacy.x.simple
-	files = strings.ReplaceAll(filesOriginal, "#CONFIG", "privacy.x.simple=true")
-	b = hugolib.Test(t, files)
-	htmlFiles = []string{
-		b.FileContent("public/p1/index.html"),
-		b.FileContent("public/p4/index.html"),
-		b.FileContent("public/p4/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
-
-	htmlFiles = []string{
-		b.FileContent("public/p2/index.html"),
-		b.FileContent("public/p3/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
-
-	// Test privacy.twitter.disable
-	files = strings.ReplaceAll(filesOriginal, "#CONFIG", "privacy.twitter.disable = true")
-	b = hugolib.Test(t, files)
-	b.AssertFileContent("public/p1/index.html", "")
-	htmlFiles = []string{
-		b.FileContent("public/p1/index.html"),
-		b.FileContent("public/p2/index.html"),
-		b.FileContent("public/p3/index.html"),
-		b.FileContent("public/p4/index.html"),
-		b.FileContent("public/p4/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
+	f := strings.ReplaceAll(files, "#CONFIG", "privacy.x.simple=true")
+	b = hugolib.Test(t, f)
+	b.AssertFileContent("public/p1/index.html", wantSimple)
+	b.AssertFileContent("public/p2/index.html", wantSimple)
 
 	// Test privacy.x.disable
-	files = strings.ReplaceAll(filesOriginal, "#CONFIG", "privacy.x.disable = true")
-	b = hugolib.Test(t, files)
+	f = strings.ReplaceAll(files, "#CONFIG", "privacy.x.disable = true")
+	b = hugolib.Test(t, f)
 	b.AssertFileContent("public/p1/index.html", "")
-	htmlFiles = []string{
-		b.FileContent("public/p1/index.html"),
-		b.FileContent("public/p4/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
-
-	htmlFiles = []string{
-		b.FileContent("public/p2/index.html"),
-		b.FileContent("public/p3/index.html"),
-	}
-	b.Assert(htmlFiles, hqt.IsAllElementsEqual)
+	b.AssertFileContent("public/p2/index.html", "")
 
 	// Test warnings
 	files = `
@@ -636,9 +546,7 @@ title: home
 ---
 {{< x user="__user_does_not_exist__" id="__id_does_not_exist__" >}}
 {{< x_simple user="__user_does_not_exist__" id="__id_does_not_exist__" >}}
-{{< twitter user="__user_does_not_exist__" id="__id_does_not_exist__" >}}
-{{< twitter_simple user="__user_does_not_exist__" id="__id_does_not_exist__" >}}
--- layouts/index.html --
+-- layouts/home.html --
 {{ .Content }}
 `
 
@@ -646,9 +554,6 @@ title: home
 	b.AssertLogContains(
 		`WARN  The "x" shortcode was unable to retrieve the remote data.`,
 		`WARN  The "x_simple" shortcode was unable to retrieve the remote data.`,
-		`WARN  The "twitter", "tweet", and "twitter_simple" shortcodes were deprecated in v0.142.0 and will be removed in a future release.`,
-		`WARN  The "twitter" shortcode was unable to retrieve the remote data.`,
-		`WARN  The "twitter_simple" shortcode was unable to retrieve the remote data.`,
 	)
 }
 
@@ -659,7 +564,7 @@ func TestYouTubeShortcode(t *testing.T) {
 -- hugo.toml --
 disableKinds = ['home','rss','section','sitemap','taxonomy','term']
 privacy.youtube.privacyEnhanced = false
--- layouts/_default/single.html --
+-- layouts/single.html --
 Hash: {{ .Content | hash.XxHash }}
 Content: {{ .Content }}
 -- content/p1.md --
@@ -688,14 +593,14 @@ title: p2
 
 	b := hugolib.Test(t, files)
 
-	b.AssertFileContent("public/p1/index.html", "4b54bf9bd03946ec")
-	b.AssertFileContent("public/p2/index.html", "289c655e727e596c")
+	b.AssertFileContent("public/p1/index.html", "365fe481b0377cd9")
+	b.AssertFileContent("public/p2/index.html", "82d7f05fb1fefb3b")
 
 	files = strings.ReplaceAll(files, "privacy.youtube.privacyEnhanced = false", "privacy.youtube.privacyEnhanced = true")
 
 	b = hugolib.Test(t, files)
-	b.AssertFileContent("public/p1/index.html", "78eb19b5c6f3768f")
-	b.AssertFileContent("public/p2/index.html", "a6db910a9cf54bc1")
+	b.AssertFileContent("public/p1/index.html", "48398992f5ff0afc")
+	b.AssertFileContent("public/p2/index.html", "116436ffc3f62191")
 }
 
 func TestShortcodePlainTextVsHTMLTemplateIssue13698(t *testing.T) {
@@ -768,7 +673,7 @@ defaultContentLanguageInSubdir = true
 [languages.pl]
 weight = 1
 [languages.en]
-weight = 2	
+weight = 2
 -- content/_index.md --
 ---
 title: dom
@@ -793,4 +698,232 @@ myshortcode.en.html
 
 	b.AssertFileContent("public/pl/index.html", "myshortcode.html")
 	b.AssertFileContent("public/en/index.html", "myshortcode.en.html")
+}
+
+func TestHasShortcodeSamePageSourceDifferentShortcodes(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','rss','section','sitemap','taxonomy','term', '404']
+defaultContentLanguage = 'en'
+defaultContentLanguageInSubdir = true
+markup.goldmark.renderer.unsafe = true
+
+[languages]
+[languages.en]
+weight = 1
+[languages.sv]
+weight = 2
+-- content/inc/i1.md --
+---
+headless: true
+sites:
+  matrix:
+    languages:
+      - '**'
+---
+{{% sc1 %}}
+-- content/inc/i2.md --
+---
+headless: true
+sites:
+  matrix:
+    languages:
+      - '**'
+---
+{{% sc2 %}}
+-- content/p1.md --
+---
+title: p1
+---
+P1.
+{{% inc %}}
+-- content/p1.sv.md --
+---
+title: p1 sv
+---
+P1.
+{{% inc %}}
+-- layouts/_shortcodes/sc1.html --
+sc1
+-- layouts/_shortcodes/sc2.html --
+sc2
+-- layouts/_shortcodes/inc.html --
+{{ with site.GetPage "inc/i1.md" }}i1.RenderShortcodes: {{ .RenderShortcodes }}{{ end }}
+-- layouts/_shortcodes/inc.sv.html --
+{{ with site.GetPage "inc/i2.md" }}i1.RenderShortcodes: {{ .RenderShortcodes }}{{ end }}
+-- layouts/all.html --
+Content: {{ .Content }}|sc1: {{ .HasShortcode "sc1" }}|sc2: {{ .HasShortcode "sc2" }}|inc: {{ .HasShortcode "inc" }}|
+
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/en/p1/index.html", " |sc1: true|sc2: false|inc: true|")
+	b.AssertFileContent("public/sv/p1/index.html", " |sc1: false|sc2: true|inc: true|")
+}
+
+func TestShortcodeMultilingualHTML(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+baseURL = 'https://example.org/'
+defaultContentLanguage = 'tr'
+defaultContentLanguageInSubdir = true
+[languages.tr]
+weight = 1
+[languages.en]
+weight = 2
+-- content/posts/test-post.tr.md --
++++
+title = 'Test Post TR'
++++
+
+{{< myhtml >}}
+-- content/posts/test-post.en.md --
++++
+title = 'Test Post EN'
++++
+
+{{< myhtml >}}
+-- layouts/_shortcodes/myhtml.en.html --
+HTML-EN
+-- layouts/_shortcodes/myhtml.tr.html --
+HTML-TR
+-- layouts/_default/single.html --
+{{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/tr/posts/test-post/index.html",
+		"HTML-TR",
+	)
+
+	b.AssertFileContent("public/en/posts/test-post/index.html",
+		"HTML-EN",
+	)
+}
+
+func TestShortcodeMultilingualMarkdown(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+baseURL = 'https://example.org/'
+defaultContentLanguage = 'tr'
+defaultContentLanguageInSubdir = true
+[languages.tr]
+weight = 1
+[languages.en]
+weight = 2
+-- content/posts/test-post.tr.md --
++++
+title = 'Test Post TR'
++++
+
+{{% mymd %}}
+-- content/posts/test-post.en.md --
++++
+title = 'Test Post EN'
++++
+
+{{% mymd %}}
+-- layouts/_shortcodes/mymd.en.md --
+MD-EN
+-- layouts/_shortcodes/mymd.tr.md --
+MD-TR
+-- layouts/_default/single.html --
+{{ .Content }}
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/tr/posts/test-post/index.html",
+		"MD-TR",
+	)
+
+	b.AssertFileContent("public/en/posts/test-post/index.html",
+		"MD-EN",
+	)
+}
+
+// Issue 14488
+func TestTwitterShortcodeDeprecationError14488(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['home','rss','section','sitemap','taxonomy','term']
+-- content/p1.md --
+---
+title: p1
+---
+{{< SHORTCODE user="SanDiegoZoo" id="1453110110599868418" >}}
+-- layouts/page.html --
+{{ .Content }}
+`
+
+	want := `ERROR The "twitter", "tweet", and "twitter_simple" shortcodes were deprecated in v0.142.0 and removed in v0.156.0. Please use the "x" shortcode instead.`
+
+	shortcodes := []string{"twitter", "twitter_simple", "tweet"}
+	for _, sc := range shortcodes {
+		f := strings.ReplaceAll(files, "SHORTCODE", sc)
+		b, err := hugolib.TestE(t, f, hugolib.TestOptWarn())
+		b.Assert(err, qt.IsNotNil)
+		b.AssertLogContains(want)
+	}
+}
+
+// Issue 14491
+func TestGistShortcodeDeprecationError14491(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+-- layouts/home.html --
+{{ .Content }}
+-- content/_index.md --
+---
+title: home
+---
+{{< gist user 23932424365401ffa5e9d9810102a477 >}}
+`
+
+	b, err := hugolib.TestE(t, files, hugolib.TestOptWarn())
+	b.Assert(err, qt.IsNotNil)
+	b.AssertLogContains(`ERROR The "gist" shortcode was deprecated in v0.143.0 and removed in v0.156.0.`)
+}
+
+// See issue 15536.
+func TestShortcodeCustomLayoutInOtherOutputFormat(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','section','taxonomy','term']
+-- content/_index.md --
+---
+title: home
+---
+[a](/b) {{< sc >}}
+-- layouts/home.html --
+{{ .Content }}
+-- layouts/home.rss.xml --
+{{ .Content }}
+-- layouts/_markup/render-link.rss.xml --
+render-link.rss.xml
+-- layouts/_shortcodes/sc.html --
+sc.html
+-- layouts/_shortcodes/sc.contact.html --
+sc.contact.html
+`
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "sc.html", "! sc.contact.html")
+	b.AssertFileContent("public/index.xml", "sc.html", "! sc.contact.html")
 }

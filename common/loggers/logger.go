@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bep/logg"
@@ -123,8 +124,11 @@ func New(opts Options) Logger {
 	)
 
 	l := logger.WithLevel(opts.Level)
+	logMu := &sync.Mutex{}
 
 	reset := func() {
+		logMu.Lock()
+		defer logMu.Unlock()
 		logCounters.mu.Lock()
 		defer logCounters.mu.Unlock()
 		logCounters.counters = make(map[logg.Level]int)
@@ -135,6 +139,7 @@ func New(opts Options) Logger {
 	}
 
 	return &logAdapter{
+		mu:          logMu,
 		logCounters: logCounters,
 		errors:      errorsw,
 		reset:       reset,
@@ -173,6 +178,7 @@ func LevelLoggerToWriter(l logg.LevelLogger) io.Writer {
 
 type Logger interface {
 	Debug() logg.LevelLogger
+	DebugCommand(command string) logg.LevelLogger
 	Debugf(format string, v ...any)
 	Debugln(v ...any)
 	Error() logg.LevelLogger
@@ -203,6 +209,7 @@ type Logger interface {
 }
 
 type logAdapter struct {
+	mu          *sync.Mutex
 	logCounters *logLevelCounter
 	errors      *strings.Builder
 	reset       func()
@@ -221,12 +228,16 @@ func (l *logAdapter) Debug() logg.LevelLogger {
 	return l.debugl
 }
 
+func (l *logAdapter) DebugCommand(command string) logg.LevelLogger {
+	return l.debugl.WithField(FieldNameCmd, command)
+}
+
 func (l *logAdapter) Debugf(format string, v ...any) {
 	l.debugl.Logf(format, v...)
 }
 
 func (l *logAdapter) Debugln(v ...any) {
-	l.debugl.Logf(l.sprint(v...))
+	l.debugl.Logf("%s", l.sprint(v...))
 }
 
 func (l *logAdapter) Info() logg.LevelLogger {
@@ -242,7 +253,7 @@ func (l *logAdapter) Infof(format string, v ...any) {
 }
 
 func (l *logAdapter) Infoln(v ...any) {
-	l.infol.Logf(l.sprint(v...))
+	l.infol.Logf("%s", l.sprint(v...))
 }
 
 func (l *logAdapter) Level() logg.Level {
@@ -275,7 +286,7 @@ func (l *logAdapter) PrintTimerIfDelayed(start time.Time, name string) {
 	if milli < 500 {
 		return
 	}
-	fmt.Fprintf(l.stdErr, "%s in %v ms", name, milli)
+	fmt.Fprintf(l.stdErr, "%s in %v ms\n", name, milli)
 }
 
 func (l *logAdapter) Printf(format string, v ...any) {
@@ -307,7 +318,7 @@ func (l *logAdapter) WarnCommand(command string) logg.LevelLogger {
 }
 
 func (l *logAdapter) Warnln(v ...any) {
-	l.warnl.Logf(l.sprint(v...))
+	l.warnl.Logf("%s", l.sprint(v...))
 }
 
 func (l *logAdapter) Error() logg.LevelLogger {
@@ -319,10 +330,12 @@ func (l *logAdapter) Errorf(format string, v ...any) {
 }
 
 func (l *logAdapter) Errorln(v ...any) {
-	l.errorl.Logf(l.sprint(v...))
+	l.errorl.Logf("%s", l.sprint(v...))
 }
 
 func (l *logAdapter) Errors() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.errors.String()
 }
 
@@ -339,7 +352,7 @@ func (l *logAdapter) Warnidf(id, format string, v ...any) {
 }
 
 func (l *logAdapter) idfInfoStatement(what, id, format string) string {
-	return fmt.Sprintf("\nYou can suppress this %s by adding the following to your site configuration:\nignoreLogs = ['%s']", what, id)
+	return fmt.Sprintf("\nYou can suppress this %s by adding the following to your project configuration:\nignoreLogs = ['%s']", what, id)
 }
 
 func (l *logAdapter) Trace(s logg.StringFunc) {

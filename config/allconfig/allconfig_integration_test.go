@@ -9,7 +9,6 @@ import (
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/config/allconfig"
 	"github.com/gohugoio/hugo/hugolib"
-	gc "github.com/gohugoio/hugo/markup/goldmark/goldmark_config"
 	"github.com/gohugoio/hugo/media"
 )
 
@@ -26,11 +25,13 @@ weight = 2
 [[module.mounts]]
 source = 'content/en'
 target = 'content'
-lang = 'en'
+[module.mounts.sites.matrix]
+languages = 'en'
 [[module.mounts]]
 source = 'content/sv'
 target = 'content'
-lang = 'sv'
+[module.mounts.sites.matrix]
+languages = 'sv'
 -- content/en/p1.md --
 ---
 title: "p1"
@@ -39,13 +40,11 @@ title: "p1"
 ---
 title: "p1"
 ---
--- layouts/_default/single.html --
+-- layouts/single.html --
 Title: {{ .Title }}
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t, TxtarString: files},
-	).Build()
+	b := hugolib.Test(t, files)
 
 	// b.AssertFileContent("public/p1/index.html", "Title: p1")
 
@@ -66,10 +65,12 @@ Title: {{ .Title }}
 	b.Assert(modConf.Mounts, qt.HasLen, 8)
 	b.Assert(modConf.Mounts[0].Source, qt.Equals, filepath.FromSlash("content/en"))
 	b.Assert(modConf.Mounts[0].Target, qt.Equals, "content")
-	b.Assert(modConf.Mounts[0].Lang, qt.Equals, "en")
+	b.Assert(modConf.Mounts[0].Lang, qt.Equals, "")
+	b.Assert(modConf.Mounts[0].Sites.Matrix.Languages, qt.DeepEquals, []string{"en"})
 	b.Assert(modConf.Mounts[1].Source, qt.Equals, filepath.FromSlash("content/sv"))
 	b.Assert(modConf.Mounts[1].Target, qt.Equals, "content")
-	b.Assert(modConf.Mounts[1].Lang, qt.Equals, "sv")
+	b.Assert(modConf.Mounts[1].Lang, qt.Equals, "")
+	b.Assert(modConf.Mounts[1].Sites.Matrix.Languages, qt.DeepEquals, []string{"sv"})
 }
 
 func TestConfigAliases(t *testing.T) {
@@ -79,9 +80,7 @@ baseURL = "https://example.com"
 logI18nWarnings = true
 logPathWarnings = true
 `
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{T: t, TxtarString: files},
-	).Build()
+	b := hugolib.Test(t, files)
 
 	conf := b.H.Configs.Base
 
@@ -139,7 +138,7 @@ disableKinds = ["taxonomy", "term"]
 [pagination]
 disableAliases = true
 pagerSize = 2
--- layouts/_default/list.html --
+-- layouts/list.html --
 {{ $paginator := .Paginate  site.RegularPages }}
 {{ template "_internal/pagination.html" . }}
 {{ range $paginator.Pages }}
@@ -189,7 +188,7 @@ func TestInvalidOutputFormat(t *testing.T) {
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 [outputs]
 home = ['html','foo']
--- layouts/index.html --
+-- layouts/home.html --
 x
 `
 
@@ -198,26 +197,21 @@ x
 	b.Assert(err.Error(), qt.Contains, `failed to create config: unknown output format "foo" for kind "home"`)
 }
 
-// Issue 13201
-func TestLanguageConfigSlice(t *testing.T) {
+// See issue 15253.
+func TestInvalidDefaultOutputFormat(t *testing.T) {
 	t.Parallel()
 
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
-[languages.en]
-title = 'TITLE_EN'
-weight = 2
-[languages.de]
-title = 'TITLE_DE'
-weight = 1
-[languages.fr]
-title = 'TITLE_FR'
-weight = 3
+defaultOutputFormat = 'foo'
+-- layouts/home.html --
+x
 `
 
-	b := hugolib.Test(t, files)
-	b.Assert(b.H.Configs.LanguageConfigSlice[0].Title, qt.Equals, `TITLE_DE`)
+	b, err := hugolib.TestE(t, files)
+	b.Assert(err, qt.IsNotNil)
+	b.Assert(err.Error(), qt.Contains, `failed to create config: unknown default output format "foo"`)
 }
 
 func TestContentTypesDefault(t *testing.T) {
@@ -384,25 +378,46 @@ weight = 3
 
 // Issue 13535
 // We changed enablement of the embedded link and image render hooks from
-// booleans to enums in v0.148.0.
+// booleans to enums in v0.148.0. This should throw error with v0.163.0 and later.
 func TestLegacyEmbeddedRenderHookEnablement(t *testing.T) {
 	files := `
 -- hugo.toml --
 [markup.goldmark.renderHooks.image]
-#KEY_VALUE
+#KEY_VALUE_IMAGE
 
 [markup.goldmark.renderHooks.link]
-#KEY_VALUE
+#KEY_VALUE_LINK
 `
-	f := strings.ReplaceAll(files, "#KEY_VALUE", "enableDefault = false")
-	b := hugolib.Test(t, f)
-	c := b.H.Configs.Base.Markup.Goldmark.RenderHooks
-	b.Assert(c.Link.UseEmbedded, qt.Equals, gc.RenderHookUseEmbeddedNever)
-	b.Assert(c.Image.UseEmbedded, qt.Equals, gc.RenderHookUseEmbeddedNever)
 
-	f = strings.ReplaceAll(files, "#KEY_VALUE", "enableDefault = true")
-	b = hugolib.Test(t, f)
-	c = b.H.Configs.Base.Markup.Goldmark.RenderHooks
-	b.Assert(c.Link.UseEmbedded, qt.Equals, gc.RenderHookUseEmbeddedFallback)
-	b.Assert(c.Image.UseEmbedded, qt.Equals, gc.RenderHookUseEmbeddedFallback)
+	replacer := strings.NewReplacer(
+		"#KEY_VALUE_IMAGE", "enableDefault = false",
+		"#KEY_VALUE_LINK", "",
+	)
+	f := replacer.Replace(files)
+	b, _ := hugolib.TestE(t, f)
+	b.AssertLogContains("ERROR deprecated")
+
+	replacer = strings.NewReplacer(
+		"#KEY_VALUE_IMAGE", "enableDefault = true",
+		"#KEY_VALUE_LINK", "",
+	)
+	f = replacer.Replace(files)
+	b, _ = hugolib.TestE(t, f)
+	b.AssertLogContains("ERROR deprecated")
+
+	replacer = strings.NewReplacer(
+		"#KEY_VALUE_IMAGE", "",
+		"#KEY_VALUE_LINK", "enableDefault = false",
+	)
+	f = replacer.Replace(files)
+	b, _ = hugolib.TestE(t, f)
+	b.AssertLogContains("ERROR deprecated")
+
+	replacer = strings.NewReplacer(
+		"#KEY_VALUE_IMAGE", "",
+		"#KEY_VALUE_LINK", "enableDefault = true",
+	)
+	f = replacer.Replace(files)
+	b, _ = hugolib.TestE(t, f)
+	b.AssertLogContains("ERROR deprecated")
 }

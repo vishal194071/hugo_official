@@ -1,4 +1,4 @@
-// Copyright 2024 The Hugo Authors. All rights reserved.
+// Copyright 2025 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package hugolib
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 
 	"github.com/bep/logg"
@@ -33,20 +34,270 @@ disableKinds = ["term", "taxonomy", "section", "page"]
 ---
 title: Page
 ---
--- layouts/index.html --
+-- layouts/home.html --
 Home: {{ .Title }}
 `
 
-	b := NewIntegrationTestBuilder(
-		IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			// LogLevel:    logg.LevelTrace,
-		},
-	).Build()
+	b := Test(t, files)
 
 	b.Assert(b.H.Log.LoggCount(logg.LevelWarn), qt.Equals, 0)
 	b.AssertFileContent("public/index.html", `Hello`)
+}
+
+func TestSmoke202509(t *testing.T) {
+	t.Parallel()
+
+	// Test variants:
+	// Site with two languages, one with home page content and one without.
+	// A common translated page bundle but with different dates.
+	// A text resource in one of the languages.
+	// Date aggregation.
+	// A content resource in one of the languages.
+	// Basic shortcode usage with templates in both languages.
+	// Test Rotate the language dimension.
+	// The same content page mounted for all languages.
+	// RenderString with shortcode.
+
+	files := `
+-- hugo.toml --
+baseURL = "https://example.com"
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = true
+[languages.en]
+title = "Site title en"
+weight = 200
+[languages.nn]
+title = "Site title nn"
+weight = 100
+[[module.mounts]]
+source = 'content/en'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = 'en'
+[[module.mounts]]
+source = 'content/nn'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = 'nn'
+[[module.mounts]]
+source = 'content/all'
+target = 'content'
+[module.mounts.sites.matrix]
+languages  = ["**"]
+-- content/en/_index.md --
+---
+title: "Home in English"
+---
+Home Content.
+-- content/en/mysection/p1/mytext.txt --
+This is a text resource in English.
+-- content/en/mysection/p1/mypage.md --
+---
+title: "mypage en"
+---
+mypage en content.
+-- content/en/mysection/p1/index.md --
+---
+title: "p1 en"
+date: 2023-10-01
+---
+Content p1 en.
+
+{{< myshortcode >}}
+-- content/nn/mysection/p1/index.md --
+---
+title: "p1 nn"
+date: 2024-10-01
+---
+Content p1 nn.
+
+{{< myshortcode >}}
+-- content/all/mysection/p2/index.md --
+---
+title: "p2 all"
+date: 2022-10-01
+---
+Content p2 all.
+
+{{< myshortcode >}}
+-- layouts/all.html --
+All. {{ .Title }}|Lastmod: {{ .Lastmod.Format "2006-01-02" }}|
+Kind: {{ .Kind }}|
+Content: {{ .Content }}|
+CurrentSection: {{ .CurrentSection.PathInfo.Path }}|
+Parent: {{ with .Parent }}{{ .RelPermalink }}{{ end }}|
+Home: {{ .Site.Home.Title }}|
+Rotate(language): {{ range .Rotate "language" }}{{ .Lang }}|{{ .Title }}|{{ end }}|
+mytext.txt: {{ with .Resources.GetMatch "**.txt" }}{{ .Content }}|{{ .RelPermalink }}{{ end }}|
+mypage.md: {{ with .Resources.GetMatch "**.md" }}{{ .Content }}|{{ .RelPermalink }}{{ end }}|
+RenderString with shortcode: {{ .RenderString "{{< myshortcode >}}" }}|
+-- layouts/_shortcodes/myshortcode.html --
+myshortcode.html
+-- layouts/_shortcodes/myshortcode.en.html --
+myshortcode.en.html
+`
+
+	b := Test(t, files)
+
+	b.AssertFileContent("public/en/index.html",
+		"All. Home in English|", // from content file.
+		"Kind: home|",
+		"Lastmod: 2023-10-01",
+		"RenderString with shortcode: myshortcode.en.html",
+		"Parent: |",
+	)
+	b.AssertFileContent("public/nn/index.html",
+		"Site title nn|", // from project config.
+		"Lastmod: 2024-10-01",
+		"RenderString with shortcode: myshortcode.html",
+	)
+
+	b.AssertFileContent("public/nn/mysection/p1/index.html",
+		"p1 nn|Lastmod: 2024-10-01|\nRotate(language): nn|p1 nn|en|p1 en||",
+		"mytext.txt: This is a text resource in English.|/en/mysection/p1/mytext.txt|",
+		"Content p1 nn.",
+		"mypage.md: |",
+		"myshortcode.html",
+	)
+
+	b.AssertFileContent("public/en/mysection/p1/index.html",
+		"p1 en|Lastmod: 2023-10-01|\nRotate(language): nn|p1 nn|en|p1 en||",
+		"mytext.txt: This is a text resource in English.|/en/mysection/p1/mytext.txt|",
+		"mypage.md: <p>mypage en content.</p>",
+		"Content p1 en.",
+		"myshortcode.en.html",
+		"RenderString with shortcode: myshortcode.en.html",
+	)
+
+	b.AssertFileContent("public/nn/mysection/p2/index.html",
+		"myshortcode.html",
+		"RenderString with shortcode: myshortcode.html",
+	)
+
+	b.AssertFileContent("public/en/mysection/p2/index.html",
+		"myshortcode.en.html",
+		"RenderString with shortcode: myshortcode.en.html",
+	)
+}
+
+func TestSmokeTaxonomies202509(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+disableKinds = ["rss", "sitemap", "robotsTXT"]
+baseURL = "https://example.com"
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = true
+[taxonomies]
+category = "categories"
+tag = "tags"
+[languages.en]
+title = "Site title en"
+weight = 200
+[languages.nn]
+title = "Site title nn"
+weight = 100
+[languages.nn.taxonomies]
+tag = "tags"
+foo = "foos"
+[module]
+[[module.mounts]]
+source = 'content/en'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = 'en'
+[[module.mounts]]
+source = 'content/nn'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = 'nn'
+-- content/en/p1.md --
+---
+title: "p1 en"
+date: 2023-10-01
+tags: ["tag1", "tag2"]
+categories: ["cat1"]
+foos: ["foo2"]
+---
+Content p1 en.
+-- content/nn/p1.md --
+---
+title: "p1 nn"
+date: 2024-10-01
+tags: ["tag1", "tag3"]
+categories: ["cat1", "cat2"]
+foos: ["foo1"]
+---
+-- layouts/all.html --
+All. {{ .Title }}|{{ .Kind }}|
+GetTerms tags: {{ range .GetTerms "tags" }}{{ .Name }}|{{ end }}$
+GetTerms categories: {{ range .GetTerms "categories" }}{{ .Name }}|{{ end }}$
+GetTerms foos: {{ range .GetTerms "foos" }}{{ .Name }}|{{ end }}$
+`
+
+	b := Test(t, files)
+
+	b.AssertFileContent("public/en/p1/index.html", "p1 en", "GetTerms tags: tag1|tag2|$", "GetTerms categories: cat1|$", "GetTerms foos: $")
+	b.AssertFileContent("public/nn/p1/index.html", "p1 nn", "GetTerms tags: tag1|tag3|$", "GetTerms categories: $", "GetTerms foos: foo1|$")
+
+	b.AssertFileContent("public/en/tags/index.html", "All. Tags|taxonomy|")
+	b.AssertFileContent("public/nn/tags/tag1/index.html", "All. Tag1|term|")
+	b.AssertFileContent("public/en/tags/tag1/index.html", "All. Tag1|term|")
+}
+
+func TestSmokeEdits202509(t *testing.T) {
+	t.Parallel()
+
+	files := `
+-- hugo.toml --
+baseURL = "https://example.com"
+disableKinds = ["term", "taxonomy"]
+disableLiveReload = true
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = true
+[languages.en]
+title = "Site title en"
+weight = 200
+[languages.nn]
+title = "Site title nn"
+weight = 100
+[module]
+[[module.mounts]]
+source = 'content/en'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = ['en']
+[[module.mounts]]
+source = 'content/nn'
+target = 'content'
+[module.mounts.sites.matrix]
+languages = ['nn']
+-- content/en/p1/index.md --
+---
+title: "p1 en"
+date: 2023-10-01
+---
+Content p1 en.
+-- content/nn/p1/index.md --
+---
+title: "p1 nn"
+date: 2024-10-01
+---
+Content p1 nn.
+-- layouts/all.html --
+All. {{ .Title }}|Lastmod: {{ .Lastmod.Format "2006-01-02" }}|Content: {{ .Content }}|
+
+`
+
+	b := TestRunning(t, files)
+
+	// b.AssertPublishDir("sDF")
+	b.AssertFileContent("public/en/p1/index.html", "All. p1 en|")
+	b.AssertFileContent("public/nn/p1/index.html", "All. p1 nn|")
+	b.EditFileReplaceAll("public/en/p1/index.html", "p1 en", "p1 en edited").Build()
+	b.AssertFileContent("public/en/p1/index.html", "All. p1 en edited")
+	b.EditFileReplaceAll("public/nn/p1/index.html", "p1 nn", "p1 nn|").Build()
 }
 
 func TestSmokeOutputFormats(t *testing.T) {
@@ -67,16 +318,16 @@ title: Page
 ---
 Page.
 
--- layouts/_default/list.html --
+-- layouts/list.html --
 List: {{ .Title }}|{{ .RelPermalink}}|{{ range .OutputFormats }}{{ .Name }}: {{ .RelPermalink }}|{{ end }}$
--- layouts/_default/list.xml --
+-- layouts/list.xml --
 List xml: {{ .Title }}|{{ .RelPermalink}}|{{ range .OutputFormats }}{{ .Name }}: {{ .RelPermalink }}|{{ end }}$
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single: {{ .Title }}|{{ .RelPermalink}}|{{ range .OutputFormats }}{{ .Name }}: {{ .RelPermalink }}|{{ end }}$
 
 `
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		b := Test(t, files)
 		b.AssertFileContent("public/index.html", `List: |/|html: /|rss: /index.xml|$`)
 		b.AssertFileContent("public/index.xml", `List xml: |/|html: /|rss: /index.xml|$`)
@@ -132,7 +383,7 @@ hugo = "Rules!"
 
 [outputs]
   home = ["html", "json", "rss"]
--- layouts/index.html --
+-- layouts/home.html --
 Home: {{ .Lang}}|{{ .Kind }}|{{ .RelPermalink }}|{{ .Title }}|{{ .Content }}|Len Resources: {{ len .Resources }}|HTML
 Resources: {{ range .Resources }}{{ .ResourceType }}|{{ .RelPermalink }}|{{ .MediaType }} - {{ end }}|
 Site last mod: {{ site.Lastmod.Format "2006-02-01" }}|
@@ -142,13 +393,14 @@ Len home.RegularPagesRecursive: {{ len .RegularPagesRecursive }}|
 RegularPagesRecursive: {{ range .RegularPagesRecursive }}{{ .RelPermalink }}|{{ end }}@
 Len site.RegularPages: {{ len site.RegularPages }}|
 Len site.Pages: {{ len site.Pages }}|
-Len site.AllPages: {{ len site.AllPages }}|
+{{ $allPages := 0 }}{{ range hugo.Sites }}{{ $allPages = add $allPages (len .Pages) }}{{ end -}}
+Len all pages: {{ $allPages }}|
 GetPage: {{ with .Site.GetPage "posts/p1" }}{{ .RelPermalink }}|{{ .Title }}{{ end }}|
 RenderString with shortcode: {{ .RenderString "{{% hello %}}" }}|
 Paginate: {{ .Paginator.PageNumber }}/{{ .Paginator.TotalPages }}|
 -- layouts/index.json --
 Home:{{ .Lang}}|{{ .Kind }}|{{ .RelPermalink }}|{{ .Title }}|{{ .Content }}|Len Resources: {{ len .Resources }}|JSON
--- layouts/_default/list.html --
+-- layouts/list.html --
 List: {{ .Lang}}|{{ .Kind }}|{{ .RelPermalink }}|{{ .Title }}|{{ .Content }}|Len Resources: {{ len .Resources }}|
 Resources: {{ range .Resources }}{{ .ResourceType }}|{{ .RelPermalink }}|{{ .MediaType }} - {{ end }}
 Pages Length: {{ len .Pages }}
@@ -159,7 +411,7 @@ Background: {{ .Params.background }}|
 Kind: {{ .Kind }}
 Type: {{ .Type }}
 Paginate: {{ .Paginator.PageNumber }}/{{ .Paginator.TotalPages }}|
--- layouts/_default/single.html --
+-- layouts/single.html --
 Single: {{ .Lang}}|{{ .Kind }}|{{ .RelPermalink }}|{{ .Title }}|{{ .Content }}|Len Resources: {{ len .Resources }}|Background: {{ .Params.background }}|
 Resources: {{ range .Resources }}{{ .ResourceType }}|{{ .RelPermalink }}|{{ .MediaType }}|{{ .Params }} - {{ end }}
 {{ $textResource := .Resources.GetMatch "**.txt" }}
@@ -171,7 +423,7 @@ Icon fingerprinted: {{ with $textResourceFingerprinted }}{{ .Params.icon }}|{{ .
 NextInSection: {{ with .NextInSection }}{{ .RelPermalink }}|{{ .Title }}{{ end }}|
 PrevInSection: {{ with .PrevInSection }}{{ .RelPermalink }}|{{ .Title }}{{ end }}|
 GetTerms: {{ range .GetTerms "tags" }}name: {{ .Name }}, title: {{ .Title }}|{{ end }}
--- layouts/shortcodes/hello.html --
+-- layouts/_shortcodes/hello.html --
 Hello.
 -- content/_index.md --
 ---
@@ -182,11 +434,11 @@ Home Content.
 ---
 title: Hjem
 cascade:
-  - _target:
+  - target:
       kind: page
       path: /posts/**
     background: post.jpg
-  - _target:
+  - target:
       kind: term
     background: term.jpg
 ---
@@ -253,13 +505,7 @@ Content Tag 1.
 
 `
 
-	b := NewIntegrationTestBuilder(IntegrationTestConfig{
-		T:           t,
-		TxtarString: files,
-		NeedsOsFS:   true,
-		// Verbose:     true,
-		// LogLevel:    logg.LevelTrace,
-	}).Build()
+	b := Test(t, files, TestOptOsFs())
 
 	b.AssertFileContent("public/en/index.html",
 		"Home: en|home|/en/|Home in English|<p>Home Content.</p>\n|HTML",
@@ -269,7 +515,7 @@ Content Tag 1.
 		"Len home.RegularPagesRecursive: 2|",
 		"Len site.RegularPages: 2|",
 		"Len site.Pages: 8|",
-		"Len site.AllPages: 16|",
+		"Len all pages: 16|",
 		"GetPage: /en/posts/p1/|Post 1|",
 		"RenderString with shortcode: Hello.|",
 		"Paginate: 1/2|",
@@ -368,18 +614,20 @@ target = "data"
 [[module.mounts]]
 source = "content/en"
 target = "content"
-lang = "en"
+[module.mounts.sites.matrix]
+languages = "en"
 [[module.mounts]]
 source = "content/nn"
 target = "content"
-lang = "nn"
+[module.mounts.sites.matrix]
+languages = "nn"
 [[module.imports]]
 path = "mytheme"
--- layouts/index.html --
+-- layouts/home.html --
 i18n s1: {{ i18n "s1" }}|
 i18n s2: {{ i18n "s2" }}|
-data s1: {{ site.Data.d1.s1 }}|
-data s2: {{ site.Data.d1.s2 }}|
+data s1: {{ hugo.Data.d1.s1 }}|
+data s2: {{ hugo.Data.d1.s2 }}|
 title: {{ .Title }}|
 -- themes/mytheme/hugo.toml --
 [[module.mounts]]
@@ -434,48 +682,69 @@ title: "Heim"
 
 // https://github.com/golang/go/issues/30286
 func TestDataRace(t *testing.T) {
-	const page = `
----
-title: "The Page"
-outputs: ["HTML", "JSON"]
----
+	var filesBuilder strings.Builder
 
-The content.
+	filesBuilder.WriteString(`
+-- hugo.toml --
+baseURL = "https://example.org"
+defaultContentLanguage = "en"
 
+[outputs]
+home = ["HTML", "JSON", "CSV", "RSS"]
+page = ["HTML", "JSON"]
 
-	`
+[mediaTypes]
+[mediaTypes."application/json"]
+suffixes = ["json"]
+[mediaTypes."text/csv"]
+suffixes = ["csv"]
 
-	b := newTestSitesBuilder(t).WithSimpleConfigFile()
-	for i := 1; i <= 50; i++ {
-		b.WithContent(fmt.Sprintf("blog/page%d.md", i), page)
-	}
+[outputFormats.JSON]
+mediaType = "application/json"
+isPlainText = true
+isHTML = false
 
-	b.WithContent("_index.md", `
+[outputFormats.CSV]
+mediaType = "text/csv"
+isPlainText = true
+isHTML = false
+
+-- layouts/single.html --
+HTML Single: {{ .Data.Pages }}
+-- layouts/list.html --
+HTML List: {{ .Data.Pages }}
+-- content/_index.md --
 ---
 title: "The Home"
 outputs: ["HTML", "JSON", "CSV", "RSS"]
 ---
-
 The content.
-
-
 `)
 
-	commonTemplate := `{{ .Data.Pages }}`
+	const pageContent = `
+---
+title: "The Page"
+outputs: ["HTML", "JSON"]
+---
+The content.
+`
 
-	b.WithTemplatesAdded("_default/single.html", "HTML Single: "+commonTemplate)
-	b.WithTemplatesAdded("_default/list.html", "HTML List: "+commonTemplate)
+	for i := 1; i <= 50; i++ {
+		filesBuilder.WriteString(fmt.Sprintf("\n-- content/blog/page%d.md --\n%s", i, pageContent))
+	}
 
-	b.CreateSites().Build(BuildCfg{})
+	files := filesBuilder.String()
+
+	_ = Test(t, files)
+
+	// Assertions can be added here if needed, but the original test only builds.
+	// The primary purpose of TestDataRace is to check for race conditions during the build process.
+	// If the build completes without race detector errors, the test passes.
 }
 
 // This is just a test to verify that BenchmarkBaseline is working as intended.
 func TestBenchmarkBaseline(t *testing.T) {
-	cfg := IntegrationTestConfig{
-		T:           t,
-		TxtarString: benchmarkBaselineFiles(true),
-	}
-	b := NewIntegrationTestBuilder(cfg).Build()
+	b := Test(t, benchmarkBaselineFiles(true))
 
 	b.Assert(len(b.H.Sites), qt.Equals, 4)
 	b.Assert(len(b.H.Sites[0].RegularPages()), qt.Equals, 161)
@@ -489,23 +758,21 @@ func BenchmarkBaseline(b *testing.B) {
 		T:           b,
 		TxtarString: benchmarkBaselineFiles(false),
 	}
-	builders := make([]*IntegrationTestBuilder, b.N)
 
-	for i := range builders {
-		builders[i] = NewIntegrationTestBuilder(cfg)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		builders[i].Build()
+	for b.Loop() {
+		b.StopTimer()
+		builder := NewIntegrationTestBuilder(cfg)
+		b.StartTimer()
+		builder.Build()
 	}
 }
 
 func benchmarkBaselineFiles(leafBundles bool) string {
 	rnd := rand.New(rand.NewSource(32))
 
-	files := `
--- config.toml --
+	var files strings.Builder
+	files.WriteString(`
+-- hugo.toml --
 baseURL = "https://example.com"
 defaultContentLanguage = 'en'
 
@@ -513,19 +780,23 @@ defaultContentLanguage = 'en'
 [[module.mounts]]
 source = 'content/en'
 target = 'content/en'
-lang = 'en'
+[module.mounts.sites.matrix]
+languages = 'en'
 [[module.mounts]]
 source = 'content/nn'
 target = 'content/nn'
-lang = 'nn'
+[module.mounts.sites.matrix]
+languages = 'nn'
 [[module.mounts]]
 source = 'content/no'
 target = 'content/no'
-lang = 'no'
+[module.mounts.sites.matrix]
+languages = 'no'
 [[module.mounts]]
 source = 'content/sv'
 target = 'content/sv'
-lang = 'sv'
+[module.mounts.sites.matrix]
+languages = 'sv'
 [[module.mounts]]
 source = 'layouts'
 target = 'layouts'
@@ -543,15 +814,15 @@ weight = 3
 [languages.sv]
 title = "Svenska"
 weight = 4
--- layouts/_default/list.html --
+-- layouts/list.html --
 {{ .Title }}
 {{ .Content }}
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ .Title }}
 {{ .Content }}
--- layouts/shortcodes/myshort.html --
+-- layouts/_shortcodes/myshort.html --
 {{ .Inner }}
-`
+`)
 
 	contentTemplate := `
 ---
@@ -578,11 +849,11 @@ Aliqua labore enim et sint anim amet excepteur ea dolore.
 `
 
 	for _, lang := range []string{"en", "nn", "no", "sv"} {
-		files += fmt.Sprintf("\n-- content/%s/_index.md --\n"+contentTemplate, lang, 1, 1, 1)
+		files.WriteString(fmt.Sprintf("\n-- content/%s/_index.md --\n"+contentTemplate, lang, 1, 1, 1))
 		for i, root := range []string{"", "foo", "bar", "baz"} {
 			for j, section := range []string{"posts", "posts/funny", "posts/science", "posts/politics", "posts/world", "posts/technology", "posts/world/news", "posts/world/news/europe"} {
 				n := i + j + 1
-				files += fmt.Sprintf("\n-- content/%s/%s/%s/_index.md --\n"+contentTemplate, lang, root, section, n, n, n)
+				files.WriteString(fmt.Sprintf("\n-- content/%s/%s/%s/_index.md --\n"+contentTemplate, lang, root, section, n, n, n))
 				for k := 1; k < rnd.Intn(30)+1; k++ {
 					n := n + k
 					ns := fmt.Sprintf("%d", n)
@@ -590,11 +861,11 @@ Aliqua labore enim et sint anim amet excepteur ea dolore.
 						ns = fmt.Sprintf("%d/index", n)
 					}
 					file := fmt.Sprintf("\n-- content/%s/%s/%s/p%s.md --\n"+contentTemplate, lang, root, section, ns, n, n)
-					files += file
+					files.WriteString(file)
 				}
 			}
 		}
 	}
 
-	return files
+	return files.String()
 }

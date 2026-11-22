@@ -16,14 +16,12 @@ params:
 {{ end }}
 ```
 
-> [!note]
+> [!NOTE]
 > This function operates on global resources. A global resource is a file within the `assets` directory, or within any directory mounted to the `assets` directory.
 >
-> For page resources, use the [`Resources.Match`] method on a `Page` object.
+> For page resources, use the [`Resources.Match`][] method on a `Page` object.
 
-Hugo determines a match using a case-insensitive [glob pattern].
+Hugo determines a match using a case-insensitive [glob pattern](g). For syntax rules and examples, see the [glob patterns quick reference guide][].
 
-{{% include "/_common/glob-patterns.md" %}}
-
-[`Resources.Match`]: /methods/page/resources/
-[glob pattern]: https://github.com/gobwas/glob#example
+[`Resources.Match`]: /methods/page/resources/#match
+[glob patterns quick reference guide]: /quick-reference/glob-patterns/

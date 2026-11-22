@@ -15,30 +15,37 @@ package paths
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/gohugoio/hugo/hugofs/files"
+	"github.com/gohugoio/hugo/hugolib/sitesmatrix"
 	"github.com/gohugoio/hugo/resources/kinds"
 
 	qt "github.com/frankban/quicktest"
 )
 
-var testParser = &PathParser{
-	LanguageIndex: map[string]int{
-		"no": 0,
-		"en": 1,
-		"fr": 2,
-	},
-	IsContentExt: func(ext string) bool {
-		return ext == "md"
-	},
-	IsOutputFormat: func(name, ext string) bool {
-		switch name {
-		case "html", "amp", "csv", "rss":
-			return true
-		}
-		return false
-	},
+func newTestParser() *PathParser {
+	dims := sitesmatrix.NewTestingDimensions([]string{"en", "no", "fr"}, []string{"v1", "v2", "v3", "v1.0.0"}, []string{"admin", "editor", "viewer", "guest"})
+
+	return &PathParser{
+		LanguageIndex: map[string]int{
+			"no": 0,
+			"en": 1,
+			"fr": 2,
+		},
+		IsContentExt: func(ext string) bool {
+			return ext == "md"
+		},
+		IsOutputFormat: func(name, ext string) bool {
+			switch name {
+			case "html", "amp", "csv", "rss":
+				return true
+			}
+			return false
+		},
+		ConfiguredDimensions: dims,
+	}
 }
 
 func TestParse(t *testing.T) {
@@ -135,7 +142,6 @@ func TestParse(t *testing.T) {
 			func(c *qt.C, p *Path) {
 				c.Assert(p.Name(), qt.Equals, "b.md")
 				c.Assert(p.Base(), qt.Equals, "/a/b")
-				c.Assert(p.BaseNoLeadingSlash(), qt.Equals, "a/b")
 				c.Assert(p.Section(), qt.Equals, "a")
 				c.Assert(p.BaseNameNoIdentifier(), qt.Equals, "b")
 
@@ -172,11 +178,9 @@ func TestParse(t *testing.T) {
 			func(c *qt.C, p *Path) {
 				c.Assert(p.Name(), qt.Equals, "b.a.b.no.txt")
 				c.Assert(p.NameNoIdentifier(), qt.Equals, "b.a.b")
-				c.Assert(p.NameNoLang(), qt.Equals, "b.a.b.txt")
 				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"txt", "no"})
 				c.Assert(p.IdentifiersUnknown(), qt.DeepEquals, []string{"b", "a", "b"})
 				c.Assert(p.Base(), qt.Equals, "/a/b.a.b.txt")
-				c.Assert(p.BaseNoLeadingSlash(), qt.Equals, "a/b.a.b.txt")
 				c.Assert(p.Path(), qt.Equals, "/a/b.a.b.no.txt")
 				c.Assert(p.PathNoLang(), qt.Equals, "/a/b.a.b.txt")
 				c.Assert(p.Ext(), qt.Equals, "txt")
@@ -190,7 +194,7 @@ func TestParse(t *testing.T) {
 				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"md"})
 				c.Assert(p.IsBranchBundle(), qt.IsTrue)
 				c.Assert(p.IsBundle(), qt.IsTrue)
-				c.Assert(p.Base(), qt.Equals, "/")
+				c.Assert(p.Base(), qt.Equals, "")
 				c.Assert(p.BaseReTyped("foo"), qt.Equals, "/foo")
 				c.Assert(p.Path(), qt.Equals, "/_index.md")
 				c.Assert(p.Container(), qt.Equals, "")
@@ -217,7 +221,6 @@ func TestParse(t *testing.T) {
 				c.Assert(p.Lang(), qt.Equals, "")
 				c.Assert(p.NameNoExt(), qt.Equals, "index")
 				c.Assert(p.NameNoIdentifier(), qt.Equals, "index")
-				c.Assert(p.NameNoLang(), qt.Equals, "index.md")
 				c.Assert(p.Section(), qt.Equals, "")
 			},
 		},
@@ -239,7 +242,6 @@ func TestParse(t *testing.T) {
 				c.Assert(p.Lang(), qt.Equals, "no")
 				c.Assert(p.NameNoExt(), qt.Equals, "index.no")
 				c.Assert(p.NameNoIdentifier(), qt.Equals, "index")
-				c.Assert(p.NameNoLang(), qt.Equals, "index.md")
 				c.Assert(p.Path(), qt.Equals, "/a/b/index.no.md")
 				c.Assert(p.PathNoLang(), qt.Equals, "/a/b/index.md")
 				c.Assert(p.Section(), qt.Equals, "a")
@@ -259,14 +261,13 @@ func TestParse(t *testing.T) {
 				c.Assert(p.IsBundle(), qt.IsTrue)
 				c.Assert(p.IsLeafBundle(), qt.IsFalse)
 				c.Assert(p.NameNoExt(), qt.Equals, "_index.no")
-				c.Assert(p.NameNoLang(), qt.Equals, "_index.md")
 			},
 		},
 		{
 			"Index root no slash",
 			"_index.md",
 			func(c *qt.C, p *Path) {
-				c.Assert(p.Base(), qt.Equals, "/")
+				c.Assert(p.Base(), qt.Equals, "")
 				c.Assert(p.Ext(), qt.Equals, "md")
 				c.Assert(p.Name(), qt.Equals, "_index.md")
 			},
@@ -275,7 +276,7 @@ func TestParse(t *testing.T) {
 			"Index root",
 			"/_index.md",
 			func(c *qt.C, p *Path) {
-				c.Assert(p.Base(), qt.Equals, "/")
+				c.Assert(p.Base(), qt.Equals, "")
 				c.Assert(p.Ext(), qt.Equals, "md")
 				c.Assert(p.Name(), qt.Equals, "_index.md")
 			},
@@ -373,13 +374,160 @@ func TestParse(t *testing.T) {
 				c.Assert(p.IsContentData(), qt.IsFalse)
 			},
 		},
+		{
+			"Custom identifier",
+			"/a/b/p1._myid_.no.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Ext(), qt.Equals, "md")
+				c.Assert(p.Custom(), qt.Equals, "myid")
+			},
+		},
+		{
+			"Prefix language",
+			"/a/b/p1._language_no_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Ext(), qt.Equals, "md")
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"md", "no"})
+			},
+		},
+		{
+			"Prefix version",
+			"/a/b/p1._version_v1_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"md", "v1"})
+			},
+		},
+		{
+			"Prefix version with dots",
+			"/a/b/p1._version_v1.0.0_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1.0.0"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Prefix role",
+			"/a/b/p1._role_admin_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"admin"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Multiple prefixes",
+			"/a/b/p1._language_no_._role_admin_._version_v2_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"admin"})
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v2"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Prefix version with dots and role",
+			"/a/b/p1._version_v1.0.0_._role_editor_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1.0.0"})
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"editor"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Prefix with dot-based lang",
+			"/a/b/p1._version_v1_.no.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1"})
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Prefix leaf bundle with version",
+			"/a/b/index._version_v1_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.IsLeafBundle(), qt.IsTrue)
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1"})
+				c.Assert(p.Base(), qt.Equals, "/a/b")
+				c.Assert(p.BaseNameNoIdentifier(), qt.Equals, "b")
+			},
+		},
+		{
+			"Prefix branch bundle with role",
+			"/a/b/_index._role_admin_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.IsBranchBundle(), qt.IsTrue)
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"admin"})
+				c.Assert(p.Base(), qt.Equals, "/a/b")
+			},
+		},
+		{
+			"Prefix with mixed case, unnormalized",
+			"/a/b/My Page._Version_V1_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/my-page")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v1"})
+				pp := p.Unnormalized()
+				c.Assert(pp.BaseNameNoIdentifier(), qt.Equals, "My Page")
+			},
+		},
+		{
+			"Multiple languages",
+			"/a/b/p1._language_en_._language_fr_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				// Right-to-left parse order.
+				c.Assert(p.Lang(), qt.Equals, "fr")
+				c.Assert(p.Langs(), qt.DeepEquals, []string{"fr", "en"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Multiple roles",
+			"/a/b/p1._role_guest_._role_admin_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"admin", "guest"})
+				c.Assert(p.Ext(), qt.Equals, "md")
+			},
+		},
+		{
+			"Multiple versions",
+			"/a/b/p1._version_v1_._version_v2_.md",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Base(), qt.Equals, "/a/b/p1")
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v2", "v1"})
+			},
+		},
+		{
+			"Unknown prefix not extracted",
+			"/a/b/p1._unknown_foo_.md",
+			func(c *qt.C, p *Path) {
+				// Unknown prefix should be left in path and treated as custom wrapper.
+				c.Assert(p.Custom(), qt.Equals, "unknown_foo")
+				c.Assert(p.Versions(), qt.IsNil)
+				c.Assert(p.Roles(), qt.IsNil)
+			},
+		},
 	}
+	parser := newTestParser()
 	for _, test := range tests {
 		c.Run(test.name, func(c *qt.C) {
-			if test.name != "Home branch cundle" {
-				// return
+			if test.name != "Caret up identifier" {
+				//	return
 			}
-			test.assert(c, testParser.Parse(files.ComponentFolderContent, test.path))
+			test.assert(c, parser.Parse(files.ComponentFolderContent, test.path))
 		})
 	}
 }
@@ -437,8 +585,8 @@ func TestParseLayouts(t *testing.T) {
 			"/mylayout.list.section.no.html",
 			func(c *qt.C, p *Path) {
 				c.Assert(p.Layout(), qt.Equals, "mylayout")
-				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "no", "section", "list", "mylayout"})
-				c.Assert(p.IdentifiersUnknown(), qt.DeepEquals, []string{})
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "no", "section", "mylayout"})
+				c.Assert(p.IdentifiersUnknown(), qt.DeepEquals, []string{"list"})
 				c.Assert(p.Base(), qt.Equals, "/mylayout.html")
 				c.Assert(p.Lang(), qt.Equals, "no")
 			},
@@ -461,7 +609,8 @@ func TestParseLayouts(t *testing.T) {
 			"Lang and output format",
 			"/list.no.amp.not.html",
 			func(c *qt.C, p *Path) {
-				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "not", "amp", "no", "list"})
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "list", "amp", "no"})
+				c.Assert(p.IdentifiersUnknown(), qt.DeepEquals, []string{"not"})
 				c.Assert(p.OutputFormat(), qt.Equals, "amp")
 				c.Assert(p.Ext(), qt.Equals, "html")
 				c.Assert(p.Lang(), qt.Equals, "no")
@@ -583,14 +732,88 @@ func TestParseLayouts(t *testing.T) {
 				c.Assert(p.NameNoIdentifier(), qt.Equals, "myshortcode")
 			},
 		},
+		{
+			"Not lang",
+			"/foo/index.xy.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Lang(), qt.Equals, "")
+				c.Assert(p.Layout(), qt.Equals, "index")
+				c.Assert(p.PathNoLang(), qt.Equals, "/foo/index.xy.html")
+				c.Assert(p.Identifiers(), qt.DeepEquals, []string{"html", "index"})
+				c.Assert(p.IdentifiersUnknown(), qt.DeepEquals, []string{"xy"})
+			},
+		},
+		{
+			"Prefix language layout",
+			"/page._language_no_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Lang(), qt.Equals, "no")
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.OutputFormat(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"Prefix outputformat layout",
+			"/page._outputformat_amp_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.OutputFormat(), qt.Equals, "amp")
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"Prefix kind layout",
+			"/page._kind_section_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Kind(), qt.Equals, kinds.KindSection)
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"Prefix layout layout",
+			"/page._layout_list_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Layout(), qt.Equals, "list")
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"All prefix identifiers in layout",
+			"/page._language_fr_._kind_section_._outputformat_amp_._layout_list_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Lang(), qt.Equals, "fr")
+				c.Assert(p.Kind(), qt.Equals, kinds.KindSection)
+				c.Assert(p.OutputFormat(), qt.Equals, "amp")
+				c.Assert(p.Layout(), qt.Equals, "list")
+				c.Assert(p.Ext(), qt.Equals, "html")
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"Prefix version in layout",
+			"/page._version_v2_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Versions(), qt.DeepEquals, []string{"v2"})
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
+		{
+			"Prefix role in layout",
+			"/page._role_guest_.html",
+			func(c *qt.C, p *Path) {
+				c.Assert(p.Roles(), qt.DeepEquals, []string{"guest"})
+				c.Assert(p.Base(), qt.Equals, "/page.html")
+			},
+		},
 	}
 
+	parser := newTestParser()
 	for _, test := range tests {
 		c.Run(test.name, func(c *qt.C) {
-			if test.name != "Shortcode lang layout" {
-				// return
-			}
-			test.assert(c, testParser.Parse(files.ComponentFolderLayouts, test.path))
+			test.assert(c, parser.Parse(files.ComponentFolderLayouts, test.path))
 		})
 	}
 }
@@ -604,8 +827,91 @@ func TestHasExt(t *testing.T) {
 	c.Assert(HasExt("/a/b.c/d"), qt.IsFalse)
 }
 
-func BenchmarkParseIdentity(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		testParser.ParseIdentity(files.ComponentFolderAssets, "/a/b.css")
+func TestSitesMatrixFromPath(t *testing.T) {
+	c := qt.New(t)
+
+	parser := newTestParser()
+
+	p := parser.Parse(files.ComponentFolderContent, "/a/b/c.fr.md")
+	v := parser.SitesMatrixFromPath(p)
+	c.Assert(v.HasLanguage(2), qt.IsTrue)
+	c.Assert(v.LenVectors(), qt.Equals, 1)
+	c.Assert(v.VectorSample(), qt.Equals, sitesmatrix.Vector{2, 0, 0})
+
+	// With version prefix.
+	p = parser.Parse(files.ComponentFolderContent, "/a/b/c._version_v2_.fr.md")
+	v = parser.SitesMatrixFromPath(p)
+	c.Assert(v.HasLanguage(2), qt.IsTrue)
+	c.Assert(v.HasVersion(1), qt.IsTrue) // v2 is index 1
+	c.Assert(v.LenVectors(), qt.Equals, 1)
+	c.Assert(v.VectorSample(), qt.Equals, sitesmatrix.Vector{2, 1, 0})
+
+	// With version and role prefixes.
+	p = parser.Parse(files.ComponentFolderContent, "/a/b/c._version_v1_._role_editor_.fr.md")
+	v = parser.SitesMatrixFromPath(p)
+	c.Assert(v.HasLanguage(2), qt.IsTrue)
+	c.Assert(v.HasVersion(0), qt.IsTrue) // v1 is index 0
+	c.Assert(v.HasRole(1), qt.IsTrue)    // editor is index 1
+	c.Assert(v.LenVectors(), qt.Equals, 1)
+	c.Assert(v.VectorSample(), qt.Equals, sitesmatrix.Vector{2, 0, 1})
+
+	// With multiple roles.
+	p = parser.Parse(files.ComponentFolderContent, "/a/b/c._role_guest_._role_admin_.fr.md")
+	v = parser.SitesMatrixFromPath(p)
+	c.Assert(v.HasLanguage(2), qt.IsTrue)
+	c.Assert(v.HasRole(0), qt.IsTrue) // admin is index 0
+	c.Assert(v.HasRole(3), qt.IsTrue) // guest is index 3
+	c.Assert(v.LenVectors(), qt.Equals, 2)
+
+	// With multiple languages via prefix.
+	p = parser.Parse(files.ComponentFolderContent, "/a/b/c._language_en_._language_fr_.md")
+	v = parser.SitesMatrixFromPath(p)
+	c.Assert(v.HasLanguage(0), qt.IsFalse) // no is index 0, not included
+	c.Assert(v.HasLanguage(1), qt.IsTrue)  // en is index 1
+	c.Assert(v.HasLanguage(2), qt.IsTrue)  // fr is index 2
+	c.Assert(v.LenVectors(), qt.Equals, 2)
+}
+
+func FuzzParsePath(f *testing.F) {
+	componentPaths := []struct {
+		component string
+		path      string
+	}{
+		{files.ComponentFolderContent, "/a/b/c.fr.md"},
+		{files.ComponentFolderContent, "/a/b/c._version_v2_.fr.md"},
+		{files.ComponentFolderContent, "/a/b/c._version_v1_._role_editor_.fr.md"},
+		{files.ComponentFolderContent, "/a/b/c._role_guest_._role_admin_.fr.md"},
+		{files.ComponentFolderContent, "/a/b/c._language_en_._language_fr_.md"},
+		{files.ComponentFolderLayouts, "/list.no.html"},
+		{files.ComponentFolderLayouts, "/page._language_fr_._kind_section_._outputformat_amp_._layout_list_.html"},
+	}
+
+	for _, cp := range componentPaths {
+		f.Add(cp.component, cp.path)
+	}
+
+	parser := newTestParser()
+
+	f.Fuzz(func(t *testing.T, c, s string) {
+		p := parser.Parse(c, s)
+		if p == nil {
+			t.Fatalf("Parse returned nil for path: %q", s)
+		}
+		// Execute all the methods using reflection to ensure they don't panic.
+		v := reflect.ValueOf(p)
+		for i := 0; i < v.NumMethod(); i++ {
+			method := v.Type().Method(i)
+			if method.Type.NumIn() == 1 {
+				method.Func.Call([]reflect.Value{v})
+			}
+		}
+	})
+}
+
+func BenchmarkSitesMatrixFromPath(b *testing.B) {
+	parser := newTestParser()
+	p := parser.Parse(files.ComponentFolderContent, "/a/b/c.fr.md")
+	for b.Loop() {
+		parser.SitesMatrixFromPath(p)
 	}
 }

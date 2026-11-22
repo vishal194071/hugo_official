@@ -8,10 +8,9 @@ params:
     aliases: [duration]
     returnType: time.Duration
     signatures: [time.Duration TIME_UNIT NUMBER]
-aliases: [/functions/duration]
 ---
 
-The `time.Duration` function returns a [`time.Duration`] value that you can use with any of the `Duration` [methods].
+The `time.Duration` function returns a [`time.Duration`][] value that you can use with any of the `Duration` [methods][].
 
 This template:
 

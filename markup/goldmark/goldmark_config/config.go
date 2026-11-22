@@ -40,7 +40,11 @@ var Default = Config{
 			RightAngleQuote:  "&raquo;",
 			Apostrophe:       "&rsquo;",
 		},
-		Footnote:        true,
+		Footnote: Footnote{
+			Enable:             true,
+			EnableAutoIDPrefix: false,
+			BacklinkHTML:       "&#x21a9;&#xfe0e;",
+		},
 		DefinitionList:  true,
 		Table:           true,
 		Strikethrough:   true,
@@ -152,7 +156,7 @@ type LinkRenderHook struct {
 
 type Extensions struct {
 	Typographer    Typographer
-	Footnote       bool
+	Footnote       Footnote
 	DefinitionList bool
 	Extras         Extras
 	Passthrough    Passthrough
@@ -164,6 +168,13 @@ type Extensions struct {
 	LinkifyProtocol string
 	TaskList        bool
 	CJK             CJK
+}
+
+// Footnote holds footnote configuration.
+type Footnote struct {
+	Enable             bool
+	EnableAutoIDPrefix bool
+	BacklinkHTML       string
 }
 
 // Typographer holds typographer configuration.

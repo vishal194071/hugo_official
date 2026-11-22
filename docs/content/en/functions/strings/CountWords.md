@@ -7,8 +7,7 @@ params:
   functions_and_methods:
     aliases: [countwords]
     returnType: int
-    signatures: [strings.CountWords INPUT]
-aliases: [/functions/countwords]
+    signatures: [strings.CountWords STRING]
 ---
 
 ```go-html-template

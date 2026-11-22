@@ -1,17 +1,18 @@
 ---
 title: collections.After
-description: Slices an array to the items after the Nth item.
+description: Returns a slice containing the elements after the first N elements of the given slice.
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [after]
-    returnType: any
-    signatures: [collections.After INDEX COLLECTION]
-aliases: [/functions/after]
+    returnType: '[]any'
+    signatures: [collections.After N SLICE]
 ---
 
-The following shows `after` being used in conjunction with the [`slice`]function:
+## Basic usage
+
+The following shows `after` being used in conjunction with the [`slice`][] function:
 
 ```go-html-template
 {{ $data := slice "one" "two" "three" "four" }}
@@ -31,9 +32,9 @@ The template above is rendered to:
 </ul>
 ```
 
-## Example of `after` with `first`: 2nd&ndash;4th most recent articles
+## Combine with first
 
-You can use `after` in combination with the [`first`] function and Hugo's [powerful sorting methods](/quick-reference/page-collections/#sort). Let's assume you have a `section` page at `example.com/articles`. You have 10 articles, but you want your template to show only two rows:
+You can use `after` in combination with the [`first`][] function and Hugo's [powerful sorting methods][]. Let's assume you have a `section` page at `example.org/articles`. You have 10 articles, but you want your template to show only two rows:
 
 1. The top row is titled "Featured" and shows only the most recently published article (i.e. by `publishdate` in the content files' front matter).
 1. The second row is titled "Recent Articles" and shows only the 2nd- to 4th-most recently published articles.
@@ -65,3 +66,4 @@ You can use `after` in combination with the [`first`] function and Hugo's [power
 
 [`first`]: /functions/collections/first/
 [`slice`]: /functions/collections/slice/
+[powerful sorting methods]: /quick-reference/page-collections/#sort

@@ -15,6 +15,7 @@ package hugolib
 
 import (
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/gohugoio/hugo/output"
@@ -37,7 +38,7 @@ func newPagePaths(ps *pageState) (pagePaths, error) {
 	if ps.m.isStandalone() {
 		outputFormats = output.Formats{ps.m.standaloneOutputFormat}
 	} else {
-		outputFormats = pm.outputFormats()
+		outputFormats = ps.outputFormats()
 		if len(outputFormats) == 0 {
 			return pagePaths{}, nil
 		}
@@ -96,6 +97,52 @@ func newPagePaths(ps *pageState) (pagePaths, error) {
 	}, nil
 }
 
+// targetPathDir returns the directory part of p's target path, with any
+// slug set in the section, taxonomy or term pages above it applied.
+func targetPathDir(p *pageState) string {
+	unnormalized := p.s.Conf.DisablePathToLower()
+	pi := p.PathInfo()
+	if unnormalized {
+		pi = pi.Unnormalized()
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(pi.Base()))
+
+	if p.IsBranch() {
+		writeBranchDir(&sb, p, unnormalized)
+	} else {
+		section := p.CurrentSection()
+		writeBranchDir(&sb, section, unnormalized)
+		sb.WriteString(strings.TrimPrefix(pi.ContainerDir(), pathBase(section, unnormalized)))
+	}
+
+	return sb.String()
+}
+
+func writeBranchDir(sb *strings.Builder, p page.Page, unnormalized bool) {
+	if p.IsHome() {
+		return
+	}
+	parent := p.Parent()
+	writeBranchDir(sb, parent, unnormalized)
+	rel := strings.TrimPrefix(pathBase(p, unnormalized), pathBase(parent, unnormalized))
+	if slug := p.Slug(); slug != "" {
+		sb.WriteString(rel[:strings.LastIndexByte(rel, '/')+1])
+		sb.WriteString(slug)
+		return
+	}
+	sb.WriteString(rel)
+}
+
+func pathBase(p page.Page, unnormalized bool) string {
+	pi := p.PathInfo()
+	if unnormalized {
+		pi = pi.Unnormalized()
+	}
+	return pi.Base()
+}
+
 type pagePaths struct {
 	outputFormats     page.OutputFormats
 	firstOutputFormat page.OutputFormat
@@ -113,19 +160,16 @@ func createTargetPathDescriptor(p *pageState) (page.TargetPathDescriptor, error)
 	d := s.Deps
 	pm := p.m
 	alwaysInSubDir := p.Kind() == kinds.KindSitemap
-
 	pageInfoPage := p.PathInfo()
-	pageInfoCurrentSection := p.CurrentSection().PathInfo()
 	if p.s.Conf.DisablePathToLower() {
 		pageInfoPage = pageInfoPage.Unnormalized()
-		pageInfoCurrentSection = pageInfoCurrentSection.Unnormalized()
 	}
 
 	desc := page.TargetPathDescriptor{
 		PathSpec:    d.PathSpec,
 		Kind:        p.Kind(),
 		Path:        pageInfoPage,
-		Section:     pageInfoCurrentSection,
+		Dir:         targetPathDir(p),
 		UglyURLs:    s.h.Conf.IsUglyURLs(p.Section()),
 		ForcePrefix: s.h.Conf.IsMultihost() || alwaysInSubDir,
 		URL:         pm.pageConfig.URL,
@@ -139,8 +183,39 @@ func createTargetPathDescriptor(p *pageState) (page.TargetPathDescriptor, error)
 		desc.BaseName = pageInfoPage.BaseNameNoIdentifier()
 	}
 
-	desc.PrefixFilePath = s.getLanguageTargetPathLang(alwaysInSubDir)
-	desc.PrefixLink = s.getLanguagePermalinkLang(alwaysInSubDir)
+	addPrefix := func(filePath, link string) {
+		if filePath != "" {
+			if desc.PrefixFilePath != "" {
+				desc.PrefixFilePath += "/" + filePath
+			} else {
+				desc.PrefixFilePath += filePath
+			}
+		}
+
+		if link != "" {
+			if desc.PrefixLink != "" {
+				desc.PrefixLink += "/" + link
+			} else {
+				desc.PrefixLink += link
+			}
+		}
+	}
+
+	// Add path prefixes.
+	// Add any role first, as that is a natural candidate for external ACL checks.
+	// For multihost sites, the file path needs to start with the language code.
+	if s.h.Conf.IsMultihost() {
+		addPrefix(s.getLanguageTargetPathLang(true), "")
+	}
+	rolePrefix := s.getPrefixRole()
+	addPrefix(rolePrefix, rolePrefix)
+	versionPrefix := s.getPrefixVersion()
+	addPrefix(versionPrefix, versionPrefix)
+	if s.h.Conf.IsMultihost() {
+		addPrefix("", s.getLanguagePermalinkLang(alwaysInSubDir))
+	} else {
+		addPrefix(s.getLanguageTargetPathLang(alwaysInSubDir), s.getLanguagePermalinkLang(alwaysInSubDir))
+	}
 
 	if desc.URL != "" && strings.IndexByte(desc.URL, ':') >= 0 {
 		// Attempt to parse and expand an url
@@ -155,25 +230,21 @@ func createTargetPathDescriptor(p *pageState) (page.TargetPathDescriptor, error)
 		}
 	}
 
-	opath, err := d.ResourceSpec.Permalinks.Expand(p.Section(), p)
+	opath, err := d.ResourceSpec.Permalinks.Expand(p)
 	if err != nil {
 		return desc, err
 	}
 
 	if opath != "" {
 		opath, _ = url.QueryUnescape(opath)
-		if strings.HasSuffix(opath, "//") {
-			// When rewriting the _index of the section the permalink config is applied to,
-			// we get double slashes at the end sometimes; clear them up here
-			opath = strings.TrimSuffix(opath, "/")
-		}
+		opath = path.Clean(opath)
 
 		desc.ExpandedPermalink = opath
 
 		if p.File() != nil {
 			s.Log.Debugf("Set expanded permalink path for %s %s to %#v", p.Kind(), p.File().Path(), opath)
 		} else {
-			s.Log.Debugf("Set expanded permalink path for %s in %v to %#v", p.Kind(), desc.Section.Path(), opath)
+			s.Log.Debugf("Set expanded permalink path for %s %s to %#v", p.Kind(), p.Path(), opath)
 		}
 	}
 

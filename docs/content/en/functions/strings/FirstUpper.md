@@ -1,6 +1,6 @@
 ---
 title: strings.FirstUpper
-description: Returns the given string, capitalizing the first character.
+description: Returns the given string, converting the first character to uppercase.
 categories: []
 keywords: []
 params:
@@ -8,9 +8,8 @@ params:
     aliases: []
     returnType: string
     signatures: [strings.FirstUpper STRING]
-aliases: [/functions/strings.firstupper]
 ---
 
 ```go-html-template
-{{ strings.FirstUpper "foo" }} → Foo
+{{ strings.FirstUpper "hugo" }} → Hugo
 ```

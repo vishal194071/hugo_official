@@ -29,6 +29,9 @@ chroma:
     - alloy
     Name: Alloy
   - Aliases:
+    - ampl
+    Name: AMPL
+  - Aliases:
     - ng2
     Name: Angular2
   - Aliases:
@@ -54,6 +57,10 @@ chroma:
   - Aliases:
     - armasm
     Name: ArmAsm
+  - Aliases:
+    - arturo
+    - art
+    Name: Arturo
   - Aliases:
     - atl
     Name: ATL
@@ -121,12 +128,15 @@ chroma:
     Name: C
   - Aliases:
     - csharp
-    - c#
-    Name: C#
+    - 'c#'
+    Name: 'C#'
   - Aliases:
     - cpp
     - c++
     Name: C++
+  - Aliases:
+    - c3
+    Name: C3
   - Aliases:
     - caddyfile
     - caddy
@@ -224,6 +234,10 @@ chroma:
     - desktop_entry
     Name: Desktop file
   - Aliases:
+    - devicetree
+    - dts
+    Name: Devicetree
+  - Aliases:
     - diff
     - udiff
     Name: Diff
@@ -238,6 +252,7 @@ chroma:
   - Aliases:
     - docker
     - dockerfile
+    - containerfile
     Name: Docker
   - Aliases:
     - dtd
@@ -261,6 +276,12 @@ chroma:
     - elisp
     - emacs-lisp
     Name: EmacsLisp
+  - Aliases:
+    - erb
+    - html+erb
+    - html+ruby
+    - rhtml
+    Name: ERB
   - Aliases:
     - erlang
     Name: Erlang
@@ -301,6 +322,16 @@ chroma:
     - gd3
     Name: GDScript3
   - Aliases:
+    - gemfile-lock
+    - gemfilelock
+    Name: Gemfile.lock
+  - Aliases:
+    - gemtext
+    - gmi
+    - gmni
+    - gemini
+    Name: Gemtext
+  - Aliases:
     - genshi
     - kid
     - xml+genshi
@@ -313,6 +344,10 @@ chroma:
   - Aliases:
     - genshitext
     Name: Genshi Text
+  - Aliases:
+    - pot
+    - po
+    Name: Gettext
   - Aliases:
     - cucumber
     - Cucumber
@@ -428,6 +463,7 @@ chroma:
     Name: JavaScript
   - Aliases:
     - json
+    - jsonl
     Name: JSON
   - Aliases:
     - jsonata
@@ -443,8 +479,21 @@ chroma:
     - jungle
     Name: Jungle
   - Aliases:
+    - kak
+    - kakoune
+    - kakrc
+    - kakscript
+    Name: Kakoune
+  - Aliases:
+    - kdl
+    Name: KDL
+  - Aliases:
     - kotlin
     Name: Kotlin
+  - Aliases:
+    - lateralus
+    - ltl
+    Name: Lateralus
   - Aliases:
     - lean4
     - lean
@@ -454,12 +503,19 @@ chroma:
     - lighttpd
     Name: Lighttpd configuration file
   - Aliases:
+    - lilypond
+    Name: LilyPond
+  - Aliases:
     - llvm
     Name: LLVM
+  - Aliases: null
+    Name: lox
   - Aliases:
     - lua
-    - luau
     Name: Lua
+  - Aliases:
+    - luau
+    Name: Luau
   - Aliases:
     - make
     - makefile
@@ -473,6 +529,9 @@ chroma:
     - md
     - mkd
     Name: markdown
+  - Aliases:
+    - mess
+    Name: Markless
   - Aliases:
     - mason
     Name: Mason
@@ -500,6 +559,9 @@ chroma:
     - metal
     Name: Metal
   - Aliases:
+    - µcad
+    Name: microcad
+  - Aliases:
     - minizinc
     - MZN
     - mzn
@@ -508,16 +570,23 @@ chroma:
     - mlir
     Name: MLIR
   - Aliases:
+    - modelica
+    Name: Modelica
+  - Aliases:
     - modula2
     - m2
     Name: Modula-2
   - Aliases:
     - mojo
-    - "\U0001F525"
+    - 🔥
     Name: Mojo
   - Aliases:
     - monkeyc
     Name: MonkeyC
+  - Aliases:
+    - moonbit
+    - mbt
+    Name: MoonBit
   - Aliases:
     - moonscript
     - moon
@@ -561,6 +630,9 @@ chroma:
     - nsi
     - nsh
     Name: NSIS
+  - Aliases:
+    - nu
+    Name: Nu
   - Aliases:
     - objective-c
     - objectivec
@@ -675,6 +747,9 @@ chroma:
     - proto
     Name: Protocol Buffer
   - Aliases:
+    - txtpb
+    Name: Protocol Buffer Text Format
+  - Aliases:
     - prql
     Name: PRQL
   - Aliases:
@@ -689,6 +764,7 @@ chroma:
     - sage
     - python3
     - py3
+    - starlark
     Name: Python
   - Aliases:
     - python2
@@ -743,6 +819,12 @@ chroma:
     - arexx
     Name: Rexx
   - Aliases:
+    - rgbasm
+    Name: RGBDS Assembly
+  - Aliases:
+    - ring
+    Name: Ring
+  - Aliases:
     - SQLRPGLE
     - RPG IV
     Name: RPGLE
@@ -767,6 +849,9 @@ chroma:
   - Aliases:
     - scala
     Name: Scala
+  - Aliases:
+    - scdoc
+    Name: scdoc
   - Aliases:
     - scheme
     - scm
@@ -809,6 +894,9 @@ chroma:
   - Aliases:
     - sp
     Name: SourcePawn
+  - Aliases:
+    - spade
+    Name: Spade
   - Aliases:
     - sparql
     Name: SPARQL
@@ -858,6 +946,9 @@ chroma:
     - tcsh
     - csh
     Name: Tcsh
+  - Aliases:
+    - templ
+    Name: Templ
   - Aliases:
     - termcap
     Name: Termcap
@@ -953,6 +1044,10 @@ chroma:
   - Aliases: null
     Name: WDTE
   - Aliases:
+    - wast
+    - wat
+    Name: WebAssembly Text Format
+  - Aliases:
     - wgsl
     Name: WebGPU Shading Language
   - Aliases:
@@ -971,6 +1066,12 @@ chroma:
     - yaml
     Name: YAML
   - Aliases:
+    - yaml+jinja
+    - salt
+    - sls
+    - ansible
+    Name: YAML+Jinja
+  - Aliases:
     - yang
     Name: YANG
   - Aliases:
@@ -983,73 +1084,228 @@ chroma:
     - zig
     Name: Zig
   styles:
-  - RPGLE
-  - abap
-  - algol
-  - algol_nu
-  - arduino
-  - autumn
-  - average
-  - base16-snazzy
-  - borland
-  - bw
-  - catppuccin-frappe
-  - catppuccin-latte
-  - catppuccin-macchiato
-  - catppuccin-mocha
-  - colorful
-  - doom-one
-  - doom-one2
-  - dracula
-  - emacs
-  - evergarden
-  - friendly
-  - fruity
-  - github
-  - github-dark
-  - gruvbox
-  - gruvbox-light
-  - hr_high_contrast
-  - hrdark
-  - igor
-  - lovelace
-  - manni
-  - modus-operandi
-  - modus-vivendi
-  - monokai
-  - monokailight
-  - murphy
-  - native
-  - nord
-  - nordic
-  - onedark
-  - onesenterprise
-  - paraiso-dark
-  - paraiso-light
-  - pastie
-  - perldoc
-  - pygments
-  - rainbow_dash
-  - rose-pine
-  - rose-pine-dawn
-  - rose-pine-moon
-  - rrt
-  - solarized-dark
-  - solarized-dark256
-  - solarized-light
-  - swapoff
-  - tango
-  - tokyonight-day
-  - tokyonight-moon
-  - tokyonight-night
-  - tokyonight-storm
-  - trac
-  - vim
-  - vs
-  - vulcan
-  - witchhazel
-  - xcode
-  - xcode-dark
+  - counterpart: ''
+    mode: light
+    name: abap
+  - counterpart: ''
+    mode: light
+    name: algol
+  - counterpart: ''
+    mode: light
+    name: algol_nu
+  - counterpart: ''
+    mode: light
+    name: arduino
+  - counterpart: ''
+    mode: dark
+    name: ashen
+  - counterpart: ''
+    mode: dark
+    name: aura-theme-dark
+  - counterpart: ''
+    mode: dark
+    name: aura-theme-dark-soft
+  - counterpart: ''
+    mode: light
+    name: autumn
+  - counterpart: ''
+    mode: dark
+    name: average
+  - counterpart: ''
+    mode: dark
+    name: base16-snazzy
+  - counterpart: ''
+    mode: light
+    name: borland
+  - counterpart: ''
+    mode: light
+    name: bw
+  - counterpart: ''
+    mode: dark
+    name: catppuccin-frappe
+  - counterpart: catppuccin-mocha
+    mode: light
+    name: catppuccin-latte
+  - counterpart: ''
+    mode: dark
+    name: catppuccin-macchiato
+  - counterpart: catppuccin-latte
+    mode: dark
+    name: catppuccin-mocha
+  - counterpart: ''
+    mode: light
+    name: colorful
+  - counterpart: ''
+    mode: dark
+    name: darcula
+  - counterpart: ''
+    mode: dark
+    name: doom-one
+  - counterpart: ''
+    mode: dark
+    name: doom-one2
+  - counterpart: ''
+    mode: dark
+    name: dracula
+  - counterpart: ''
+    mode: light
+    name: emacs
+  - counterpart: ''
+    mode: dark
+    name: evergarden
+  - counterpart: ''
+    mode: light
+    name: friendly
+  - counterpart: ''
+    mode: dark
+    name: fruity
+  - counterpart: github-dark
+    mode: light
+    name: github
+  - counterpart: github
+    mode: dark
+    name: github-dark
+  - counterpart: gruvbox-light
+    mode: dark
+    name: gruvbox
+  - counterpart: gruvbox
+    mode: light
+    name: gruvbox-light
+  - counterpart: ''
+    mode: light
+    name: hr_high_contrast
+  - counterpart: ''
+    mode: light
+    name: hrdark
+  - counterpart: ''
+    mode: light
+    name: igor
+  - counterpart: ''
+    mode: dark
+    name: kanagawa-dragon
+  - counterpart: kanagawa-wave
+    mode: light
+    name: kanagawa-lotus
+  - counterpart: kanagawa-lotus
+    mode: dark
+    name: kanagawa-wave
+  - counterpart: ''
+    mode: light
+    name: lovelace
+  - counterpart: ''
+    mode: light
+    name: manni
+  - counterpart: modus-vivendi
+    mode: light
+    name: modus-operandi
+  - counterpart: modus-operandi
+    mode: dark
+    name: modus-vivendi
+  - counterpart: monokailight
+    mode: dark
+    name: monokai
+  - counterpart: monokai
+    mode: light
+    name: monokailight
+  - counterpart: ''
+    mode: light
+    name: murphy
+  - counterpart: ''
+    mode: dark
+    name: native
+  - counterpart: ''
+    mode: dark
+    name: nord
+  - counterpart: ''
+    mode: dark
+    name: nordic
+  - counterpart: ''
+    mode: dark
+    name: onedark
+  - counterpart: ''
+    mode: light
+    name: onesenterprise
+  - counterpart: paraiso-light
+    mode: dark
+    name: paraiso-dark
+  - counterpart: paraiso-dark
+    mode: light
+    name: paraiso-light
+  - counterpart: ''
+    mode: light
+    name: pastie
+  - counterpart: ''
+    mode: light
+    name: perldoc
+  - counterpart: ''
+    mode: light
+    name: pygments
+  - counterpart: ''
+    mode: light
+    name: rainbow_dash
+  - counterpart: rose-pine-dawn
+    mode: dark
+    name: rose-pine
+  - counterpart: rose-pine
+    mode: light
+    name: rose-pine-dawn
+  - counterpart: ''
+    mode: dark
+    name: rose-pine-moon
+  - counterpart: ''
+    mode: light
+    name: rpgle
+  - counterpart: ''
+    mode: dark
+    name: rrt
+  - counterpart: solarized-light
+    mode: dark
+    name: solarized-dark
+  - counterpart: ''
+    mode: dark
+    name: solarized-dark256
+  - counterpart: solarized-dark
+    mode: light
+    name: solarized-light
+  - counterpart: ''
+    mode: dark
+    name: swapoff
+  - counterpart: ''
+    mode: light
+    name: tango
+  - counterpart: tokyonight-night
+    mode: light
+    name: tokyonight-day
+  - counterpart: ''
+    mode: dark
+    name: tokyonight-moon
+  - counterpart: tokyonight-day
+    mode: dark
+    name: tokyonight-night
+  - counterpart: ''
+    mode: dark
+    name: tokyonight-storm
+  - counterpart: ''
+    mode: light
+    name: trac
+  - counterpart: ''
+    mode: dark
+    name: vim
+  - counterpart: ''
+    mode: light
+    name: vs
+  - counterpart: ''
+    mode: dark
+    name: vulcan
+  - counterpart: ''
+    mode: dark
+    name: witchhazel
+  - counterpart: xcode-dark
+    mode: light
+    name: xcode
+  - counterpart: xcode
+    mode: dark
+    name: xcode-dark
 config:
   HTTPCache:
     cache:
@@ -1065,10 +1321,12 @@ config:
         - '**'
       high: 0s
       low: 0s
+    respectCacheControlNoStoreInRequest: true
+    respectCacheControlNoStoreInResponse: false
   archeTypeDir: archetypes
   assetDir: assets
-  author: null
-  baseURL: ""
+  author: {}
+  baseURL: https://example.org/
   build:
     buildStats:
       disableClasses: false
@@ -1076,23 +1334,23 @@ config:
       disableTags: false
       enable: false
     cacheBusters:
-    - source: (postcss|tailwind)\.config\.js
+    - source: '(postcss|tailwind)\.config\.(js|mjs|cjs)'
       target: (css|styles|scss|sass)
+    cleanDestinationDir:
+      enable: false
+      keepDirs:
+      - '{**/,}.*'
+      keepFiles:
+      - '{**/,}.{git,gitignore,gitattributes}'
     noJSConfigInAssets: false
     useResourceCacheWhen: fallback
   buildDrafts: false
   buildExpired: false
   buildFuture: false
-  cacheDir: ""
+  cacheDir: ''
   caches:
     assets:
       dir: :resourceDir/_gen
-      maxAge: -1
-    getcsv:
-      dir: :cacheDir/:project
-      maxAge: -1
-    getjson:
-      dir: :cacheDir/:project
       maxAge: -1
     getresource:
       dir: :cacheDir/:project
@@ -1103,13 +1361,18 @@ config:
     misc:
       dir: :cacheDir/:project
       maxAge: -1
+    modulegitinfo:
+      dir: :cacheDir/modules
+      maxAge: 24h
+    modulequeries:
+      dir: :cacheDir/modules
+      maxAge: 24h
     modules:
       dir: :cacheDir/modules
       maxAge: -1
   canonifyURLs: false
   capitalizeListTitles: true
-  cascade: []
-  cleanDestinationDir: false
+  cascade: null
   contentDir: content
   contentTypes:
     text/asciidoc: {}
@@ -1118,10 +1381,14 @@ config:
     text/org: {}
     text/pandoc: {}
     text/rst: {}
-  copyright: ""
+  copyright: ''
   dataDir: data
   defaultContentLanguage: en
   defaultContentLanguageInSubdir: false
+  defaultContentRole: guest
+  defaultContentRoleInSubdir: false
+  defaultContentVersion: ''
+  defaultContentVersionInSubdir: false
   defaultOutputFormat: html
   deployment:
     confirm: false
@@ -1131,11 +1398,12 @@ config:
     matchers: null
     maxDeletes: 256
     order: null
-    target: ""
+    target: ''
     targets: null
     workers: 10
   disableAliases: false
   disableDefaultLanguageRedirect: false
+  disableDefaultSiteRedirect: false
   disableHugoGeneratorInject: false
   disableKinds: null
   disableLanguages: null
@@ -1175,25 +1443,49 @@ config:
   ignoreCache: false
   ignoreFiles: null
   ignoreLogs: null
-  ignoreVendorPaths: ""
+  ignoreVendorPaths: ''
   imaging:
-    bgColor: '#ffffff'
-    hint: photo
-    quality: 75
+    anchor: smart
+    avif:
+      compression: lossy
+      encoderSpeed: 10
+      hint: photo
+      quality: 60
+    bgColor: ffffff
+    exif:
+      disableDate: false
+      disableLatLong: false
+      excludeFields: GPS|Exif|Exposure[M|P|B]|Contrast|Resolution|Sharp|JPEG|Metering|Sensing|Saturation|ColorSpace|Flash|WhiteBalance
+      includeFields: ''
+    firstFrameOnly: false
+    jpeg:
+      quality: 75
+    meta:
+      fields:
+      - '! *{GPS,Exif,Exposure[MPB],Contrast,Resolution,Sharp,JPEG,Metering,Sensing,Saturation,ColorSpace,Flash,WhiteBalance}*'
+      sources:
+      - exif
+      - iptc
     resampleFilter: box
-  languageCode: ""
+    webp:
+      compression: lossy
+      hint: photo
+      method: 2
+      quality: 75
+      useSharpYuv: false
   languages:
     en:
+      direction: ''
       disabled: false
-      languageCode: ""
-      languageDirection: ""
-      languageName: ""
-      title: ""
+      label: ''
+      locale: ''
+      title: ''
       weight: 0
   layoutDir: layouts
+  locale: ''
   mainSections: null
   markup:
-    asciidocExt:
+    asciiDocExt:
       attributes: {}
       backend: html5
       extensions: []
@@ -1226,7 +1518,10 @@ config:
             enable: false
           superscript:
             enable: false
-        footnote: true
+        footnote:
+          backlinkHTML: '&#x21a9;&#xfe0e;'
+          enable: true
+          enableAutoIDPrefix: false
         linkify: true
         linkifyProtocol: https
         passthrough:
@@ -1272,9 +1567,9 @@ config:
       anchorLineNos: false
       codeFences: true
       guessSyntax: false
-      hl_Lines: ""
+      hl_Lines: ''
       hl_inline: false
-      lineAnchors: ""
+      lineAnchors: ''
       lineNoStart: 1
       lineNos: false
       lineNumbersInTable: true
@@ -1282,6 +1577,8 @@ config:
       style: monokai
       tabWidth: 4
       wrapperClass: highlight
+    rst:
+      syntaxHighlight: long
     tableOfContents:
       endLevel: 3
       ordered: false
@@ -1306,6 +1603,10 @@ config:
       suffixes:
       - xml
       - rss
+    application/source-map:
+      delimiter: .
+      suffixes:
+      - map
     application/toml:
       delimiter: .
       suffixes:
@@ -1331,6 +1632,18 @@ config:
       delimiter: .
       suffixes:
       - ttf
+    font/woff:
+      delimiter: .
+      suffixes:
+      - woff
+    font/woff2:
+      delimiter: .
+      suffixes:
+      - woff2
+    image/avif:
+      delimiter: .
+      suffixes:
+      - avif
     image/bmp:
       delimiter: .
       suffixes:
@@ -1339,6 +1652,14 @@ config:
       delimiter: .
       suffixes:
       - gif
+    image/heic:
+      delimiter: .
+      suffixes:
+      - heic
+    image/heif:
+      delimiter: .
+      suffixes:
+      - heif
     image/jpeg:
       delimiter: .
       suffixes:
@@ -1478,8 +1799,8 @@ config:
     tdewolff:
       css:
         inline: false
-        keepCSS2: true
         precision: 0
+        version: 0
       html:
         keepComments: false
         keepConditionalComments: false
@@ -1490,8 +1811,8 @@ config:
         keepSpecialComments: true
         keepWhitespace: false
         templateDelims:
-        - ""
-        - ""
+        - ''
+        - ''
       js:
         keepVarNames: false
         precision: 0
@@ -1500,99 +1821,150 @@ config:
         keepNumbers: false
         precision: 0
       svg:
-        inline: false
         keepComments: false
+        keepNamespaces:
+        - ''
+        - x-bind
         precision: 0
       xml:
         keepWhitespace: false
   module:
-    auth: ""
+    auth: ''
     hugoVersion:
       extended: false
-      max: ""
-      min: ""
+      max: ''
+      min: ''
     imports: null
     mounts:
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: content
       target: content
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: data
       target: data
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: layouts
       target: layouts
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: i18n
       target: i18n
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: archetypes
       target: archetypes
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: assets
       target: assets
     - disableWatch: false
-      excludeFiles: null
-      includeFiles: null
-      lang: ""
+      files: null
+      sites:
+        complements:
+          languages: null
+          roles: null
+          versions: null
+        matrix:
+          languages: null
+          roles: null
+          versions: null
       source: static
       target: static
     noProxy: none
-    noVendor: ""
+    noVendor: ''
     params: null
     private: '*.*'
     proxy: direct
     replacements: null
     vendorClosest: false
-    workspace: "off"
-  newContentEditor: ""
+    workspace: 'off'
+  newContentEditor: ''
   noBuildLock: false
   noChmod: false
   noTimes: false
   outputFormats:
-    "404":
-      baseName: ""
+    '404':
+      baseName: ''
       isHTML: true
       isPlainText: false
       mediaType: text/html
       noUgly: false
       notAlternative: true
-      path: ""
+      path: ''
       permalinkable: true
-      protocol: ""
-      rel: ""
+      protocol: ''
+      rel: ''
       root: false
       ugly: true
       weight: 0
     alias:
-      baseName: ""
+      baseName: ''
       isHTML: true
       isPlainText: false
       mediaType: text/html
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
-      rel: ""
+      protocol: ''
+      rel: ''
       root: false
       ugly: true
       weight: 0
@@ -1605,7 +1977,7 @@ config:
       notAlternative: false
       path: amp
       permalinkable: true
-      protocol: ""
+      protocol: ''
       rel: amphtml
       root: false
       ugly: false
@@ -1617,7 +1989,7 @@ config:
       mediaType: text/calendar
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
       protocol: webcal://
       rel: alternate
@@ -1631,9 +2003,9 @@ config:
       mediaType: text/css
       noUgly: false
       notAlternative: true
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: stylesheet
       root: false
       ugly: false
@@ -1645,24 +2017,24 @@ config:
       mediaType: text/csv
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: alternate
       root: false
       ugly: false
       weight: 0
     gotmpl:
-      baseName: ""
+      baseName: ''
       isHTML: false
       isPlainText: true
       mediaType: text/x-gotmpl
       noUgly: false
       notAlternative: true
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
-      rel: ""
+      protocol: ''
+      rel: ''
       root: false
       ugly: false
       weight: 0
@@ -1673,9 +2045,9 @@ config:
       mediaType: text/html
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: true
-      protocol: ""
+      protocol: ''
       rel: canonical
       root: false
       ugly: false
@@ -1687,9 +2059,9 @@ config:
       mediaType: application/json
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: alternate
       root: false
       ugly: false
@@ -1701,9 +2073,9 @@ config:
       mediaType: text/markdown
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: alternate
       root: false
       ugly: false
@@ -1715,9 +2087,9 @@ config:
       mediaType: text/plain
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: alternate
       root: true
       ugly: false
@@ -1729,9 +2101,9 @@ config:
       mediaType: application/rss+xml
       noUgly: true
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: alternate
       root: false
       ugly: false
@@ -1743,9 +2115,9 @@ config:
       mediaType: application/xml
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: sitemap
       root: false
       ugly: true
@@ -1757,9 +2129,9 @@ config:
       mediaType: application/xml
       noUgly: false
       notAlternative: false
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: sitemap
       root: true
       ugly: true
@@ -1771,9 +2143,9 @@ config:
       mediaType: application/manifest+json
       noUgly: false
       notAlternative: true
-      path: ""
+      path: ''
       permalinkable: false
-      protocol: ""
+      protocol: ''
       rel: manifest
       root: false
       ugly: false
@@ -1798,19 +2170,13 @@ config:
   page:
     nextPrevInSectionSortOrder: desc
     nextPrevSortOrder: desc
-  paginate: 0
-  paginatePath: ""
   pagination:
     disableAliases: false
     pagerSize: 10
     path: page
   panicOnWarning: false
   params: {}
-  permalinks:
-    page: {}
-    section: {}
-    taxonomy: {}
-    term: {}
+  permalinks: null
   pluralizeListTitles: true
   printI18nWarnings: false
   printPathWarnings: false
@@ -1820,13 +2186,9 @@ config:
       disable: false
     googleAnalytics:
       disable: false
-      respectDoNotTrack: false
+      respectDoNotTrack: true
     instagram:
       disable: false
-      simple: false
-    twitter:
-      disable: false
-      enableDNT: false
       simple: false
     vimeo:
       disable: false
@@ -1840,30 +2202,36 @@ config:
       disable: false
       privacyEnhanced: false
   publishDir: public
-  refLinksErrorLevel: ""
-  refLinksNotFoundURL: ""
+  refLinksErrorLevel: ''
+  refLinksNotFoundURL: ''
   related:
     includeNewer: false
     indices:
     - applyFilter: false
       cardinalityThreshold: 0
+      minTokenLength: 0
       name: keywords
-      pattern: ""
+      pattern: ''
       toLower: false
+      tokenize: false
       type: basic
       weight: 100
     - applyFilter: false
       cardinalityThreshold: 0
+      minTokenLength: 0
       name: date
-      pattern: ""
+      pattern: ''
       toLower: false
+      tokenize: false
       type: basic
       weight: 10
     - applyFilter: false
       cardinalityThreshold: 0
+      minTokenLength: 0
       name: tags
-      pattern: ""
+      pattern: ''
       toLower: false
+      tokenize: false
       type: basic
       weight: 80
     threshold: 80
@@ -1872,19 +2240,24 @@ config:
   removePathAccents: false
   renderSegments: null
   resourceDir: resources
-  sectionPagesMenu: ""
+  roles:
+    guest:
+      weight: 0
+  sectionPagesMenu: ''
   security:
+    allowContent:
+    - '! ^text/html$'
+    - '! ^text/org$'
     enableInlineShortcodes: false
     exec:
       allow:
-      - ^(dart-)?sass(-embedded)?$
+      - ^(dart-)?sass$
       - ^go$
       - ^git$
-      - ^npx$
+      - ^node$
       - ^postcss$
-      - ^tailwindcss$
       osEnv:
-      - (?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE)$
+      - '(?i)^((HTTPS?|NO)_PROXY|PATH(EXT)?|APPDATA|TE?MP|TERM|GO\w+|(XDG_CONFIG_)?HOME|USERPROFILE|SSH_AUTH_SOCK|DISPLAY|LANG|SYSTEMDRIVE|PROGRAMDATA)$'
     funcs:
       getenv:
       - ^HUGO_
@@ -1893,34 +2266,45 @@ config:
       mediaTypes: null
       methods:
       - (?i)GET|POST
+      proxyFromEnvironment: false
       urls:
-      - .*
-  segments: null
+      - (?i)^https?://[a-z0-9]
+      - '! (?i)^https?://\d+\.'
+      - '! (?i)localhost'
+      - '! (?i)^https?://[^/?#]*@'
+    node:
+      permissions:
+        allowAddons:
+        - tailwindcss
+        allowChildProcess:
+        - tailwindcss
+        allowRead:
+        - .
+        allowWorker:
+        - tailwindcss
+        allowWrite: []
+        disable: false
+  segments: {}
   server:
     headers: null
     redirects:
     - force: false
       from: /**
       fromHeaders: null
-      fromRe: ""
+      fromRe: ''
       status: 404
       to: /404.html
   services:
     disqus:
-      shortname: ""
+      shortname: ''
     googleAnalytics:
-      id: ""
-    instagram:
-      accessToken: ""
-      disableInlineCSS: false
+      id: ''
     rss:
       limit: -1
-    twitter:
-      disableInlineCSS: false
     x:
       disableInlineCSS: false
   sitemap:
-    changeFreq: ""
+    changeFreq: ''
     disable: false
     filename: sitemap.xml
     priority: -1
@@ -1929,6 +2313,7 @@ config:
   - static
   staticDir0: null
   staticDir1: null
+  staticDir10: null
   staticDir2: null
   staticDir3: null
   staticDir4: null
@@ -1937,7 +2322,6 @@ config:
   staticDir7: null
   staticDir8: null
   staticDir9: null
-  staticDir10: null
   summaryLength: 70
   taxonomies:
     category: categories
@@ -1946,12 +2330,15 @@ config:
   templateMetricsHints: false
   theme: null
   themesDir: themes
-  timeZone: ""
+  timeZone: ''
   timeout: 60s
-  title: ""
+  title: ''
   titleCaseStyle: AP
-  uglyURLs: null
-  workingDir: ""
+  uglyURLs: {}
+  versions:
+    v1.0.0:
+      weight: 0
+  workingDir: ''
 config_helpers:
   mergeStrategy:
     build:
@@ -2004,6 +2391,8 @@ config_helpers:
       _merge: none
     related:
       _merge: none
+    roles:
+      _merge: none
     security:
       _merge: none
     segments:
@@ -2015,6 +2404,8 @@ config_helpers:
     sitemap:
       _merge: none
     taxonomies:
+      _merge: none
+    versions:
       _merge: none
 output:
   layouts: {}
@@ -2053,7 +2444,7 @@ tpl:
         Aliases:
         - after
         Args:
-        - "n"
+        - 'n'
         - l
         Description: After returns all the items after the first n items in list l.
         Examples: []
@@ -2062,11 +2453,16 @@ tpl:
         - append
         Args:
         - args
-        Description: "Append appends args up to the last one to the slice in the last
-          argument.\nThis construct allows template constructs like this:\n\n\t{{
-          $pages = $pages | append $p2 $p1 }}\n\nNote that with 2 arguments where
-          both are slices of the same type,\nthe first slice will be appended to the
-          second:\n\n\t{{ $pages = $pages | append .Site.RegularPages }}"
+        Description: |-
+          Append appends args up to the last one to the slice in the last argument.
+          This construct allows template constructs like this:
+          
+          	{{ $pages = $pages | append $p2 $p1 }}
+          
+          Note that with 2 arguments where both are slices of the same type,
+          the first slice will be appended to the second:
+          
+          	{{ $pages = $pages | append .Site.RegularPages }}
         Examples: []
       Apply:
         Aliases:
@@ -2076,23 +2472,33 @@ tpl:
         - c
         - fname
         - args
-        Description: Apply takes an array or slice c and returns a new slice with
-          the function fname applied over it.
+        Description: Apply takes an array or slice c and returns a new slice with the function fname applied over it.
         Examples: []
       Complement:
         Aliases:
         - complement
         Args:
         - ls
-        Description: "Complement gives the elements in the last element of ls that
-          are not in\nany of the others.\n\nAll elements of ls must be slices or arrays
-          of comparable types.\n\nThe reasoning behind this rather clumsy API is so
-          we can do this in the templates:\n\n\t{{ $c := .Pages | complement $last4
-          }}"
+        Description: |-
+          Complement gives the elements in the last element of ls that are not in
+          any of the others.
+          
+          All elements of ls must be slices or arrays of comparable types.
+          
+          The reasoning behind this rather clumsy API is so we can do this in the templates:
+          
+          	{{ $c := .Pages | complement $last4 }}
         Examples:
-        - - '{{ slice "a" "b" "c" "d" "e" "f" | complement (slice "b" "c") (slice
-            "d" "e") }}'
+        - - '{{ slice "a" "b" "c" "d" "e" "f" | complement (slice "b" "c") (slice "d" "e") }}'
           - '[a f]'
+      D:
+        Aliases: null
+        Args:
+        - seed
+        - 'n'
+        - hi
+        Description: 'D returns a sorted slice of unique random integers in the half-open interval\n[0, hi) using the provided seed value. The number of elements in the\nresulting slice is n or hi, whichever is less.\n\nIf n <= hi, it returns a sorted random sample of size n using J. S. Vitter’s\nMethod D for sequential random sampling.\n\nIf n > hi, it returns the full, sorted range [0, hi) of size hi.\n\nIf n == 0 or hi == 0, it returns an empty slice.\n\nReference:\n\n\tJ. S. Vitter, "An efficient algorithm for sequential random sampling," ACM Trans. Math. Softw., vol. 11, no. 1, pp. 37–57, 1985.\n\tSee also: https://getkerf.wordpress.com/2016/03/30/the-best-algorithm-no-one-knows-about/'
+        Examples: []
       Delimit:
         Aliases:
         - delimit
@@ -2141,11 +2547,9 @@ tpl:
         Args:
         - l
         - v
-        Description: In returns whether v is in the list l.  l may be an array or
-          slice.
+        Description: In returns whether v is in the list l.  l may be an array or slice.
         Examples:
-        - - '{{ if in "this string contains a substring" "substring" }}Substring found!{{
-            end }}'
+        - - '{{ if in "this string contains a substring" "substring" }}Substring found!{{ end }}'
           - Substring found!
       Index:
         Aliases:
@@ -2157,9 +2561,9 @@ tpl:
           Index returns the result of indexing its first argument by the following
           arguments. Thus "index x 1 2 3" is, in Go syntax, x[1][2][3]. Each
           indexed item must be a map, slice, or array.
-
+          
           Adapted from Go stdlib src/text/template/funcs.go.
-
+          
           We deviate from the stdlib mostly because of https://github.com/golang/go/issues/14751.
         Examples: []
       Intersect:
@@ -2209,17 +2613,14 @@ tpl:
         Description: |-
           Merge creates a copy of the final parameter in params and merges the preceding
           parameters into it in reverse order.
-
+          
           Currently only maps are supported. Key handling is case insensitive.
         Examples:
-        - - '{{ dict "title" "Hugo Rocks!" | collections.Merge (dict "title" "Default
-            Title" "description" "Yes, Hugo Rocks!") | sort }}'
+        - - '{{ dict "title" "Hugo Rocks!" | collections.Merge (dict "title" "Default Title" "description" "Yes, Hugo Rocks!") | sort }}'
           - '[Yes, Hugo Rocks! Hugo Rocks!]'
-        - - '{{ merge (dict "title" "Default Title" "description" "Yes, Hugo Rocks!")
-            (dict "title" "Hugo Rocks!") | sort }}'
+        - - '{{ merge (dict "title" "Default Title" "description" "Yes, Hugo Rocks!") (dict "title" "Hugo Rocks!") | sort }}'
           - '[Yes, Hugo Rocks! Hugo Rocks!]'
-        - - '{{ merge (dict "title" "Default Title" "description" "Yes, Hugo Rocks!")
-            (dict "title" "Hugo Rocks!") (dict "extra" "For reals!") | sort }}'
+        - - '{{ merge (dict "title" "Default Title" "description" "Yes, Hugo Rocks!") (dict "title" "Hugo Rocks!") (dict "extra" "For reals!") | sort }}'
           - '[Yes, Hugo Rocks! For reals! Hugo Rocks!]'
       NewScratch:
         Aliases:
@@ -2229,9 +2630,8 @@ tpl:
           NewScratch creates a new Scratch which can be used to store values in a
           thread safe way.
         Examples:
-        - - '{{ $scratch := newScratch }}{{ $scratch.Add "b" 2 }}{{ $scratch.Add "b"
-            2 }}{{ $scratch.Get "b" }}'
-          - "4"
+        - - '{{ $scratch := newScratch }}{{ $scratch.Add "b" 2 }}{{ $scratch.Add "b" 2 }}{{ $scratch.Get "b" }}'
+          - '4'
       Querify:
         Aliases:
         - querify
@@ -2241,27 +2641,33 @@ tpl:
           Querify returns a URL query string composed of the given key-value pairs,
           encoded and sorted by key.
         Examples:
-        - - '{{ (querify "foo" 1 "bar" 2 "baz" "with spaces" "qux" "this&that=those")
-            | safeHTML }}'
+        - - '{{ (querify "foo" 1 "bar" 2 "baz" "with spaces" "qux" "this&that=those") | safeHTML }}'
           - bar=2&baz=with+spaces&foo=1&qux=this%26that%3Dthose
-        - - <a href="https://www.google.com?{{ (querify "q" "test" "page" 3) | safeURL
-            }}">Search</a>
+        - - <a href="https://www.google.com?{{ (querify "q" "test" "page" 3) | safeURL }}">Search</a>
           - <a href="https://www.google.com?page=3&amp;q=test">Search</a>
         - - '{{ slice "foo" 1 "bar" 2 | querify | safeHTML }}'
           - bar=2&foo=1
       Reverse:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - l
+        Description: Reverse creates a copy of the list l and reverses it.
+        Examples: []
       Seq:
         Aliases:
         - seq
         Args:
         - args
-        Description: "Seq creates a sequence of integers from args. It's named and
-          used as GNU's seq.\n\nExamples:\n\n\t3 => 1, 2, 3\n\t1 2 4 => 1, 3\n\t-3
-          => -1, -2, -3\n\t1 4 => 1, 2, 3, 4\n\t1 -2 => 1, 0, -1, -2"
+        Description: |-
+          Seq creates a sequence of integers from args. It's named and used as GNU's seq.
+          
+          Examples:
+          
+          	3 => 1, 2, 3
+          	1 2 4 => 1, 3
+          	-3 => -1, -2, -3
+          	1 4 => 1, 2, 3, 4
+          	1 -2 => 1, 0, -1, -2
         Examples:
         - - '{{ seq 3 }}'
           - '[1 2 3]'
@@ -2321,8 +2727,7 @@ tpl:
         - uniq
         Args:
         - l
-        Description: Uniq returns a new list with duplicate elements in the list l
-          removed.
+        Description: Uniq returns a new list with duplicate elements in the list l removed.
         Examples:
         - - '{{ slice 1 2 3 2 | uniq }}'
           - '[1 2 3]'
@@ -2346,7 +2751,7 @@ tpl:
         - v2
         Description: |-
           Conditional can be used as a ternary operator.
-
+          
           It returns v1 if cond is true, else v2.
         Examples:
         - - '{{ cond (eq (add 2 2) 4) "2+2 is 4" "what?" | safeHTML }}'
@@ -2373,8 +2778,9 @@ tpl:
         Args:
         - first
         - others
-        Description: Eq returns the boolean truth of arg1 == arg2 || arg1 == arg3
-          || arg1 == arg4.
+        Description: |-
+          Eq returns the boolean truth of arg1 == arg2 || arg1 == arg3 || arg1 == arg4.
+          Numbers are compared by value regardless of type, so e.g. 1 and 1.0 are considered equal.
         Examples:
         - - '{{ if eq .Section "blog" }}current-section{{ end }}'
           - current-section
@@ -2384,8 +2790,7 @@ tpl:
         Args:
         - first
         - others
-        Description: Ge returns the boolean truth of arg1 >= arg2 && arg1 >= arg3
-          && arg1 >= arg4.
+        Description: Ge returns the boolean truth of arg1 >= arg2 && arg1 >= arg3 && arg1 >= arg4.
         Examples:
         - - '{{ if ge hugo.Version "0.80" }}Reasonable new Hugo version!{{ end }}'
           - Reasonable new Hugo version!
@@ -2395,8 +2800,7 @@ tpl:
         Args:
         - first
         - others
-        Description: Gt returns the boolean truth of arg1 > arg2 && arg1 > arg3 &&
-          arg1 > arg4.
+        Description: Gt returns the boolean truth of arg1 > arg2 && arg1 > arg3 && arg1 > arg4.
         Examples: []
       Le:
         Aliases:
@@ -2404,8 +2808,7 @@ tpl:
         Args:
         - first
         - others
-        Description: Le returns the boolean truth of arg1 <= arg2 && arg1 <= arg3
-          && arg1 <= arg4.
+        Description: Le returns the boolean truth of arg1 <= arg2 && arg1 <= arg3 && arg1 <= arg4.
         Examples: []
       Lt:
         Aliases:
@@ -2413,29 +2816,28 @@ tpl:
         Args:
         - first
         - others
-        Description: Lt returns the boolean truth of arg1 < arg2 && arg1 < arg3 &&
-          arg1 < arg4.
+        Description: Lt returns the boolean truth of arg1 < arg2 && arg1 < arg3 && arg1 < arg4.
         Examples: []
       LtCollate:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - collator
+        - first
+        - others
+        Description: |-
+          LtCollate returns the boolean truth of arg1 < arg2 && arg1 < arg3 && arg1 < arg4.
+          The provided collator will be used for string comparisons.
+          This is for internal use.
+        Examples: []
       Ne:
         Aliases:
         - ne
         Args:
         - first
         - others
-        Description: Ne returns the boolean truth of arg1 != arg2 && arg1 != arg3
-          && arg1 != arg4.
+        Description: Ne returns the boolean truth of arg1 != arg2 && arg1 != arg3 && arg1 != arg4.
         Examples: []
     crypto:
-      FNV32a:
-        Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
       HMAC:
         Aliases:
         - hmac
@@ -2448,6 +2850,26 @@ tpl:
         Examples:
         - - '{{ hmac "sha256" "Secret key" "Hello world, gophers!" }}'
           - b6d11b6c53830b9d87036272ca9fe9d19306b8f9d8aa07b15da27d89e6e34f40
+      Hash:
+        Aliases: null
+        Args:
+        - args
+        Description: |-
+          Hash returns the hex-encoded checksum of v using the given algorithm; one of
+          md5, sha1, sha256 (the default), sha384 or sha512.
+          
+          The supported algorithms match those used for the Subresource Integrity (SRI)
+          hash in .Data.Integrity on fingerprinted resources, so an SRI hash can be
+          constructed by combining this with encoding.HexDecode and encoding.Base64Encode.
+        Examples:
+        - - '{{ crypto.Hash "sha256" "Hello world, gophers!" }}'
+          - 6ec43b78da9669f50e4e422575c54bf87536954ccd58280219c393f2ce352b46
+        - - '{{ "Hello world" | crypto.Hash "sha256" }}'
+          - 64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c
+        - - '{{ "Hello world" | crypto.Hash }}'
+          - 64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c
+        - - '{{ "Hello world" | crypto.Hash "sha512" }}'
+          - b7f783baed8297f0db917462184ff4f08e69c2d5e5f79a942600f9725f58ce1f29c18139bf80b06c0fff2bdd34738452ecf40c488c22a7e3d80cdf6f9c1c0d47
       MD5:
         Aliases:
         - md5
@@ -2478,6 +2900,24 @@ tpl:
         - - '{{ sha256 "Hello world, gophers!" }}'
           - 6ec43b78da9669f50e4e422575c54bf87536954ccd58280219c393f2ce352b46
     css:
+      Build:
+        Aliases: null
+        Args:
+        - args
+        Description: |-
+          Build processes the given CSS Resource with ESBuild.
+          Note that this method is identical to the one in the js Namespace.
+        Examples: []
+      ChromaStyles:
+        Aliases: null
+        Args:
+        - opts
+        Description: |-
+          ChromaStyles generates a CSS stylesheet for the Chroma code highlighter
+          and returns it as a Resource. This stylesheet is needed if
+          markup.highlight.noClasses is disabled in config.
+          The style defaults to the markup.highlight.style config setting.
+        Examples: []
       PostCSS:
         Aliases:
         - postCSS
@@ -2487,9 +2927,10 @@ tpl:
         Examples: []
       Quoted:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - v
+        Description: Quoted returns a string that needs to be quoted in CSS.
+        Examples: []
       Sass:
         Aliases:
         - toCSS
@@ -2499,37 +2940,15 @@ tpl:
         Examples: []
       TailwindCSS:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - args
+        Description: TailwindCSS processes the given Resource with tailwindcss.
+        Examples: []
       Unquoted:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
-    data:
-      GetCSV:
-        Aliases:
-        - getCSV
         Args:
-        - sep
-        - args
-        Description: |-
-          GetCSV expects the separator sep and one or n-parts of a URL to a resource which
-          can either be a local or a remote one.
-          The data separator can be a comma, semi-colon, pipe, etc, but only one character.
-          If you provide multiple parts for the URL they will be joined together to the final URL.
-          GetCSV returns nil or a slice slice to use in a short code.
-        Examples: []
-      GetJSON:
-        Aliases:
-        - getJSON
-        Args:
-        - args
-        Description: |-
-          GetJSON expects one or n-parts of a URL in args to a resource which can either be a local or a remote one.
-          If you provide multiple parts they will be joined together to the final URL.
-          GetJSON returns nil or parsed JSON to use in a short code.
+        - v
+        Description: Unquoted returns a string that does not need to be quoted in CSS.
         Examples: []
     debug:
       Dump:
@@ -2540,52 +2959,55 @@ tpl:
           Dump returns a object dump of val as a string.
           Note that not every value passed to Dump will print so nicely, but
           we'll improve on that.
-
+          
           We recommend using the "go" Chroma lexer to format the output
           nicely.
-
+          
           Also note that the output from Dump may change from Hugo version to the next,
           so don't depend on a specific output.
         Examples:
-        - - |-
-            {{ $m := newScratch }}
-            {{ $m.Set "Hugo" "Rocks!" }}
-            {{ $m.Values | debug.Dump | safeHTML }}
-          - |-
-            {
-              "Hugo": "Rocks!"
-            }
+        - - '{{ $m := newScratch }}\n{{ $m.Set "Hugo" "Rocks!" }}\n{{ $m.Values | debug.Dump | safeHTML }}'
+          - '{\n  "Hugo": "Rocks!"\n}'
       TestDeprecationErr:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - item
+        - alternative
+        Description: Internal template func, used in tests only.
+        Examples: []
       TestDeprecationInfo:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - item
+        - alternative
+        Description: Internal template func, used in tests only.
+        Examples: []
       TestDeprecationWarn:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - item
+        - alternative
+        Description: Internal template func, used in tests only.
+        Examples: []
       Timer:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - name
+        Description: ''
+        Examples: []
       VisualizeSpaces:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - val
+        Description: VisualizeSpaces returns a string with spaces replaced by a visible string.
+        Examples: []
     diagrams:
       Goat:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - v
+        Description: Goat creates a new SVG diagram from input v.
+        Examples: []
     encoding:
       Base64Decode:
         Aliases:
@@ -2597,7 +3019,7 @@ tpl:
         - - '{{ "SGVsbG8gd29ybGQ=" | base64Decode }}'
           - Hello world
         - - '{{ 42 | base64Encode | base64Decode }}'
-          - "42"
+          - '42'
       Base64Encode:
         Aliases:
         - base64Encode
@@ -2607,6 +3029,22 @@ tpl:
         Examples:
         - - '{{ "Hello world" | base64Encode }}'
           - SGVsbG8gd29ybGQ=
+      HexDecode:
+        Aliases: null
+        Args:
+        - content
+        Description: HexDecode returns the hex decoding of the given content.
+        Examples:
+        - - '{{ "48656c6c6f20776f726c64" | encoding.HexDecode }}'
+          - Hello world
+      HexEncode:
+        Aliases: null
+        Args:
+        - content
+        Description: HexEncode returns the hex encoding of the given content.
+        Examples:
+        - - '{{ "Hello world" | encoding.HexEncode }}'
+          - 48656c6c6f20776f726c64
       Jsonify:
         Aliases:
         - jsonify
@@ -2622,12 +3060,7 @@ tpl:
         - - '{{ (slice "A" "B" "C") | jsonify }}'
           - '["A","B","C"]'
         - - '{{ (slice "A" "B" "C") | jsonify (dict "indent" "  ") }}'
-          - |-
-            [
-              "A",
-              "B",
-              "C"
-            ]
+          - '[\n  "A",\n  "B",\n  "C"\n]'
     fmt:
       Errorf:
         Aliases:
@@ -2640,7 +3073,7 @@ tpl:
           It returns an empty string.
         Examples:
         - - '{{ errorf "%s." "failed" }}'
-          - ""
+          - ''
       Erroridf:
         Aliases:
         - erroridf
@@ -2654,12 +3087,15 @@ tpl:
           It returns an empty string.
         Examples:
         - - '{{ erroridf "my-err-id" "%s." "failed" }}'
-          - ""
+          - ''
       Errormf:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - m
+        - format
+        - args
+        Description: Errormf is experimental and subject to change at any time.
+        Examples: []
       Print:
         Aliases:
         - print
@@ -2675,8 +3111,7 @@ tpl:
         Args:
         - format
         - args
-        Description: Printf returns string representation of args formatted with the
-          layout in format.
+        Description: Printf returns string representation of args formatted with the layout in format.
         Examples:
         - - '{{ printf "%s!" "works" }}'
           - works!
@@ -2685,8 +3120,7 @@ tpl:
         - println
         Args:
         - args
-        Description: Println returns string representation of args  ending with a
-          newline.
+        Description: Println returns string representation of args  ending with a newline.
         Examples:
         - - '{{ println "works!" }}'
           - |
@@ -2702,7 +3136,7 @@ tpl:
           It returns an empty string.
         Examples:
         - - '{{ warnf "%s." "warning" }}'
-          - ""
+          - ''
       Warnidf:
         Aliases:
         - warnidf
@@ -2716,12 +3150,15 @@ tpl:
           It returns an empty string.
         Examples:
         - - '{{ warnidf "my-warn-id" "%s." "warning" }}'
-          - ""
+          - ''
       Warnmf:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - m
+        - format
+        - args
+        Description: Warnmf is experimental and subject to change at any time.
+        Examples: []
     hash:
       FNV32a:
         Aliases: null
@@ -2730,7 +3167,7 @@ tpl:
         Description: FNV32a hashes v using fnv32a algorithm.
         Examples:
         - - '{{ hash.FNV32a "Hugo Rocks!!" }}'
-          - "1515779328"
+          - '1515779328'
       XxHash:
         Aliases:
         - xxhash
@@ -2741,86 +3178,101 @@ tpl:
         - - '{{ hash.XxHash "The quick brown fox jumps over the lazy dog" }}'
           - 0b242d361fda71bc
     hugo:
+      Data:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
       Deps:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      Environment:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      ForEeachIdentityByName:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
       Generator:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsDevelopment:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsExtended:
         Aliases: null
         Args: null
-        Description: ""
-        Examples: null
-      IsMultiHost:
-        Aliases: null
-        Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsMultihost:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsMultilingual:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsProduction:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       IsServer:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      Sites:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
       Store:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Version:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       WorkingDir:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
     images:
       AutoOrient:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Brightness:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       ColorBalance:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Colorize:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Config:
         Aliases:
@@ -2834,102 +3286,106 @@ tpl:
       Contrast:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Dither:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Filter:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - args
+        Description: Filter applies the given filters to the image given as the last element in args.
+        Examples: []
       Gamma:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       GaussianBlur:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Grayscale:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Hue:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Invert:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Mask:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Opacity:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Overlay:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Padding:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Pixelate:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Process:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       QR:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - args
+        Description: |-
+          QR encodes the given text into a QR code using the specified options,
+          returning an image resource.
+        Examples: []
       Saturation:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Sepia:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Sigmoid:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Text:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       UnsharpMask:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
     inflect:
       Humanize:
@@ -2939,7 +3395,7 @@ tpl:
         - v
         Description: |-
           Humanize returns the humanized form of v.
-
+          
           If v is either an integer or a string containing an integer
           value, the behavior is to add the appropriate ordinal.
         Examples:
@@ -2979,14 +3435,20 @@ tpl:
         Examples: []
       Batch:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - id
+        Description: |-
+          Batch creates a new Batcher with the given ID.
+          Repeated calls with the same ID will return the same Batcher.
+          The ID will be used to name the root directory of the batch.
+          Forward slashes in the ID is allowed.
+        Examples: []
       Build:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - args
+        Description: Build processes the given JavaScript Resource with ESBuild.
+        Examples: []
     lang:
       FormatAccounting:
         Aliases: null
@@ -2997,7 +3459,7 @@ tpl:
         Description: |-
           FormatAccounting returns the currency representation of number for the given currency and precision
           for the current language in accounting notation.
-
+          
           The return value is formatted with at least two decimal places.
         Examples:
         - - '{{ 512.5032 | lang.FormatAccounting 2 "NOK" }}'
@@ -3011,7 +3473,7 @@ tpl:
         Description: |-
           FormatCurrency returns the currency representation of number for the given currency and precision
           for the current language.
-
+          
           The return value is formatted with at least two decimal places.
         Examples:
         - - '{{ 512.5032 | lang.FormatCurrency 2 "USD" }}'
@@ -3021,34 +3483,24 @@ tpl:
         Args:
         - precision
         - number
-        Description: FormatNumber formats number with the given precision for the
-          current language.
+        Description: FormatNumber formats number with the given precision for the current language.
         Examples:
         - - '{{ 512.5032 | lang.FormatNumber 2 }}'
-          - "512.50"
+          - '512.50'
       FormatNumberCustom:
         Aliases: null
         Args:
         - precision
         - number
         - options
-        Description: |-
-          FormatNumberCustom formats a number with the given precision. The first
-          options parameter is a space-delimited string of characters to represent
-          negativity, the decimal point, and grouping. The default value is `- . ,`.
-          The second options parameter defines an alternate delimiting character.
-
-          Note that numbers are rounded up at 5 or greater.
-          So, with precision set to 0, 1.5 becomes `2`, and 1.4 becomes `1`.
-
-          For a simpler function that adapts to the current language, see FormatNumber.
+        Description: 'FormatNumberCustom formats a number with the given precision. The first\noptions parameter is a space-delimited string of characters to represent\nnegativity, the decimal point, and grouping. The default value is `- . ,`.\nThe second options parameter defines an alternate delimiting character.\n\nNote that numbers are rounded up at 5 or greater.\nSo, with precision set to 0, 1.5 becomes `2`, and 1.4 becomes `1`.\n\nFor a simpler function that adapts to the current language, see FormatNumber.'
         Examples:
         - - '{{ lang.FormatNumberCustom 2 12345.6789 }}'
           - 12,345.68
         - - '{{ lang.FormatNumberCustom 2 12345.6789 "- , ." }}'
           - 12.345,68
         - - '{{ lang.FormatNumberCustom 6 -12345.6789 "- ." }}'
-          - "-12345.678900"
+          - '-12345.678900'
         - - '{{ lang.FormatNumberCustom 0 -12345.6789 "- . ," }}'
           - -12,346
         - - '{{ lang.FormatNumberCustom 0 -12345.6789 "-|.| " "|" }}'
@@ -3068,9 +3520,11 @@ tpl:
           - 512.50%
       Merge:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - p2
+        - p1
+        Description: Merge creates a union of pages from two languages.
+        Examples: []
       Translate:
         Aliases:
         - i18n
@@ -3085,19 +3539,19 @@ tpl:
       Abs:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Abs returns the absolute value of n.
         Examples:
         - - '{{ math.Abs -2.1 }}'
-          - "2.1"
+          - '2.1'
       Acos:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Acos returns the arccosine, in radians, of n.
         Examples:
         - - '{{ math.Acos 1 }}'
-          - "0"
+          - '0'
       Add:
         Aliases:
         - add
@@ -3106,55 +3560,53 @@ tpl:
         Description: Add adds the multivalued addends n1 and n2 or more values.
         Examples:
         - - '{{ add 1 2 }}'
-          - "3"
+          - '3'
       Asin:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Asin returns the arcsine, in radians, of n.
         Examples:
         - - '{{ math.Asin 1 }}'
-          - "1.5707963267948966"
+          - '1.5707963267948966'
       Atan:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Atan returns the arctangent, in radians, of n.
         Examples:
         - - '{{ math.Atan 1 }}'
-          - "0.7853981633974483"
+          - '0.7853981633974483'
       Atan2:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         - m
-        Description: Atan2 returns the arc tangent of n/m, using the signs of the
-          two to determine the quadrant of the return value.
+        Description: Atan2 returns the arc tangent of n/m, using the signs of the two to determine the quadrant of the return value.
         Examples:
         - - '{{ math.Atan2 1 2 }}'
-          - "0.4636476090008061"
+          - '0.4636476090008061'
       Ceil:
         Aliases: null
         Args:
-        - "n"
-        Description: Ceil returns the least integer value greater than or equal to
-          n.
+        - 'n'
+        Description: Ceil returns the least integer value greater than or equal to n.
         Examples:
         - - '{{ math.Ceil 2.1 }}'
-          - "3"
+          - '3'
       Cos:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Cos returns the cosine of the radian argument n.
         Examples:
         - - '{{ math.Cos 1 }}'
-          - "0.5403023058681398"
+          - '0.5403023058681398'
       Counter:
         Aliases: null
         Args: null
-        Description: ""
-        Examples: null
+        Description: 'Counter increments and returns a global counter.\nThis was originally added to be used in tests where now.UnixNano did not\nhave the needed precision (especially on Windows).\nNote that given the parallel nature of Hugo, you cannot use this to get sequences of numbers,\nand the counter will reset on new builds.\n<docsmeta>{"identifiers": ["now.UnixNano"] }</docsmeta>'
+        Examples: []
       Div:
         Aliases:
         - div
@@ -3163,49 +3615,46 @@ tpl:
         Description: Div divides n1 by n2.
         Examples:
         - - '{{ div 6 3 }}'
-          - "2"
+          - '2'
       Floor:
         Aliases: null
         Args:
-        - "n"
-        Description: Floor returns the greatest integer value less than or equal to
-          n.
+        - 'n'
+        Description: Floor returns the greatest integer value less than or equal to n.
         Examples:
         - - '{{ math.Floor 1.9 }}'
-          - "1"
+          - '1'
       Log:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Log returns the natural logarithm of the number n.
         Examples:
         - - '{{ math.Log 1 }}'
-          - "0"
+          - '0'
       Max:
         Aliases: null
         Args:
         - inputs
-        Description: Max returns the greater of all numbers in inputs. Any slices
-          in inputs are flattened.
+        Description: Max returns the greater of all numbers in inputs. Any slices in inputs are flattened.
         Examples:
         - - '{{ math.Max 1 2 }}'
-          - "2"
+          - '2'
       MaxInt64:
         Aliases: null
         Args: null
         Description: MaxInt64 returns the maximum value for a signed 64-bit integer.
         Examples:
         - - '{{ math.MaxInt64 }}'
-          - "9223372036854775807"
+          - '9223372036854775807'
       Min:
         Aliases: null
         Args:
         - inputs
-        Description: Min returns the smaller of all numbers in inputs. Any slices
-          in inputs are flattened.
+        Description: Min returns the smaller of all numbers in inputs. Any slices in inputs are flattened.
         Examples:
         - - '{{ math.Min 1 2 }}'
-          - "1"
+          - '1'
       Mod:
         Aliases:
         - mod
@@ -3215,18 +3664,17 @@ tpl:
         Description: Mod returns n1 % n2.
         Examples:
         - - '{{ mod 15 3 }}'
-          - "0"
+          - '0'
       ModBool:
         Aliases:
         - modBool
         Args:
         - n1
         - n2
-        Description: ModBool returns the boolean of n1 % n2.  If n1 % n2 == 0, return
-          true.
+        Description: ModBool returns the boolean of n1 % n2.  If n1 % n2 == 0, return true.
         Examples:
         - - '{{ modBool 15 3 }}'
-          - "true"
+          - 'true'
       Mul:
         Aliases:
         - mul
@@ -3235,14 +3683,14 @@ tpl:
         Description: Mul multiplies the multivalued numbers n1 and n2 or more values.
         Examples:
         - - '{{ mul 2 3 }}'
-          - "6"
+          - '6'
       Pi:
         Aliases: null
         Args: null
         Description: Pi returns the mathematical constant pi.
         Examples:
         - - '{{ math.Pi }}'
-          - "3.141592653589793"
+          - '3.141592653589793'
       Pow:
         Aliases:
         - pow
@@ -3252,45 +3700,44 @@ tpl:
         Description: Pow returns n1 raised to the power of n2.
         Examples:
         - - '{{ math.Pow 2 3 }}'
-          - "8"
+          - '8'
       Product:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - inputs
+        Description: Product returns the product of all numbers in inputs. Any slices in inputs are flattened.
+        Examples: []
       Rand:
         Aliases: null
         Args: null
-        Description: Rand returns, as a float64, a pseudo-random number in the half-open
-          interval [0.0,1.0).
+        Description: Rand returns, as a float64, a pseudo-random number in the half-open interval [0.0,1.0).
         Examples:
         - - '{{ math.Rand }}'
-          - "0.6312770459590062"
+          - '0.6312770459590062'
       Round:
         Aliases: null
         Args:
-        - "n"
-        Description: Round returns the integer nearest to n, rounding half away from
-          zero.
+        - 'n'
+        Description: Round returns the integer nearest to n, rounding half away from zero.
         Examples:
         - - '{{ math.Round 1.5 }}'
-          - "2"
+          - '2'
       Sin:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Sin returns the sine of the radian argument n.
         Examples:
         - - '{{ math.Sin 1 }}'
-          - "0.8414709848078965"
+          - '0.8414709848078965'
       Sqrt:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Sqrt returns the square root of the number n.
         Examples:
         - - '{{ math.Sqrt 81 }}'
-          - "9"
+          - '9'
       Sub:
         Aliases:
         - sub
@@ -3299,41 +3746,42 @@ tpl:
         Description: Sub subtracts multivalued.
         Examples:
         - - '{{ sub 3 2 }}'
-          - "1"
+          - '1'
       Sum:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - inputs
+        Description: Sum returns the sum of all numbers in inputs. Any slices in inputs are flattened.
+        Examples: []
       Tan:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: Tan returns the tangent of the radian argument n.
         Examples:
         - - '{{ math.Tan 1 }}'
-          - "1.557407724654902"
+          - '1.557407724654902'
       ToDegrees:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: ToDegrees converts radians into degrees.
         Examples:
         - - '{{ math.ToDegrees 1.5707963267948966 }}'
-          - "90"
+          - '90'
       ToRadians:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         Description: ToRadians converts degrees into radians.
         Examples:
         - - '{{ math.ToRadians 90 }}'
-          - "1.5707963267948966"
+          - '1.5707963267948966'
     openapi3:
       Unmarshal:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: []
     os:
       FileExists:
@@ -3344,7 +3792,7 @@ tpl:
         Description: FileExists checks whether a file exists under the given path.
         Examples:
         - - '{{ fileExists "foo.txt" }}'
-          - "false"
+          - 'false'
       Getenv:
         Aliases:
         - getenv
@@ -3359,8 +3807,7 @@ tpl:
         - readDir
         Args:
         - i
-        Description: ReadDir lists the directory contents relative to the configured
-          WorkingDir.
+        Description: ReadDir lists the directory contents relative to the configured WorkingDir.
         Examples:
         - - '{{ range (readDir "files") }}{{ .Name }}{{ end }}'
           - README.txt
@@ -3378,9 +3825,10 @@ tpl:
           - Hugo Rocks!
       Stat:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - i
+        Description: Stat returns the os.FileInfo structure describing file.
+        Examples: []
     partials:
       Include:
         Aliases:
@@ -3413,29 +3861,63 @@ tpl:
     path:
       Base:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - path
+        Description: |-
+          Base returns the last element of path.
+          Trailing slashes are removed before extracting the last element.
+          If the path is empty, Base returns ".".
+          If the path consists entirely of slashes, Base returns "/".
+          The input path is passed into filepath.ToSlash converting any Windows slashes
+          to forward slashes.
+        Examples: []
       BaseName:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - path
+        Description: |-
+          BaseName returns the last element of path, removing the extension if present.
+          Trailing slashes are removed before extracting the last element.
+          If the path is empty, Base returns ".".
+          If the path consists entirely of slashes, Base returns "/".
+          The input path is passed into filepath.ToSlash converting any Windows slashes
+          to forward slashes.
+        Examples: []
       Clean:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - path
+        Description: |-
+          Clean replaces the separators used with standard slashes and then
+          extraneous slashes are removed.
+        Examples: []
       Dir:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - path
+        Description: |-
+          Dir returns all but the last element of path, typically the path's directory.
+          After dropping the final element using Split, the path is Cleaned and trailing
+          slashes are removed.
+          If the path is empty, Dir returns ".".
+          If the path consists entirely of slashes followed by non-slash bytes, Dir
+          returns a single slash. In any other case, the returned path does not end in a
+          slash.
+          The input path is passed into filepath.ToSlash converting any Windows slashes
+          to forward slashes.
+        Examples: []
       Ext:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - path
+        Description: |-
+          Ext returns the file name extension used by path.
+          The extension is the suffix beginning at the final dot
+          in the final slash-separated element of path;
+          it is empty if there is no dot.
+          The input path is passed into filepath.ToSlash converting any Windows slashes
+          to forward slashes.
+        Examples: []
       Join:
         Aliases: null
         Args:
@@ -3476,6 +3958,21 @@ tpl:
         - - '{{ "/my/path/filename.txt" | path.Split }}'
           - /my/path/|filename.txt
     reflect:
+      IsImageResource:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      IsImageResourceProcessable:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      IsImageResourceWithMeta:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
       IsMap:
         Aliases: null
         Args:
@@ -3484,6 +3981,21 @@ tpl:
         Examples:
         - - '{{ if reflect.IsMap (dict "a" 1) }}Map{{ end }}'
           - Map
+      IsPage:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      IsResource:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      IsSite:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
       IsSlice:
         Aliases: null
         Args:
@@ -3493,31 +4005,37 @@ tpl:
         - - '{{ if reflect.IsSlice (slice 1 2 3) }}Slice{{ end }}'
           - Slice
     resources:
-      Babel:
-        Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
       ByType:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - typ
+        Description: ByType returns resources of a given resource type (e.g. "image").
+        Examples: []
       Concat:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - targetPathIn
+        - r
+        Description: |-
+          Concat concatenates a slice of Resource objects. These resources must
+          (currently) be of the same Media Type.
+        Examples: []
       Copy:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - s
+        - r
+        Description: Copy copies r to the new targetPath in s.
+        Examples: []
       ExecuteAsTemplate:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - ctx
+        - args
+        Description: |-
+          ExecuteAsTemplate creates a Resource from a Go template, parsed and executed with
+          the given data, and published to the relative target path.
+        Examples: []
       Fingerprint:
         Aliases:
         - fingerprint
@@ -3529,9 +4047,11 @@ tpl:
         Examples: []
       FromString:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - targetPathIn
+        - contentIn
+        Description: FromString creates a Resource from a string published to the relative target path.
+        Examples: []
       Get:
         Aliases: null
         Args:
@@ -3543,26 +4063,41 @@ tpl:
       GetMatch:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       GetRemote:
         Aliases: null
         Args:
         - args
-        Description: |-
-          GetRemote gets the URL (via HTTP(s)) in the first argument in args and creates Resource object that can be used for
-          further transformations.
-
-          A second argument may be provided with an option map.
-
-          Note: This method does not return any error as a second return value,
-          for any error situations the error can be checked in .Err.
+        Description: 'GetRemote gets the URL (via HTTP(s)) in the first argument in args and creates Resource object that can be used for\nfurther transformations.\n\nA second argument may be provided with an option map.\n\nNote: This method does not return any error as a second return value,\nfor any error situations the error can be checked in .Err.'
         Examples: []
-      Match:
+      Key:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
+      Match:
+        Aliases: null
+        Args:
+        - pattern
+        Description: |-
+          Match gets all resources matching the given base path prefix, e.g
+          "*.png" will match all png files. The "*" does not match path delimiters (/),
+          so if you organize your resources in sub-folders, you need to be explicit about it, e.g.:
+          "images/*.png". To match any PNG image anywhere in the bundle you can do "**.png", and
+          to match all PNG images below the images folder, use "images/**.jpg".
+          
+          The matching is case insensitive.
+          
+          Match matches by using the files name with path relative to the file system root
+          with Unix style slashes (/) and no leading slash, e.g. "images/logo.png".
+          
+          See https://github.com/gobwas/glob for the full rules set.
+          
+          It looks for files in the assets file system.
+          
+          See Match for a more complete explanation about the rules used.
+        Examples: []
       Minify:
         Aliases:
         - minify
@@ -3572,21 +4107,18 @@ tpl:
           Minify minifies the given Resource using the MediaType to pick the correct
           minifier.
         Examples: []
-      PostCSS:
-        Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
       PostProcess:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
-      ToCSS:
+        Args:
+        - r
+        Description: 'PostProcess processes r after the build.\n\nDeprecated: Use templates.Defer instead.'
+        Examples: []
+      Publish:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - r
+        Description: Publish publishes r to the destination and returns it.
+        Examples: []
     safe:
       CSS:
         Aliases:
@@ -3644,177 +4176,177 @@ tpl:
       AllPages:
         Aliases: null
         Args: null
-        Description: ""
-        Examples: null
-      Author:
-        Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
-      Authors:
-        Aliases: null
-        Args: null
-        Description: ""
+        Description: ''
         Examples: null
       BaseURL:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       BuildDrafts:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       CheckReady:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Config:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Copyright:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Current:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Data:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      Dimension:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
       ForEeachIdentityByName:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       GetPage:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Home:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Hugo:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
-      IsMultiLingual:
+      IsDefault:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Key:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Language:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       LanguageCode:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       LanguagePrefix:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Languages:
         Aliases: null
         Args: null
-        Description: ""
-        Examples: null
-      LastChange:
-        Aliases: null
-        Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Lastmod:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       MainSections:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Menus:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Pages:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Param:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Params:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       RegularPages:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      Role:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
       Sections:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       ServerPort:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Sites:
         Aliases: null
         Args: null
-        Description: ""
-        Examples: null
-      Social:
-        Aliases: null
-        Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Store:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      String:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
       Taxonomies:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
         Examples: null
       Title:
         Aliases: null
         Args: null
-        Description: ""
+        Description: ''
+        Examples: null
+      Version:
+        Aliases: null
+        Args: null
+        Description: ''
         Examples: null
     strings:
       Chomp:
@@ -3822,8 +4354,7 @@ tpl:
         - chomp
         Args:
         - s
-        Description: Chomp returns a copy of s with all trailing newline characters
-          removed.
+        Description: Chomp returns a copy of s with all trailing newline characters removed.
         Examples:
         - - '{{ chomp "<p>Blockhead</p>\n" | safeHTML }}'
           - <p>Blockhead</p>
@@ -3835,26 +4366,26 @@ tpl:
         Description: Contains reports whether substr is in s.
         Examples:
         - - '{{ strings.Contains "abc" "b" }}'
-          - "true"
+          - 'true'
         - - '{{ strings.Contains "abc" "d" }}'
-          - "false"
+          - 'false'
       ContainsAny:
         Aliases: null
         Args:
         - s
         - chars
-        Description: ContainsAny reports whether any Unicode code points in chars
-          are within s.
+        Description: ContainsAny reports whether any Unicode code points in chars are within s.
         Examples:
         - - '{{ strings.ContainsAny "abc" "bcd" }}'
-          - "true"
+          - 'true'
         - - '{{ strings.ContainsAny "abc" "def" }}'
-          - "false"
+          - 'false'
       ContainsNonSpace:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - s
+        Description: 'ContainsNonSpace reports whether s contains any non-space characters as defined\nby Unicode''s White Space property,\n<docsmeta>{"newIn": "0.111.0" }</docsmeta>'
+        Examples: []
       Count:
         Aliases: null
         Args:
@@ -3865,7 +4396,7 @@ tpl:
           If substr is an empty string, Count returns 1 + the number of Unicode code points in s.
         Examples:
         - - '{{ "aabab" | strings.Count "a" }}'
-          - "3"
+          - '3'
       CountRunes:
         Aliases:
         - countrunes
@@ -3882,9 +4413,15 @@ tpl:
         Examples: []
       Diff:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - oldname
+        - old
+        - newname
+        - new
+        Description: |-
+          Diff returns an anchored diff of the two texts old and new in the “unified
+          diff” format. If old and new are identical, Diff returns an empty string.
+        Examples: []
       FindRE:
         Aliases:
         - findRE
@@ -3896,8 +4433,7 @@ tpl:
           FindRE returns a list of strings that match the regular expression. By default all matches
           will be included. The number of matches can be limited with an optional third parameter.
         Examples:
-        - - '{{ findRE "[G|g]o" "Hugo is a static side generator written in Go." 1
-            }}'
+        - - '{{ findRE "[G|g]o" "Hugo is a static side generator written in Go." 1 }}'
           - '[go]'
       FindRESubmatch:
         Aliases:
@@ -3911,19 +4447,26 @@ tpl:
           expression in content. Each element is a slice of strings holding the text
           of the leftmost match of the regular expression and the matches, if any, of
           its subexpressions.
-
+          
           By default all matches will be included. The number of matches can be
           limited with the optional limit parameter. A return value of nil indicates
           no match.
         Examples:
-        - - '{{ findRESubmatch `<a\s*href="(.+?)">(.+?)</a>` `<li><a href="#foo">Foo</a></li>
-            <li><a href="#bar">Bar</a></li>` | print | safeHTML }}'
+        - - '{{ findRESubmatch `<a\s*href="(.+?)">(.+?)</a>` `<li><a href="#foo">Foo</a></li> <li><a href="#bar">Bar</a></li>` | print | safeHTML }}'
           - '[[<a href="#foo">Foo</a> #foo Foo] [<a href="#bar">Bar</a> #bar Bar]]'
+      FirstLower:
+        Aliases: null
+        Args:
+        - s
+        Description: FirstLower returns s with the first Unicode letter mapped to lowercase.
+        Examples:
+        - - '{{ "Hugo rocks!" | strings.FirstLower }}'
+          - hugo rocks!
       FirstUpper:
         Aliases: null
         Args:
         - s
-        Description: FirstUpper converts s making  the first character upper case.
+        Description: FirstUpper returns s with the first Unicode letter mapped to uppercase.
         Examples:
         - - '{{ "hugo rocks!" | strings.FirstUpper }}'
           - Hugo rocks!
@@ -3936,9 +4479,9 @@ tpl:
         Description: HasPrefix tests whether the input s begins with prefix.
         Examples:
         - - '{{ hasPrefix "Hugo" "Hu" }}'
-          - "true"
+          - 'true'
         - - '{{ hasPrefix "Hugo" "Fu" }}'
-          - "false"
+          - 'false'
       HasSuffix:
         Aliases:
         - hasSuffix
@@ -3948,16 +4491,15 @@ tpl:
         Description: HasSuffix tests whether the input s begins with suffix.
         Examples:
         - - '{{ hasSuffix "Hugo" "go" }}'
-          - "true"
+          - 'true'
         - - '{{ hasSuffix "Hugo" "du" }}'
-          - "false"
+          - 'false'
       Repeat:
         Aliases: null
         Args:
-        - "n"
+        - 'n'
         - s
-        Description: Repeat returns a new string consisting of n copies of the string
-          s.
+        Description: Repeat returns a new string consisting of n copies of the string s.
         Examples:
         - - '{{ "yo" | strings.Repeat 4 }}'
           - yoyoyoyo
@@ -3978,6 +4520,19 @@ tpl:
           - Batman and Catwoman
         - - '{{ replace "aabbaabb" "a" "z" 2 }}'
           - zzbbaabb
+      ReplacePairs:
+        Aliases: null
+        Args:
+        - args
+        Description: |-
+          ReplacePairs returns a copy of a string with multiple replacements performed
+          in a single pass. The last argument is the source string. Preceding arguments
+          are old/new string pairs, either as a slice or as individual arguments.
+        Examples:
+        - - '{{ "aab" | strings.ReplacePairs "a" "b" "b" "c" }}'
+          - bbc
+        - - '{{ "aab" | strings.ReplacePairs (slice "a" "b" "b" "c") }}'
+          - bbc
       ReplaceRE:
         Aliases:
         - replaceRE
@@ -3985,7 +4540,7 @@ tpl:
         - pattern
         - repl
         - s
-        - "n"
+        - 'n'
         Description: |-
           ReplaceRE returns a copy of s, replacing all matches of the regular
           expression pattern with the replacement text repl. The number of replacements
@@ -4022,8 +4577,7 @@ tpl:
         Args:
         - a
         - delimiter
-        Description: Split slices an input string into all substrings separated by
-          delimiter.
+        Description: Split slices an input string into all substrings separated by delimiter.
         Examples: []
       Substr:
         Aliases:
@@ -4031,19 +4585,7 @@ tpl:
         Args:
         - a
         - nums
-        Description: |-
-          Substr extracts parts of a string, beginning at the character at the specified
-          position, and returns the specified number of characters.
-
-          It normally takes two parameters: start and length.
-          It can also take one parameter: start, i.e. length is omitted, in which case
-          the substring starting from start until the end of the string will be returned.
-
-          To extract characters from the end of the string, use a negative start number.
-
-          In addition, borrowing from the extended behavior described at http://php.net/substr,
-          if length is given and is negative, then that many characters will be omitted from
-          the end of string.
+        Description: 'Substr extracts parts of a string, beginning at the character at the specified\nposition, and returns the specified number of characters.\n\nIt normally takes two parameters: start and length.\nIt can also take one parameter: start, i.e. length is omitted, in which case\nthe substring starting from start until the end of the string will be returned.\n\nTo extract characters from the end of the string, use a negative start number.\n\nIn addition, borrowing from the extended behavior described at http://php.net/substr,\nif length is given and is negative, then that many characters will be omitted from\nthe end of string.'
         Examples:
         - - '{{ substr "BatMan" 0 -3 }}'
           - Bat
@@ -4067,9 +4609,7 @@ tpl:
         - lower
         Args:
         - s
-        Description: |-
-          ToLower returns a copy of the input s with all Unicode letters mapped to their
-          lower case.
+        Description: ToLower returns s with all Unicode letters mapped to lowercase.
         Examples:
         - - '{{ lower "BatMan" }}'
           - batman
@@ -4078,9 +4618,7 @@ tpl:
         - upper
         Args:
         - s
-        Description: |-
-          ToUpper returns a copy of the input s with all Unicode letters mapped to their
-          upper case.
+        Description: ToUpper returns s with all Unicode letters mapped to uppercase.
         Examples:
         - - '{{ upper "BatMan" }}'
           - BATMAN
@@ -4133,9 +4671,12 @@ tpl:
           - aabb
       TrimSpace:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - s
+        Description: |-
+          TrimSpace returns the given string, removing leading and trailing whitespace
+          as defined by Unicode.
+        Examples: []
       TrimSuffix:
         Aliases: null
         Args:
@@ -4164,12 +4705,14 @@ tpl:
     templates:
       Current:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - ctx
+        Description: Get information about the currently executing template.
+        Examples: []
       Defer:
         Aliases: null
         Args:
+        - ctx
         - args
         Description: Defer defers the execution of a template block.
         Examples: []
@@ -4193,11 +4736,31 @@ tpl:
           Note that this is the Unix-styled relative path including filename suffix,
           e.g. partials/header.html
         Examples:
-        - - '{{ if (templates.Exists "partials/header.html") }}Yes!{{ end }}'
+        - - '{{ if (templates.Exists "_partials/header.html") }}Yes!{{ end }}'
           - Yes!
-        - - '{{ if not (templates.Exists "partials/doesnotexist.html") }}No!{{ end
-            }}'
+        - - '{{ if not (templates.Exists "_partials/doesnotexist.html") }}No!{{ end }}'
           - No!
+      Inner:
+        Aliases:
+        - inner
+        Args:
+        - ctx
+        - data
+        Description: |-
+          Inner executes the inner content of a partial decorator.
+          Note that there is only one inner block per partial decorator, but inner may be called multiple times with, typically, different data.
+        Examples: []
+    testinginternal:
+      HashString:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
+      NewCachedResourceGetter:
+        Aliases: null
+        Args: null
+        Description: ''
+        Examples: null
     time:
       AsTime:
         Aliases: null
@@ -4209,7 +4772,7 @@ tpl:
           a time.Time interface.
         Examples:
         - - '{{ (time "2015-01-21").Year }}'
-          - "2015"
+          - '2015'
       Duration:
         Aliases:
         - duration
@@ -4236,9 +4799,15 @@ tpl:
           - 'dateFormat: Wednesday, Jan 21, 2015'
       In:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - timeZoneName
+        - t
+        Description: |-
+          In returns the time t in the IANA time zone specified by timeZoneName.
+          If timeZoneName is "" or "UTC", the time is returned in UTC.
+          If timeZoneName is "Local", the time is returned in the system's local time zone.
+          Otherwise, timeZoneName must be a valid IANA location name (e.g., "Europe/Oslo").
+        Examples: []
       Now:
         Aliases:
         - now
@@ -4249,22 +4818,17 @@ tpl:
         Aliases: null
         Args:
         - s
-        Description: |-
-          ParseDuration parses the duration string s.
-          A duration string is a possibly signed sequence of
-          decimal numbers, each with optional fraction and a unit suffix,
-          such as "300ms", "-1.5h" or "2h45m".
-          Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
-          See https://golang.org/pkg/time/#ParseDuration
+        Description: 'ParseDuration parses the duration string s.\nA duration string is a possibly signed sequence of\ndecimal numbers, each with optional fraction and a unit suffix,\nsuch as "300ms", "-1.5h" or "2h45m".\nValid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".\nSee https://golang.org/pkg/time/#ParseDuration'
         Examples:
         - - '{{ "1h12m10s" | time.ParseDuration }}'
           - 1h12m10s
     transform:
       CanHighlight:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - language
+        Description: CanHighlight returns whether the given code language is supported by the Chroma highlighter.
+        Examples: []
       Emojify:
         Aliases:
         - emojify
@@ -4272,7 +4836,7 @@ tpl:
         - s
         Description: |-
           Emojify returns a copy of s with all emoji codes replaced with actual emojis.
-
+          
           See http://www.emoji-cheat-sheet.com/
         Examples:
         - - '{{ "I :heart: Hugo" | emojify }}'
@@ -4282,17 +4846,24 @@ tpl:
         - htmlEscape
         Args:
         - s
-        Description: HTMLEscape returns a copy of s with reserved HTML characters
-          escaped.
+        Description: HTMLEscape returns a copy of s with reserved HTML characters escaped.
         Examples:
-        - - '{{ htmlEscape "Cathal Garvey & The Sunshine Band <cathal@foo.bar>" |
-            safeHTML }}'
+        - - '{{ htmlEscape "Cathal Garvey & The Sunshine Band <cathal@foo.bar>" | safeHTML }}'
           - Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;
         - - '{{ htmlEscape "Cathal Garvey & The Sunshine Band <cathal@foo.bar>" }}'
           - Cathal Garvey &amp;amp; The Sunshine Band &amp;lt;cathal@foo.bar&amp;gt;
-        - - '{{ htmlEscape "Cathal Garvey & The Sunshine Band <cathal@foo.bar>" |
-            htmlUnescape | safeHTML }}'
+        - - '{{ htmlEscape "Cathal Garvey & The Sunshine Band <cathal@foo.bar>" | htmlUnescape | safeHTML }}'
           - Cathal Garvey & The Sunshine Band <cathal@foo.bar>
+      HTMLToMarkdown:
+        Aliases: null
+        Args:
+        - ctx
+        - args
+        Description: |-
+          This was added in Hugo v0.151.0 and should be considered experimental for now.
+          We need to test this out in the wild for a while before committing to this API,
+          and there will eventually be more options here.
+        Examples: []
       HTMLUnescape:
         Aliases:
         - htmlUnescape
@@ -4302,34 +4873,36 @@ tpl:
           HTMLUnescape returns a copy of s with HTML escape requences converted to plain
           text.
         Examples:
-        - - '{{ htmlUnescape "Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;"
-            | safeHTML }}'
+        - - '{{ htmlUnescape "Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;" | safeHTML }}'
           - Cathal Garvey & The Sunshine Band <cathal@foo.bar>
-        - - '{{ "Cathal Garvey &amp;amp; The Sunshine Band &amp;lt;cathal@foo.bar&amp;gt;"
-            | htmlUnescape | htmlUnescape | safeHTML }}'
+        - - '{{ "Cathal Garvey &amp;amp; The Sunshine Band &amp;lt;cathal@foo.bar&amp;gt;" | htmlUnescape | htmlUnescape | safeHTML }}'
           - Cathal Garvey & The Sunshine Band <cathal@foo.bar>
-        - - '{{ "Cathal Garvey &amp;amp; The Sunshine Band &amp;lt;cathal@foo.bar&amp;gt;"
-            | htmlUnescape | htmlUnescape }}'
+        - - '{{ "Cathal Garvey &amp;amp; The Sunshine Band &amp;lt;cathal@foo.bar&amp;gt;" | htmlUnescape | htmlUnescape }}'
           - Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;
-        - - '{{ htmlUnescape "Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;"
-            | htmlEscape | safeHTML }}'
+        - - '{{ htmlUnescape "Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;" | htmlEscape | safeHTML }}'
           - Cathal Garvey &amp; The Sunshine Band &lt;cathal@foo.bar&gt;
       Highlight:
         Aliases:
         - highlight
         Args:
         - s
-        - lang
-        - opts
+        - args
         Description: |-
-          Highlight returns a copy of s as an HTML string with syntax
+          Highlight returns a copy of CODE as an HTML string with syntax
           highlighting applied.
+          
+          	transform.Highlight CODE [LANG] [OPTIONS]
+          
+          LANG is optional; it can also be set via the type option in OPTIONS, which
+          makes this work the same way as HighlightCodeBlock.
         Examples: []
       HighlightCodeBlock:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - ctx
+        - opts
+        Description: HighlightCodeBlock highlights a code block on the form received in the codeblock render hooks.
+        Examples: []
       Markdownify:
         Aliases:
         - markdownify
@@ -4351,9 +4924,12 @@ tpl:
           - Hello world, gophers!
       PortableText:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - v
+        Description: |-
+          PortableText converts the portable text in v to Markdown.
+          We may add more options in the future.
+        Examples: []
       Remarshal:
         Aliases: null
         Args:
@@ -4367,17 +4943,17 @@ tpl:
           change without notice if it serves a purpose in the docs.
           Format is one of json, yaml or toml.
         Examples:
-        - - '{{ "title = \"Hello World\"" | transform.Remarshal "json" | safeHTML
-            }}'
-          - |
-            {
-               "title": "Hello World"
-            }
+        - - '{{ "title = \"Hello World\"" | transform.Remarshal "json" | safeHTML }}'
+          - '{\n   "title": "Hello World"\n}\n'
       ToMath:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - ctx
+        - args
+        Description: |-
+          ToMath converts a LaTeX string to math in the given format, default MathML.
+          This uses KaTeX to render the math, see https://katex.org/.
+        Examples: []
       Unmarshal:
         Aliases:
         - unmarshal
@@ -4390,8 +4966,7 @@ tpl:
         Examples:
         - - '{{ "hello = \"Hello World\"" | transform.Unmarshal }}'
           - map[hello:Hello World]
-        - - '{{ "hello = \"Hello World\"" | resources.FromString "data/greetings.toml"
-            | transform.Unmarshal }}'
+        - - '{{ "hello = \"Hello World\"" | resources.FromString "data/greetings.toml" | transform.Unmarshal }}'
           - map[hello:Hello World]
       XMLEscape:
         Aliases: null
@@ -4447,17 +5022,36 @@ tpl:
           - a/b
       Parse:
         Aliases: null
-        Args: null
-        Description: ""
-        Examples: null
+        Args:
+        - rawurl
+        Description: |-
+          Parse parses rawurl into a URL structure. The rawurl may be relative or
+          absolute.
+        Examples: []
+      PathEscape:
+        Aliases: null
+        Args:
+        - s
+        Description: |-
+          PathEscape returns the given string, applying percent-encoding to special
+          characters and reserved delimiters so it can be safely used as a segment
+          within a URL path.
+        Examples: []
+      PathUnescape:
+        Aliases: null
+        Args:
+        - s
+        Description: |-
+          PathUnescape returns the given string, replacing all percent-encoded
+          sequences with the corresponding unescaped characters.
+        Examples: []
       Ref:
         Aliases:
         - ref
         Args:
         - p
         - args
-        Description: Ref returns the absolute URL path to a given content item from
-          Page p.
+        Description: Ref returns the absolute URL path to a given content item from Page p.
         Examples: []
       RelLangURL:
         Aliases:
@@ -4474,8 +5068,7 @@ tpl:
         Args:
         - p
         - args
-        Description: RelRef returns the relative URL path to a given content item
-          from Page p.
+        Description: RelRef returns the relative URL path to a given content item from Page p.
         Examples: []
       RelURL:
         Aliases:

@@ -19,19 +19,23 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	qt "github.com/frankban/quicktest"
+	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugolib"
 )
 
 func TestGetRemoteHead(t *testing.T) {
 	files := `
--- config.toml --
+-- hugo.toml --
 [security]
   [security.http]
     methods = ['(?i)GET|POST|HEAD']
     urls = ['.*gohugo\.io.*']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $url := "https://gohugo.io/img/hugo.png" }}
 {{ $opts := dict "method" "head" }}
 {{ with try (resources.GetRemote $url $opts) }}
@@ -45,14 +49,7 @@ func TestGetRemoteHead(t *testing.T) {
 {{ end }}
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-
-	b.Build()
+	b := hugolib.Test(t, files)
 
 	b.AssertFileContent("public/index.html",
 		"Head Content: .",
@@ -62,12 +59,12 @@ func TestGetRemoteHead(t *testing.T) {
 
 func TestGetRemoteResponseHeaders(t *testing.T) {
 	files := `
--- config.toml --
+-- hugo.toml --
 [security]
   [security.http]
     methods = ['(?i)GET|POST|HEAD']
     urls = ['.*gohugo\.io.*']
--- layouts/index.html --
+-- layouts/home.html --
 {{ $url := "https://gohugo.io/img/hugo.png" }}
 {{ $opts := dict "method" "head" "responseHeaders" (slice "X-Frame-Options" "Server") }}
 {{ with try (resources.GetRemote $url $opts) }}
@@ -81,14 +78,7 @@ func TestGetRemoteResponseHeaders(t *testing.T) {
 {{ end }}
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-
-	b.Build()
+	b := hugolib.Test(t, files)
 
 	b.AssertFileContent("public/index.html",
 		"Response Headers: map[Server:[Netlify] X-Frame-Options:[DENY]]",
@@ -97,6 +87,7 @@ func TestGetRemoteResponseHeaders(t *testing.T) {
 
 func TestGetRemoteRetry(t *testing.T) {
 	t.Parallel()
+	htesting.SkipSlowTestUnlessCI(t)
 
 	temporaryHTTPCodes := []int{408, 429, 500, 502, 503, 504}
 	numPages := 20
@@ -121,7 +112,7 @@ timeout = "TIMEOUT"
 [security.http]
 urls = ['.*']
 mediaTypes = ['text/plain']
--- layouts/_default/single.html --
+-- layouts/single.html --
 {{ $url := printf "%s%s" "URL" .RelPermalink}}
 {{ $opts := dict }}
 {{ with try (resources.GetRemote $url $opts) }}
@@ -144,14 +135,7 @@ mediaTypes = ['text/plain']
 
 	t.Run("OK", func(t *testing.T) {
 		files := strings.ReplaceAll(filesTemplate, "TIMEOUT", "60s")
-		b := hugolib.NewIntegrationTestBuilder(
-			hugolib.IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		)
-
-		b.Build()
+		b := hugolib.Test(t, files)
 
 		for i := range numPages {
 			b.AssertFileContent(fmt.Sprintf("public/post/p%d/index.html", i), fmt.Sprintf("Content: Response for /post/p%d/.", i))
@@ -160,16 +144,298 @@ mediaTypes = ['text/plain']
 
 	t.Run("Timeout", func(t *testing.T) {
 		files := strings.ReplaceAll(filesTemplate, "TIMEOUT", "100ms")
-		b, err := hugolib.NewIntegrationTestBuilder(
-			hugolib.IntegrationTestConfig{
-				T:           t,
-				TxtarString: files,
-			},
-		).BuildE()
+		b, err := hugolib.TestE(t, files)
 		// This is hard to get stable on GitHub Actions, it sometimes succeeds due to timing issues.
 		if err != nil {
 			b.AssertLogContains("Got Err")
 			b.AssertLogContains("retry timeout")
 		}
 	})
+}
+
+func TestGetRemotePerRequestTimeout(t *testing.T) {
+	t.Parallel()
+	htesting.SkipSlowTestUnlessCI(t)
+
+	// A server that always sleeps longer than the per-request timeout.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.Header().Add("Content-Type", "text/plain")
+		w.Write([]byte("too late"))
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	files := `
+-- hugo.toml --
+timeout = "30s"
+[security]
+[security.http]
+urls = ['.*']
+mediaTypes = ['text/plain']
+-- layouts/home.html --
+{{ $url := "URL" }}
+{{ $opts := dict "timeout" "200ms" }}
+{{ with try (resources.GetRemote $url $opts) }}
+  {{ with .Err }}
+    Err: {{ . }}
+  {{ else with .Value }}
+    Content: {{ .Content }}
+  {{ end }}
+{{ end }}
+`
+	files = strings.ReplaceAll(files, "URL", srv.URL)
+
+	b := hugolib.Test(t, files)
+
+	// The per-request timeout of 200ms should fire well before the global 30s timeout.
+	b.AssertFileContent("public/index.html", "Err:")
+}
+
+// Issue 14828.
+func TestGetRemoteRetryAfterIssue14828(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Honored", func(t *testing.T) {
+		var (
+			mu       sync.Mutex
+			reqTimes []time.Time
+		)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			reqTimes = append(reqTimes, time.Now())
+			n := len(reqTimes)
+			mu.Unlock()
+
+			if n == 1 {
+				w.Header().Set("Retry-After", "2")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Add("Content-Type", "text/plain")
+			w.Write([]byte("OK"))
+		}))
+		t.Cleanup(func() { srv.Close() })
+
+		files := `
+-- hugo.toml --
+timeout = "30s"
+[security]
+[security.http]
+urls = ['.*']
+mediaTypes = ['text/plain']
+-- layouts/home.html --
+{{ $url := "URL" }}
+{{ with try (resources.GetRemote $url) }}
+  {{ with .Err }}
+    {{ errorf "Got Err: %s" . }}
+  {{ else with .Value }}
+    Content: {{ .Content }}
+  {{ end }}
+{{ end }}
+`
+		files = strings.ReplaceAll(files, "URL", srv.URL)
+
+		b := hugolib.Test(t, files)
+		b.AssertFileContent("public/index.html", "Content: OK")
+
+		mu.Lock()
+		defer mu.Unlock()
+		b.Assert(len(reqTimes) >= 2, qt.IsTrue, qt.Commentf("expected at least 2 requests, got %d", len(reqTimes)))
+		// Default exponential backoff caps the initial sleep at 1100ms.
+		// A Retry-After of 2s should produce a gap well above that.
+		gap := reqTimes[1].Sub(reqTimes[0])
+		b.Assert(gap >= 1500*time.Millisecond, qt.IsTrue, qt.Commentf("expected gap of at least 1500ms (Retry-After: 2), got %s", gap))
+	})
+
+	t.Run("TimeoutMessage", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		t.Cleanup(func() { srv.Close() })
+
+		files := `
+-- hugo.toml --
+timeout = "200ms"
+[security]
+[security.http]
+urls = ['.*']
+-- layouts/home.html --
+{{ $url := "URL" }}
+{{ with try (resources.GetRemote $url) }}
+  {{ with .Err }}
+    {{ errorf "Got Err: %s" . }}
+  {{ end }}
+{{ end }}
+`
+		files = strings.ReplaceAll(files, "URL", srv.URL)
+
+		b, _ := hugolib.TestE(t, files)
+		b.AssertLogContains("Retry-After: 1s")
+	})
+}
+
+// Issue 14871.
+func TestGetRemoteRedirectSecurityCheckIssue14871(t *testing.T) {
+	t.Parallel()
+
+	// Final server: the redirect target. Its host must be denied by security.http.urls.
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/plain")
+		w.Write([]byte("should not reach here"))
+	}))
+	t.Cleanup(func() { target.Close() })
+
+	// Redirector: the allowed host. Redirects to the denied target.
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL+"/", http.StatusFound)
+	}))
+	t.Cleanup(func() { redirector.Close() })
+
+	files := `
+-- hugo.toml --
+[security]
+[security.http]
+urls = ['REDIRECTOR']
+mediaTypes = ['text/plain']
+-- layouts/home.html --
+{{ $url := "REDIRECTOR/" }}
+{{ with try (resources.GetRemote $url) }}
+  {{ with .Err }}
+    Err: {{ . }}
+  {{ else with .Value }}
+    Content: {{ .Content }}
+  {{ end }}
+{{ end }}
+`
+	files = strings.ReplaceAll(files, "REDIRECTOR", redirector.URL)
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "Err:", "security.http.urls")
+	b.AssertFileContent("public/index.html", "! should not reach here")
+}
+
+// Issue 14611.
+func TestGetRemotePerRequestTimeoutBodyRead(t *testing.T) {
+	t.Parallel()
+
+	// Server sends headers immediately but streams body with a delay.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/plain")
+		w.WriteHeader(200)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		time.Sleep(300 * time.Millisecond)
+		w.Write([]byte("Hello from remote."))
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	files := `
+-- hugo.toml --
+timeout = "30s"
+[security]
+[security.http]
+urls = ['.*']
+mediaTypes = ['text/plain']
+-- layouts/home.html --
+{{ $url := "URL" }}
+{{ $opts := dict "timeout" "5s" }}
+{{ with try (resources.GetRemote $url $opts) }}
+  {{ with .Err }}
+    Err: {{ . }}
+  {{ else with .Value }}
+    Content: {{ .Content }}
+  {{ end }}
+{{ end }}
+`
+	files = strings.ReplaceAll(files, "URL", srv.URL)
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "Content: Hello from remote.")
+}
+
+// Issue 11601: resources.GetRemote must not rely on the OS mime table (or on
+// the Hugo server registering Hugo's media types in it) to resolve the media
+// type of a remote resource.
+func TestGetRemoteMediaTypeFromHugoMediaTypesIssue11601(t *testing.T) {
+	t.Parallel()
+
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		// application/rss+xml is not in Go's builtin mime table and is
+		// missing from many OS mime databases (e.g. in the snap sandbox).
+		w.Header().Add("Content-Type", "application/rss+xml; charset=UTF-8")
+		// No XML declaration, so content sniffing alone can't detect XML.
+		w.Write([]byte(`<rss version="2.0"><channel><title>My Blog</title><item><title>First Post</title></item><item><title>Second Post</title></item></channel></rss>`))
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(func() { srv.Close() })
+
+	files := strings.ReplaceAll(`
+-- hugo.toml --
+disableKinds = ["taxonomy", "term", "sitemap", "rss"]
+[security]
+[security.http]
+urls = ['.*']
+-- layouts/home.html --
+{{ with try (resources.GetRemote "URL/feed/?t=1698195621") }}
+  {{ with .Err }}
+    {{ errorf "Got Err: %s" . }}
+  {{ else with .Value }}
+    MediaType: {{ .MediaType.SubType }}|
+    {{ with . | transform.Unmarshal }}
+      Channel: {{ .channel.title }}|
+      {{ range .channel.item }}Item: {{ .title }}|{{ end }}
+    {{ end }}
+  {{ else }}
+    {{ errorf "Unable to get remote resource" }}
+  {{ end }}
+{{ end }}
+`, "URL", srv.URL)
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "MediaType: rss|", "Channel: My Blog|", "Item: First Post|", "Item: Second Post|")
+}
+
+// Issue 11601: same as above, but with a custom media type that no OS mime
+// table knows about, so the outcome doesn't depend on the host.
+func TestGetRemoteCustomMediaTypeIssue11601(t *testing.T) {
+	t.Parallel()
+
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/x-hugo11601; charset=UTF-8")
+		w.Write([]byte(`Hello from remote.`))
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(func() { srv.Close() })
+
+	files := strings.ReplaceAll(`
+-- hugo.toml --
+disableKinds = ["taxonomy", "term", "sitemap", "rss"]
+[mediaTypes."text/x-hugo11601"]
+suffixes = ["hugo11601"]
+[security]
+[security.http]
+urls = ['.*']
+-- layouts/home.html --
+{{ with try (resources.GetRemote "URL/data") }}
+  {{ with .Err }}
+    {{ errorf "Got Err: %s" . }}
+  {{ else with .Value }}
+    MediaType: {{ .MediaType.Type }}|Content: {{ .Content }}|
+  {{ else }}
+    {{ errorf "Unable to get remote resource" }}
+  {{ end }}
+{{ end }}
+`, "URL", srv.URL)
+
+	b := hugolib.Test(t, files)
+
+	b.AssertFileContent("public/index.html", "MediaType: text/x-hugo11601|Content: Hello from remote.|")
 }

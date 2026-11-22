@@ -21,6 +21,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/gohugoio/hugo/common/hhtml"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
 	"github.com/gohugoio/hugo/media"
@@ -104,7 +105,7 @@ func (s HtmlSummary) trimSpace(ss string) string {
 
 func (s HtmlSummary) Content() string {
 	if s.Divider.IsZero() {
-		return s.source
+		return s.trimSpace(s.source)
 	}
 	ss := s.source[:s.Divider.Low]
 	ss += s.source[s.Divider.High:]
@@ -139,7 +140,7 @@ func (s HtmlSummary) ContentWithoutSummary() string {
 }
 
 func (s HtmlSummary) Truncated() bool {
-	return s.SummaryLowHigh.High < len(s.source)
+	return s.Summary() != s.Content()
 }
 
 func (s *HtmlSummary) resolveParagraphTagAndSetWrapper(mt media.Type) tagReStartEnd {
@@ -234,9 +235,11 @@ func ExtractSummaryFromHTML(mt media.Type, input string, numWords int, isCJK boo
 		}
 
 		if count >= numWords {
+			summaryHigh := j + closingIndex + len(ptag.tagName) + 3
+			summaryHigh = expandSummaryHighToBalancedHTML(input, result.WrapperStart.High, summaryHigh, high)
 			result.SummaryLowHigh = types.LowHigh[string]{
 				Low:  result.WrapperStart.High,
-				High: j + closingIndex + len(ptag.tagName) + 3,
+				High: summaryHigh,
 			}
 			return
 		}
@@ -251,6 +254,42 @@ func ExtractSummaryFromHTML(mt media.Type, input string, numWords int, isCJK boo
 	}
 
 	return
+}
+
+// expandSummaryHighToBalancedHTML moves high forward until every element
+// opened in input[low:high] is closed, so the summary does not end inside
+// e.g. a blockquote or list item.
+func expandSummaryHighToBalancedHTML(input string, low, high, maxHigh int) int {
+	if low >= high || high >= maxHigh {
+		return high
+	}
+
+	var buf [16]string
+	stack := buf[:0]
+	sc := hhtml.NewScanner(input, low)
+
+	for {
+		t, ok := sc.Next(high)
+		if !ok {
+			break
+		}
+		stack = hhtml.UpdateElementStack(&sc, stack, t, high)
+	}
+
+	if len(stack) == 0 {
+		return high
+	}
+
+	for {
+		t, ok := sc.Next(maxHigh)
+		if !ok {
+			return high
+		}
+		stack = hhtml.UpdateElementStack(&sc, stack, t, maxHigh)
+		if len(stack) == 0 {
+			return sc.Pos()
+		}
+	}
 }
 
 // ExtractSummaryFromHTMLWithDivider extracts a summary from the given HTML content with

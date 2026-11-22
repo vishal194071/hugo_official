@@ -25,7 +25,7 @@ func TestPageTranslationsMap(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 baseURL = 'https://example.org/'
 title = 'Issue-9073'
 defaultContentLanguageInSubdir = true
@@ -52,19 +52,13 @@ tags: ['T1']
 title: P1
 tags: ['T1']
 ---
--- layouts/_default/single.html --
+-- layouts/single.html --
 <ul>{{ range .AllTranslations }}<li>{{ .Title }}-{{ .Lang }}</li>{{ end }}</ul>
--- layouts/_default/list.html --
+-- layouts/list.html --
 <ul>{{ range .AllTranslations }}<li>{{ .Title }}-{{ .Lang }}</li>{{ end }}</ul>
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-	b.Build()
+	b := hugolib.Test(t, files)
 
 	// Kind home
 	b.AssertFileContent("public/en/index.html",
@@ -93,19 +87,13 @@ func TestRenderStringBadMarkupOpt(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- layouts/index.html --
+-- layouts/home.html --
 {{ $opts := dict "markup" "foo" }}
 {{ "something" | .RenderString $opts }}
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-
-	_, err := b.BuildE()
+	b, err := hugolib.TestE(t, files)
+	_ = b
 
 	want := `no content renderer found for markup "foo"`
 	if !strings.Contains(err.Error(), want) {
@@ -118,7 +106,7 @@ func TestTitleCaseStyleWithAutomaticSectionPages(t *testing.T) {
 	t.Parallel()
 
 	files := `
--- config.toml --
+-- hugo.toml --
 titleCaseStyle = 'none'
 -- content/books/book-1.md --
 ---
@@ -129,19 +117,13 @@ tags: [fiction]
 ---
 title: Films
 ---
--- layouts/index.html --
+-- layouts/home.html --
 {{ (site.GetPage "/tags").Title }}
 {{ (site.GetPage "/tags/fiction").Title }}
 {{ (site.GetPage "/books").Title }}
 {{ (site.GetPage "/films").Title }}
 	`
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-		},
-	)
-	b.Build()
+	b := hugolib.Test(t, files)
 	b.AssertFileContent("public/index.html", "tags\nfiction\nbooks\nFilms")
 }

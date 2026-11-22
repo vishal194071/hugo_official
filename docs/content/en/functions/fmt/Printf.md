@@ -1,6 +1,6 @@
 ---
 title: fmt.Printf
-description: Formats a string using the standard `fmt.Sprintf` function.
+description: Returns a string formatted according to the given format specifier.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [printf]
     returnType: string
     signatures: ['fmt.Printf FORMAT [INPUT]']
-aliases: [/functions/printf]
 ---
 
 {{% include "/_common/functions/fmt/format-string.md" %}}
@@ -23,7 +22,7 @@ aliases: [/functions/printf]
 {{ printf "Pi is approximately %.2f." $pi }} → 3.14
 ```
 
-Use the `printf` function with the `safeHTMLAttr` function:
+Use the `printf` function with the [`safe.HTMLAttr`][] function:
 
 ```go-html-template
 {{ $desc := "Eat at Joe's" }}
@@ -35,3 +34,5 @@ Hugo renders this to:
 ```html
 <meta name="description" content="Eat at Joe's">
 ```
+
+[`safe.HTMLAttr`]: /functions/safe/htmlattr/

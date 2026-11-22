@@ -3,7 +3,6 @@ title: Archetypes
 description: An archetype is a template for new content.
 categories: []
 keywords: []
-aliases: [/content/archetypes/]
 ---
 
 ## Overview
@@ -34,7 +33,7 @@ draft = true
 
 You can create an archetype for one or more [content types](g). For example, use one archetype for posts, and use the default archetype for everything else:
 
-```text
+```tree
 archetypes/
 ├── default.md
 └── posts.md
@@ -44,7 +43,7 @@ archetypes/
 
 Hugo looks for archetypes in the `archetypes` directory in the root of your project, falling back to the `archetypes` directory in themes or installed modules. An archetype for a specific content type takes precedence over the default archetype.
 
-For example, with this command:
+For example, if you have enabled a theme named `my-theme` and you run this command:
 
 ```sh
 hugo new content posts/my-first-post.md
@@ -53,35 +52,33 @@ hugo new content posts/my-first-post.md
 The archetype lookup order is:
 
 1. `archetypes/posts.md`
-1. `archetypes/default.md`
 1. `themes/my-theme/archetypes/posts.md`
+1. `archetypes/default.md`
 1. `themes/my-theme/archetypes/default.md`
 
 If none of these exists, Hugo uses a built-in default archetype.
 
 ## Functions and context
 
-You can use any template [function](g) within an archetype. As shown above, the default archetype uses the [`replace`](/functions/strings/replace) function to replace hyphens with spaces when populating the title in front matter.
+You can use any template [function](g) within an archetype. As shown above, the default archetype uses the [`strings.Replace`][] function to replace hyphens with spaces when populating the title in front matter.
 
 Archetypes receive the following [context](g):
 
-Date
+`Date`
 : (`string`) The current date and time, formatted in compliance with RFC3339.
 
-File
-: (`hugolib.fileInfo`) Returns file information for the current page. See&nbsp;[details](/methods/page/file).
+`File`
+: (`hugolib.fileInfo`) Returns [file information][] for the current page.
 
-Type
+`Type`
 : (`string`) The [content type](g) inferred from the top-level directory name, or as specified by the `--kind` flag passed to the `hugo new content` command.
 
-Site
-: (`page.Site`) The current site object. See&nbsp;[details](/methods/site/).
+`Site`
+: (`page.Site`) The current `Site` object.
 
 ## Date format
 
-To insert date and time with a different format, use the [`time.Now`] function:
-
-[`time.Now`]: /functions/time/now/
+To insert date and time with a different format, use the [`time.Now`][] function:
 
 {{< code-toggle file=archetypes/default.md fm=true >}}
 title = '{{ replace .File.ContentBaseName `-` ` ` | title }}'
@@ -95,7 +92,7 @@ Although typically used as a front matter template, you can also use an archetyp
 
 For example, in a documentation site you might have a section (content type) for functions. Every page within this section should follow the same format: a brief description, the function signature, examples, and notes. We can pre-populate the page to remind content authors of the standard format.
 
-````text {file="archetypes/functions.md"}
+````md {file="archetypes/functions.md"}
 ---
 date: '{{ .Date }}'
 draft: true
@@ -131,7 +128,7 @@ For example, in a photography site you might have a section (content type) for g
 
 Create an archetype for galleries:
 
-```text
+```tree
 archetypes/
 ├── galleries/
 │   ├── images/
@@ -150,7 +147,7 @@ hugo new galleries/bryce-canyon
 
 This produces:
 
-```text
+```tree
 content/
 ├── galleries/
 │   └── bryce-canyon/
@@ -162,11 +159,11 @@ content/
 
 ## Specify archetype
 
-Use the `--kind` command line flag to specify an archetype when creating content.
+Use the `--kind` command-line flag to specify an archetype when creating content.
 
 For example, let's say your site has two sections: articles and tutorials. Create an archetype for each content type:
 
-```text
+```tree
 archetypes/
 ├── articles.md
 ├── default.md
@@ -184,3 +181,7 @@ To create an article using the tutorials archetype:
 ```sh
 hugo new content --kind tutorials articles/something.md
 ```
+
+[`strings.Replace`]: /functions/strings/replace/
+[`time.Now`]: /functions/time/now/
+[file information]: /methods/page/file/

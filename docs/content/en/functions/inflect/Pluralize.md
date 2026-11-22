@@ -1,6 +1,6 @@
 ---
 title: inflect.Pluralize
-description: Pluralizes the given word according to a set of common English pluralization rules.
+description: Returns the plural form of the given word according to a set of common English pluralization rules.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [pluralize]
     returnType: string
     signatures: [inflect.Pluralize INPUT]
-aliases: [/functions/pluralize]
 ---
 
 ```go-html-template

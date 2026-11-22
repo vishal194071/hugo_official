@@ -193,6 +193,7 @@ func TestTocMisc(t *testing.T) {
 	})
 }
 
+// Note that some of these cannot use b.Loop() because of golang/go#27217.
 func BenchmarkToc(b *testing.B) {
 	newTocs := func(n int) []*Fragments {
 		var tocs []*Fragments
@@ -208,7 +209,6 @@ func BenchmarkToc(b *testing.B) {
 			builders = append(builders, newTestTocBuilder())
 		}
 		b.ResetTimer()
-
 		for i := 0; i < b.N; i++ {
 			b := builders[i]
 			b.Build()
@@ -216,10 +216,10 @@ func BenchmarkToc(b *testing.B) {
 	})
 
 	b.Run("ToHTML", func(b *testing.B) {
-		tocs := newTocs(b.N)
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			toc := tocs[i]
+		const size = 1000
+		tocs := newTocs(size)
+		for i := 0; b.Loop(); i++ {
+			toc := tocs[i%size]
 			toc.ToHTML(1, -1, false)
 		}
 	})

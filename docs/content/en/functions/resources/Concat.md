@@ -10,17 +10,18 @@ params:
     signatures: ['resources.Concat TARGETPATH [RESOURCE...]']
 ---
 
-The `resources.Concat` function returns a concatenated slice of resources, caching the result using the target path as its cache key. Each resource must have the same [media type].
+{{% include "/_common/methods/resource/global-page-remote-resources.md" %}}
 
-Hugo publishes the resource to the target path when you call its [`Publish`], [`Permalink`], or [`RelPermalink`] method.
+The `resources.Concat` function returns a concatenated slice of resources, caching the result using the target path as its cache key. Each resource must have the same [media type](g).
 
-[media type]: https://en.wikipedia.org/wiki/Media_type
-[`publish`]: /methods/resource/publish/
-[`permalink`]: /methods/resource/permalink/
-[`relpermalink`]: /methods/resource/relpermalink/
+Hugo publishes the resource to the target path when you call its [`Publish`][], [`Permalink`][], or [`RelPermalink`][] method.
 
 ```go-html-template
 {{ $plugins := resources.Get "js/plugins.js" }}
 {{ $global := resources.Get "js/global.js" }}
 {{ $js := slice $plugins $global | resources.Concat "js/bundle.js" }}
 ```
+
+[`Permalink`]: /methods/resource/permalink/
+[`Publish`]: /methods/resource/publish/
+[`RelPermalink`]: /methods/resource/relpermalink/

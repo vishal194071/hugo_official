@@ -15,7 +15,9 @@
 package hugofs
 
 import (
+	"context"
 	"fmt"
+	iofs "io/fs"
 	"os"
 	"strings"
 
@@ -242,6 +244,8 @@ func WrapFilesystem(container, content afero.Fs) afero.Fs {
 	return filesystemsWrapper{Fs: container, content: content}
 }
 
+var _ afero.Lstater = (*filesystemsWrapper)(nil)
+
 type filesystemsWrapper struct {
 	afero.Fs
 	content afero.Fs
@@ -249,4 +253,37 @@ type filesystemsWrapper struct {
 
 func (w filesystemsWrapper) UnwrapFilesystem() afero.Fs {
 	return w.content
+}
+
+func (w filesystemsWrapper) LstatIfPossible(name string) (os.FileInfo, bool, error) {
+	if lstater, ok := w.Fs.(afero.Lstater); ok {
+		return lstater.LstatIfPossible(name)
+	}
+	fi, err := w.Fs.Stat(name)
+	return fi, false, err
+}
+
+type ReadDirWithContextDir interface {
+	ReadDirWithContext(context context.Context, count int) ([]iofs.DirEntry, context.Context, error)
+}
+
+func ReadDirWithContext(ctx context.Context, f DirOnlyOps, count int) ([]iofs.DirEntry, context.Context, error) {
+	if ff, ok := f.(ReadDirWithContextDir); ok {
+		return ff.ReadDirWithContext(ctx, count)
+	}
+	v, err := f.(iofs.ReadDirFile).ReadDir(count)
+	if err != nil {
+		return nil, ctx, err
+	}
+	return v, ctx, nil
+}
+
+// LstatIfPossible tries to use LstatIfPossible if the filesystem supports it, otherwise it falls back to Stat.
+func LstatIfPossible(fs afero.Fs, name string) (os.FileInfo, error) {
+	if lstater, ok := fs.(afero.Lstater); ok {
+		fi, _, err := lstater.LstatIfPossible(name)
+		return fi, err
+	}
+	fi, err := fs.Stat(name)
+	return fi, err
 }

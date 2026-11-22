@@ -24,6 +24,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 )
 
@@ -38,7 +39,9 @@ type (
 	passthroughExtension struct {
 		cfg goldmark_config.Passthrough
 	}
-	htmlRenderer struct{}
+	htmlRenderer struct {
+		html.Config
+	}
 )
 
 func (e *passthroughExtension) Extend(m goldmark.Markdown) {
@@ -80,8 +83,12 @@ func (e *passthroughExtension) Extend(m goldmark.Markdown) {
 }
 
 func newHTMLRenderer() renderer.NodeRenderer {
-	r := &htmlRenderer{}
+	r := &htmlRenderer{Config: html.NewConfig()}
 	return r
+}
+
+func (r *htmlRenderer) SetOption(name renderer.OptionName, value any) {
+	r.Config.SetOption(name, value)
 }
 
 func (r *htmlRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
@@ -121,8 +128,12 @@ func (r *htmlRenderer) renderPassthroughBlock(w util.BufWriter, src []byte, node
 
 	renderer := ctx.RenderContext().GetRenderer(hooks.PassthroughRendererType, typ)
 	if renderer == nil {
-		// Write the raw content if no renderer is found.
-		ctx.WriteString(s)
+		// Write the content as is if no renderer is found, escaped unless raw HTML is allowed.
+		if r.Unsafe {
+			ctx.WriteString(s)
+		} else {
+			ctx.Write(util.EscapeHTML([]byte(s)))
+		}
 		return ast.WalkContinue, nil
 	}
 
@@ -132,8 +143,8 @@ func (r *htmlRenderer) renderPassthroughBlock(w util.BufWriter, src []byte, node
 	// Trim the delimiters.
 	s = s[len(delims.Open) : len(s)-len(delims.Close)]
 
-	pctx := &passthroughContext{
-		BaseContext:      render.NewBaseContext(ctx, renderer, node, src, nil, ordinal),
+	pctx := passthroughContext{
+		BaseContext:      render.NewBaseContext(ctx, renderer, node, src, ordinal),
 		inner:            s,
 		typ:              typ,
 		AttributesHolder: attributes.New(node.Attributes(), attributes.AttributesOwnerGeneral),
@@ -157,10 +168,10 @@ type passthroughContext struct {
 	*attributes.AttributesHolder
 }
 
-func (p *passthroughContext) Type() string {
+func (p passthroughContext) Type() string {
 	return p.typ
 }
 
-func (p *passthroughContext) Inner() string {
+func (p passthroughContext) Inner() string {
 	return p.inner
 }

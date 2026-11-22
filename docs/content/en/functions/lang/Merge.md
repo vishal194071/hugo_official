@@ -1,6 +1,6 @@
 ---
 title: lang.Merge
-description: Merge missing translations from other languages.
+description: Returns a copy of the given page collection with missing translations filled in from another page collection.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: []
     returnType: any
     signatures: [lang.Merge FROM TO]
-aliases: [/functions/lang.merge]
 ---
 
 As an example:

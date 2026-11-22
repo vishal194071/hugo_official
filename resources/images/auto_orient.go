@@ -17,9 +17,7 @@ import (
 	"image"
 	"image/draw"
 
-	"github.com/disintegration/gift"
-	"github.com/gohugoio/hugo/resources/images/exif"
-	"github.com/spf13/cast"
+	"github.com/gohugoio/gift"
 )
 
 var _ gift.Filter = (*autoOrientFilter)(nil)
@@ -37,7 +35,7 @@ var transformationFilters = map[int]gift.Filter{
 type autoOrientFilter struct{}
 
 type ImageFilterFromOrientationProvider interface {
-	AutoOrient(exifInfo *exif.ExifInfo) gift.Filter
+	AutoOrient(orientation int) gift.Filter
 }
 
 func (f autoOrientFilter) Draw(dst draw.Image, src image.Image, options *gift.Options) {
@@ -48,15 +46,9 @@ func (f autoOrientFilter) Bounds(srcBounds image.Rectangle) image.Rectangle {
 	panic("not supported")
 }
 
-func (f autoOrientFilter) AutoOrient(exifInfo *exif.ExifInfo) gift.Filter {
-	if exifInfo != nil {
-		if v, ok := exifInfo.Tags["Orientation"]; ok {
-			orientation := cast.ToInt(v)
-			if filter, ok := transformationFilters[orientation]; ok {
-				return filter
-			}
-		}
+func (f autoOrientFilter) AutoOrient(orientation int) gift.Filter {
+	if filter, ok := transformationFilters[orientation]; ok {
+		return filter
 	}
-
 	return nil
 }

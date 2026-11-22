@@ -1,6 +1,6 @@
 ---
 title: URL
-description: Returns the relative permalink of the page associated with the given menu entry, else its `url` property.
+description: Returns the relative permalink of the page associated with the given menu entry, else its url property.
 categories: []
 keywords: []
 params:
@@ -9,7 +9,7 @@ params:
     signatures: [MENUENTRY.URL]
 ---
 
-For menu entries associated with a page, the `URL` method returns the page's [`RelPermalink`], otherwise it returns the entry's `url` property.
+For menu entries associated with a page, the `URL` method returns the page's [`RelPermalink`][], otherwise it returns the entry's `url` property.
 
 ```go-html-template
 <ul>

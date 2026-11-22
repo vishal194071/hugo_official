@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.13
-// +build go1.13
-
 package parse
 
 import (
@@ -580,16 +577,4 @@ func TestPos(t *testing.T) {
 			}
 		}
 	}
-}
-
-// parseLexer is a local version of parse that lets us pass in the lexer instead of building it.
-// We expect an error, so the tree set and funcs list are explicitly nil.
-func (t *Tree) parseLexer(lex *lexer) (tree *Tree, err error) {
-	defer t.recover(&err)
-	t.ParseName = t.Name
-	t.startParse(nil, lex, map[string]*Tree{})
-	t.parse()
-	t.add()
-	t.stopParse()
-	return t, nil
 }

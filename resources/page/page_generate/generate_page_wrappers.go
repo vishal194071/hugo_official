@@ -19,9 +19,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/gohugoio/hugo/codegen"
 	"github.com/gohugoio/hugo/resources/page"
+	"github.com/gohugoio/hugo/resources/resource"
 )
 
 const header = `// Copyright 2019 The Hugo Authors. All rights reserved.
@@ -41,7 +43,9 @@ const header = `// Copyright 2019 The Hugo Authors. All rights reserved.
 `
 
 var (
-	pageInterface = reflect.TypeOf((*page.PageMetaProvider)(nil)).Elem()
+	pageInterface                 = reflect.TypeFor[page.PageMetaResource]()
+	pageDeprecatedInterface       = reflect.TypeFor[page.DeprecatedPageMetaProvider]()
+	resourceDataProviderInterface = reflect.TypeFor[resource.ResourceDataProvider]()
 
 	packageDir = filepath.FromSlash("resources/page")
 )
@@ -64,11 +68,12 @@ func generateMarshalJSON(c *codegen.Inspector) error {
 
 	includes := []reflect.Type{pageInterface}
 
-	excludes := []reflect.Type{}
+	excludes := []reflect.Type{pageDeprecatedInterface, resourceDataProviderInterface}
 
 	methods := c.MethodsFromTypes(
 		includes,
-		excludes)
+		excludes,
+	)
 
 	if len(methods) == 0 {
 		return errors.New("no methods found")
@@ -79,6 +84,7 @@ func generateMarshalJSON(c *codegen.Inspector) error {
 		"github.com/gohugoio/hugo/resources/page",
 		// Exclusion regexps. Matches method names.
 		`\bPage\b`,
+		`\bIsNode\b`,
 	)
 
 	fmt.Fprintf(f, `%s
@@ -105,10 +111,11 @@ func importsString(imps []string) string {
 		return fmt.Sprintf("import %q", imps[0])
 	}
 
-	impsStr := "import (\n"
+	var impsStr strings.Builder
+	impsStr.WriteString("import (\n")
 	for _, imp := range imps {
-		impsStr += fmt.Sprintf("%q\n", imp)
+		impsStr.WriteString(fmt.Sprintf("%q\n", imp))
 	}
 
-	return impsStr + ")"
+	return impsStr.String() + ")"
 }

@@ -1,6 +1,6 @@
 ---
 title: Params
-description: Returns the `params` property of the given menu entry.
+description: Returns the params property of the given menu entry.
 categories: []
 keywords: []
 params:
@@ -9,7 +9,7 @@ params:
     signatures: [MENUENTRY.Params]
 ---
 
-When you define menu entries [in site configuration] or [in front matter], you can include a `params` key to attach additional information to the entry. For example:
+When you define menu entries in your [project configuration][] or in [front matter][], you can include a `params` key to attach additional information to the entry. For example:
 
 {{< code-toggle file=hugo >}}
 [[menus.main]]
@@ -54,8 +54,8 @@ Hugo renders:
 </ul>
 ```
 
-See the [menu templates] section for more information.
+See the [menu templates][] section for more information.
 
+[front matter]: /content-management/menus/#define-in-front-matter
 [menu templates]: /templates/menu/#menu-entry-parameters
-[in front matter]: /content-management/menus/#define-in-front-matter
-[in site configuration]: /content-management/menus/
+[project configuration]: /content-management/menus/

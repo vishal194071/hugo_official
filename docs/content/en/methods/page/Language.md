@@ -1,6 +1,6 @@
 ---
 title: Language
-description: Returns the language object for the given page.
+description: Returns the Language object for the given page.
 categories: []
 keywords: []
 params:
@@ -9,61 +9,109 @@ params:
     signatures: [PAGE.Language]
 ---
 
-The `Language` method on a `Page` object returns the language object for the given page. The language object points to the language definition in the site configuration.
+The `Language` method on a `Page` object returns the `Language` object for the given page, derived from the language definition in your project configuration.
 
-You can also use the `Language` method on a `Site` object. See&nbsp;[details].
+You can also use the `Language` method on a `Site` object. See [details][].
 
 ## Methods
 
-The examples below assume the following in your site configuration:
+Use these methods on the `Language` object.
+
+The examples below assume the following language definition.
 
 {{< code-toggle file=hugo >}}
 [languages.de]
-languageCode = 'de-DE'
-languageDirection = 'ltr'
-languageName = 'Deutsch'
+direction = 'ltr'
+label = 'Deutsch'
+locale = 'de-DE'
 weight = 2
 {{< /code-toggle >}}
 
-### Lang
+`Direction`
+: {{< new-in 0.158.0 />}}
+: (`string`) Returns the [`direction`][] from the language definition.
 
-(`string`) The language tag as defined by [RFC 5646].
+  ```go-html-template
+  {{ .Language.Direction }} → ltr
+  ```
 
-```go-html-template
-{{ .Language.Lang }} → de
+`IsDefault`
+: {{< new-in 0.153.0 />}}
+: (`bool`) Reports whether this is the [default language](g).
+
+  ```go-html-template
+  {{ .Language.IsDefault }} → true
+  ```
+
+`Label`
+: {{< new-in 0.158.0 />}}
+: (`string`) Returns the [`label`][] from the language definition.
+
+  ```go-html-template
+  {{ .Language.Label }} → Deutsch
+  ```
+
+`Lang`
+: {{<deprecated-in 0.158.0 />}}
+: Use [`Name`](#name) instead.
+
+`LanguageCode`
+: {{<deprecated-in 0.158.0 />}}
+: Use [`Locale`](#locale) instead.
+
+`LanguageDirection`
+: {{<deprecated-in 0.158.0 />}}
+
+Use [`Direction`](#direction) instead.
+`LanguageName`
+: {{<deprecated-in 0.158.0 />}}
+: Use [`Label`](#label) instead.
+
+`Locale`
+: {{< new-in 0.158.0 />}}
+: (`string`) Returns the [`locale`][] from the language definition, falling back to [`Name`](#name).
+
+  ```go-html-template
+  {{ .Language.Locale }} → de-DE
+  ```
+
+`Name`
+: {{< new-in 0.153.0 />}}
+: (`string`) Returns the language tag as defined by [RFC 5646][]. This is the lowercased key from the language definition.
+
+  ```go-html-template
+  {{ .Language.Name }} → de
+  ```
+
+`Weight`
+: {{<deprecated-in 0.158.0 />}}
+
+## Example
+
+Use the code below to create a language selector, allowing users to navigate between the different translated versions of the current page.
+
+```go-html-template {file="layouts/_partials/language-selector.html" copy=true}
+{{ with .Rotate "language" }}
+  <nav class="language-selector">
+    <ul>
+      {{ range . }}
+        {{ if eq .Language $.Language }}
+          <li class="active">
+            <a aria-current="page" href="{{ .Permalink }}" hreflang="{{ .Language.Locale }}">{{ .Language.Label }}</a>
+          </li>
+        {{ else }}
+          <li>
+            <a href="{{ .Permalink }}" hreflang="{{ .Language.Locale }}">{{ .Language.Label }}</a>
+          </li>
+        {{ end }}
+      {{ end }}
+    </ul>
+  </nav>
+{{ end }}
 ```
 
-### LanguageCode
-
-(`string`) The language code from the site configuration. Falls back to `Lang` if not defined.
-
-```go-html-template
-{{ .Language.LanguageCode }} → de-DE
-```
-
-### LanguageDirection
-
-(`string`) The language direction from the site configuration, either `ltr` or `rtl`.
-
-```go-html-template
-{{ .Language.LanguageDirection }} → ltr
-```
-
-### LanguageName
-
-(`string`) The language name from the site configuration.
-
-```go-html-template
-{{ .Language.LanguageName }} → Deutsch
-```
-
-### Weight
-
-(`int`) The language weight from the site configuration which determines its order in the slice of languages returned by the `Languages` method on a `Site` object.
-
-```go-html-template
-{{ .Language.Weight }} → 2
-```
-
-[details]: /methods/site/language/
 [RFC 5646]: https://datatracker.ietf.org/doc/html/rfc5646
+[`direction`]: /configuration/languages/#direction
+[`label`]: /configuration/languages/#label
+[`locale`]: /configuration/languages/#locale
+[details]: /methods/site/language/

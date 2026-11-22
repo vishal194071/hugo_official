@@ -16,6 +16,7 @@ package create
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,11 +24,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gohugoio/hugo/hugofs/glob"
-
 	"github.com/gohugoio/hugo/common/hexec"
-	"github.com/gohugoio/hugo/common/hstrings"
 	"github.com/gohugoio/hugo/common/paths"
+	"github.com/gohugoio/hugo/hugofs/hglob"
 
 	"github.com/gohugoio/hugo/hugofs"
 
@@ -37,7 +36,7 @@ import (
 )
 
 const (
-	// DefaultArchetypeTemplateTemplate is the template used in 'hugo new site'
+	// DefaultArchetypeTemplateTemplate is the template used in 'hugo new project'
 	// and the template we use as a fall back.
 	DefaultArchetypeTemplateTemplate = `---
 title: "{{ replace .File.ContentBaseName "-" " " | title }}"
@@ -159,13 +158,12 @@ func (b *contentBuilder) buildDir() error {
 		contentTargetFilenames = append(contentTargetFilenames, abs)
 	}
 
-	var contentInclusionFilter *glob.FilenameFilter
+	var contentInclusionFilter *hglob.FilenameFilter
 	if !b.dirMap.siteUsed {
 		// We don't need to build everything.
-		contentInclusionFilter = glob.NewFilenameFilterForInclusionFunc(func(filename string) bool {
-			filename = strings.TrimPrefix(filename, string(os.PathSeparator))
+		contentInclusionFilter = hglob.NewFilenameFilterForInclusionFunc(func(filename string) bool {
 			for _, cn := range contentTargetFilenames {
-				if strings.Contains(cn, filename) {
+				if strings.HasSuffix(cn, filename) {
 					return true
 				}
 			}
@@ -220,6 +218,9 @@ func (b *contentBuilder) buildDir() error {
 func (b *contentBuilder) buildFile() (string, error) {
 	contentPlaceholderAbsFilename, err := b.cf.CreateContentPlaceHolder(b.targetPath, b.force)
 	if err != nil {
+		if fi, serr := b.sourceFs.Stat(contentPlaceholderAbsFilename); serr == nil && !fi.IsDir() {
+			return "", errTargetConflict(contentPlaceholderAbsFilename)
+		}
 		return "", err
 	}
 
@@ -228,13 +229,19 @@ func (b *contentBuilder) buildFile() (string, error) {
 		return "", err
 	}
 
-	var contentInclusionFilter *glob.FilenameFilter
+	var contentInclusionFilter *hglob.FilenameFilter
 	if !usesSite {
 		// We don't need to build everything.
-		contentInclusionFilter = glob.NewFilenameFilterForInclusionFunc(func(filename string) bool {
-			filename = strings.TrimPrefix(filename, string(os.PathSeparator))
-			return strings.Contains(contentPlaceholderAbsFilename, filename)
+		contentInclusionFilter = hglob.NewFilenameFilterForInclusionFunc(func(filename string) bool {
+			return strings.HasSuffix(contentPlaceholderAbsFilename, filename)
 		})
+	}
+
+	// If a directory with the target's name (sans extension) exists, this file
+	// would produce a URL conflict with the existing section or leaf bundle.
+	targetDir := strings.TrimSuffix(contentPlaceholderAbsFilename, filepath.Ext(contentPlaceholderAbsFilename))
+	if fi, err := b.sourceFs.Stat(targetDir); err == nil && fi.IsDir() {
+		return "", errTargetConflict(contentPlaceholderAbsFilename)
 	}
 
 	if err := b.h.Build(hugolib.BuildCfg{NoBuildLock: true, SkipRender: true, ContentInclusionFilter: contentInclusionFilter}); err != nil {
@@ -269,10 +276,14 @@ func (b *contentBuilder) setArcheTypeFilenameToUse(ext string) {
 	}
 }
 
+func errTargetConflict(path string) error {
+	return fmt.Errorf("no page found for %q; the target path conflicts with existing content", path)
+}
+
 func (b *contentBuilder) applyArcheType(contentFilename string, archetypeFi hugofs.FileMetaInfo) error {
 	p := b.h.GetContentPage(contentFilename)
 	if p == nil {
-		panic(fmt.Sprintf("[BUG] no Page found for %q", contentFilename))
+		return errTargetConflict(contentFilename)
 	}
 
 	f, err := b.sourceFs.Create(contentFilename)
@@ -291,9 +302,7 @@ func (b *contentBuilder) applyArcheType(contentFilename string, archetypeFi hugo
 func (b *contentBuilder) mapArcheTypeDir() error {
 	var m archetypeMap
 
-	seen := map[hstrings.Strings2]bool{}
-
-	walkFn := func(path string, fim hugofs.FileMetaInfo) error {
+	walkFn := func(ctx context.Context, path string, fim hugofs.FileMetaInfo) error {
 		if fim.IsDir() {
 			return nil
 		}
@@ -301,15 +310,6 @@ func (b *contentBuilder) mapArcheTypeDir() error {
 		pi := fim.Meta().PathInfo
 
 		if pi.IsContent() {
-			pathLang := hstrings.Strings2{pi.PathBeforeLangAndOutputFormatAndExt(), fim.Meta().Lang}
-			if seen[pathLang] {
-				// Duplicate content file, e.g. page.md and page.html.
-				// In the regular build, we will filter out the duplicates, but
-				// for archetype folders these are ambiguous and we need to
-				// fail.
-				return fmt.Errorf("duplicate content file found in archetype folder: %q; having both e.g. %s.md and %s.html is ambigous", path, pi.BaseNameNoIdentifier(), pi.BaseNameNoIdentifier())
-			}
-			seen[pathLang] = true
 			m.contentFiles = append(m.contentFiles, fim)
 			if !m.siteUsed {
 				var err error

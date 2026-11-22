@@ -21,22 +21,19 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 
-	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/formatters/html"
-	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/bep/simplecobra"
+	"github.com/goccy/go-yaml"
 	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/docshelper"
 	"github.com/gohugoio/hugo/helpers"
 	"github.com/gohugoio/hugo/hugofs"
 	"github.com/gohugoio/hugo/hugolib"
+	"github.com/gohugoio/hugo/markup/highlight"
 	"github.com/gohugoio/hugo/parser"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
-	"gopkg.in/yaml.v2"
 )
 
 func newGenCommand() *genCommand {
@@ -47,10 +44,15 @@ func newGenCommand() *genCommand {
 
 		// Chroma flags.
 		style                  string
+		mode                   string
+		modeSelector           bool
+		classDark              string
+		classLight             string
 		highlightStyle         string
 		lineNumbersInlineStyle string
 		lineNumbersTableStyle  string
 		omitEmpty              bool
+		omitClassComments      bool
 	)
 
 	newChromaStyles := func() simplecobra.Commander {
@@ -59,52 +61,54 @@ func newGenCommand() *genCommand {
 			short: "Generate CSS stylesheet for the Chroma code highlighter",
 			long: `Generate CSS stylesheet for the Chroma code highlighter for a given style. This stylesheet is needed if markup.highlight.noClasses is disabled in config.
 
-See https://xyproto.github.io/splash/docs/all.html for a preview of the available styles`,
+See https://gohugo.io/quick-reference/syntax-highlighting-styles/ for a preview of the available styles.`,
 
 			run: func(ctx context.Context, cd *simplecobra.Commandeer, r *rootCommand, args []string) error {
-				style = strings.ToLower(style)
-				if !slices.Contains(styles.Names(), style) {
-					return fmt.Errorf("invalid style: %s", style)
+				if omitEmpty {
+					// See https://github.com/alecthomas/chroma/commit/5b2a4c5a26c503c79bc86ba3c4ae5b330028bd3d
+					hugo.Deprecate("--omitEmpty", "Flag is no longer needed, empty classes are now always omitted.", "v0.149.0")
 				}
-				builder := styles.Get(style).Builder()
-				if highlightStyle != "" {
-					builder.Add(chroma.LineHighlight, highlightStyle)
-				}
-				if lineNumbersInlineStyle != "" {
-					builder.Add(chroma.LineNumbers, lineNumbersInlineStyle)
-				}
-				if lineNumbersTableStyle != "" {
-					builder.Add(chroma.LineNumbersTable, lineNumbersTableStyle)
-				}
-				style, err := builder.Build()
+				css, err := highlight.ChromaStylesCSS(highlight.ChromaStylesOptions{
+					Style:                  style,
+					Mode:                   mode,
+					ModeSelector:           modeSelector,
+					ClassDark:              classDark,
+					ClassLight:             classLight,
+					HighlightStyle:         highlightStyle,
+					LineNumbersInlineStyle: lineNumbersInlineStyle,
+					LineNumbersTableStyle:  lineNumbersTableStyle,
+					OmitClassComments:      omitClassComments,
+				})
 				if err != nil {
 					return err
 				}
 
-				var formatter *html.Formatter
-				if omitEmpty {
-					formatter = html.New(html.WithClasses(true))
-				} else {
-					formatter = html.New(html.WithAllClasses(true))
-				}
-
-				w := os.Stdout
-				fmt.Fprintf(w, "/* Generated using: hugo %s */\n\n", strings.Join(os.Args[1:], " "))
-				formatter.WriteCSS(w, style)
+				fmt.Printf("/* Generated using: hugo %s */\n\n", strings.Join(os.Args[1:], " "))
+				fmt.Print(css)
 				return nil
 			},
 			withc: func(cmd *cobra.Command, r *rootCommand) {
 				cmd.ValidArgsFunction = cobra.NoFileCompletions
-				cmd.PersistentFlags().StringVar(&style, "style", "friendly", "highlighter style (see https://xyproto.github.io/splash/docs/)")
+				cmd.PersistentFlags().StringVar(&style, "style", "friendly", "highlighter style")
 				_ = cmd.RegisterFlagCompletionFunc("style", cobra.NoFileCompletions)
+				cmd.PersistentFlags().StringVar(&mode, "mode", "", `style mode ("light", "dark")`)
+				_ = cmd.RegisterFlagCompletionFunc("mode", cobra.FixedCompletions([]string{"light", "dark"}, cobra.ShellCompDirectiveNoFileComp))
+				cmd.PersistentFlags().BoolVar(&modeSelector, "modeSelector", false, `scope selectors under a top level mode class, e.g. ".dark .chroma"`)
+				_ = cmd.RegisterFlagCompletionFunc("modeSelector", cobra.NoFileCompletions)
+				cmd.PersistentFlags().StringVar(&classDark, "classDark", "dark", `class name used by --modeSelector for dark styles`)
+				_ = cmd.RegisterFlagCompletionFunc("classDark", cobra.NoFileCompletions)
+				cmd.PersistentFlags().StringVar(&classLight, "classLight", "light", `class name used by --modeSelector for light styles`)
+				_ = cmd.RegisterFlagCompletionFunc("classLight", cobra.NoFileCompletions)
 				cmd.PersistentFlags().StringVar(&highlightStyle, "highlightStyle", "", `foreground and background colors for highlighted lines, e.g. --highlightStyle "#fff000 bg:#000fff"`)
 				_ = cmd.RegisterFlagCompletionFunc("highlightStyle", cobra.NoFileCompletions)
 				cmd.PersistentFlags().StringVar(&lineNumbersInlineStyle, "lineNumbersInlineStyle", "", `foreground and background colors for inline line numbers, e.g. --lineNumbersInlineStyle "#fff000 bg:#000fff"`)
 				_ = cmd.RegisterFlagCompletionFunc("lineNumbersInlineStyle", cobra.NoFileCompletions)
 				cmd.PersistentFlags().StringVar(&lineNumbersTableStyle, "lineNumbersTableStyle", "", `foreground and background colors for table line numbers, e.g. --lineNumbersTableStyle "#fff000 bg:#000fff"`)
 				_ = cmd.RegisterFlagCompletionFunc("lineNumbersTableStyle", cobra.NoFileCompletions)
-				cmd.PersistentFlags().BoolVar(&omitEmpty, "omitEmpty", false, `omit empty CSS rules`)
+				cmd.PersistentFlags().BoolVar(&omitEmpty, "omitEmpty", false, `omit empty CSS rules (deprecated, no longer needed)`)
 				_ = cmd.RegisterFlagCompletionFunc("omitEmpty", cobra.NoFileCompletions)
+				cmd.PersistentFlags().BoolVar(&omitClassComments, "omitClassComments", false, `omit CSS class comment prefixes in the generated CSS`)
+				_ = cmd.RegisterFlagCompletionFunc("omitClassComments", cobra.NoFileCompletions)
 			},
 		}
 	}
@@ -244,7 +248,7 @@ url: %s
 					return err
 				}
 				defer f.Close()
-				yamlEnc := yaml.NewEncoder(f)
+				yamlEnc := yaml.NewEncoder(f, yaml.UseSingleQuote(true), yaml.AutoInt())
 				if err := yamlEnc.Encode(m); err != nil {
 					return err
 				}

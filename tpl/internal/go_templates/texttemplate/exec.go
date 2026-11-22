@@ -333,7 +333,7 @@ func isTrueOld(val reflect.Value) (truth, ok bool) {
 		truth = val.Bool()
 	case reflect.Complex64, reflect.Complex128:
 		truth = val.Complex() != 0
-	case reflect.Chan, reflect.Func, reflect.Pointer, reflect.Interface:
+	case reflect.Chan, reflect.Func, reflect.Pointer, reflect.UnsafePointer, reflect.Interface:
 		truth = !val.IsNil()
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		truth = val.Int() != 0
@@ -495,7 +495,7 @@ func (s *state) walkRange(dot reflect.Value, r *parse.RangeNode) {
 	}
 }
 
-func (s *state) walkTemplate(dot reflect.Value, t *parse.TemplateNode) {
+func (s *state) walkTemplateOld(dot reflect.Value, t *parse.TemplateNode) {
 	s.at(t)
 	tmpl := s.tmpl.Lookup(t.Name)
 	if tmpl == nil {
@@ -657,7 +657,7 @@ func (s *state) evalVariableNode(dot reflect.Value, variable *parse.VariableNode
 // evalFieldChain evaluates .X.Y.Z possibly followed by arguments.
 // dot is the environment in which to evaluate arguments, while
 // receiver is the value being walked along the chain.
-func (s *state) evalFieldChain(dot, receiver reflect.Value, node parse.Node, ident []string, args []parse.Node, final reflect.Value) reflect.Value {
+func (s *state) evalFieldChainOld(dot, receiver reflect.Value, node parse.Node, ident []string, args []parse.Node, final reflect.Value) reflect.Value {
 	n := len(ident)
 	for i := 0; i < n-1; i++ {
 		receiver = s.evalField(dot, ident[i], node, nil, missingVal, receiver)
@@ -889,7 +889,7 @@ func canBeNil(typ reflect.Type) bool {
 }
 
 // validateType guarantees that the value is valid and assignable to the type.
-func (s *state) validateType(value reflect.Value, typ reflect.Type) reflect.Value {
+func (s *state) _validateType(value reflect.Value, typ reflect.Type) reflect.Value {
 	if !value.IsValid() {
 		if typ == nil {
 			// An untyped nil interface{}. Accept as a proper nil value.

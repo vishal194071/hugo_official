@@ -18,24 +18,18 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"path"
-	"sync"
+	"path/filepath"
 
+	"github.com/bep/helpers/maphelpers"
 	"github.com/bep/overlayfs"
 	"github.com/gohugoio/hugo/common/hashing"
 	"github.com/gohugoio/hugo/common/hugio"
 	"github.com/gohugoio/hugo/resources/images"
 	"github.com/gohugoio/hugo/resources/resource_factories/create"
+	"github.com/gohugoio/qr"
 	"github.com/mitchellh/mapstructure"
-	"rsc.io/qr"
-
-	// Importing image codecs for image.DecodeConfig
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-
-	// Import webp codec
-	_ "golang.org/x/image/webp"
 
 	"github.com/gohugoio/hugo/deps"
 	"github.com/spf13/afero"
@@ -59,7 +53,7 @@ func New(d *deps.Deps) *Namespace {
 	return &Namespace{
 		readFileFs:   readFileFs,
 		Filters:      &images.Filters{},
-		cache:        map[string]image.Config{},
+		cache:        maphelpers.NewConcurrentMap[string, image.Config](),
 		deps:         d,
 		createClient: create.New(d.ResourceSpec),
 	}
@@ -69,8 +63,7 @@ func New(d *deps.Deps) *Namespace {
 type Namespace struct {
 	*images.Filters
 	readFileFs   afero.Fs
-	cacheMu      sync.RWMutex
-	cache        map[string]image.Config
+	cache        *maphelpers.ConcurrentMap[string, image.Config]
 	deps         *deps.Deps
 	createClient *create.Client
 }
@@ -87,31 +80,19 @@ func (ns *Namespace) Config(path any) (image.Config, error) {
 		return image.Config{}, errors.New("config needs a filename")
 	}
 
-	// Check cache for image config.
-	ns.cacheMu.RLock()
-	config, ok := ns.cache[filename]
-	ns.cacheMu.RUnlock()
+	return ns.cache.GetOrCreate(filename, func() (image.Config, error) {
+		f, err := ns.readFileFs.Open(filename)
+		if err != nil {
+			return image.Config{}, err
+		}
+		defer f.Close()
 
-	if ok {
-		return config, nil
-	}
+		ext := filepath.Ext(filename)
+		format, _ := images.ImageFormatFromExt(ext)
 
-	f, err := ns.readFileFs.Open(filename)
-	if err != nil {
-		return image.Config{}, err
-	}
-	defer f.Close()
-
-	config, _, err = image.DecodeConfig(f)
-	if err != nil {
+		config, _, err := ns.deps.ResourceSpec.Imaging.Codec.DecodeConfig(format, f)
 		return config, err
-	}
-
-	ns.cacheMu.Lock()
-	ns.cache[filename] = config
-	ns.cacheMu.Unlock()
-
-	return config, nil
+	})
 }
 
 // Filter applies the given filters to the image given as the last element in args.
@@ -145,6 +126,8 @@ func (ns *Namespace) QR(args ...any) (images.ImageResource, error) {
 		Level     string // error correction level; one of low, medium, quartile, or high
 		Scale     int    // number of image pixels per QR code module
 		TargetDir string // target directory relative to publishDir
+		FgColor   any    // foreground color as a hex string or a Color; nil or empty means black
+		BgColor   any    // background color as a hex string or a Color; nil or empty means white
 	}{
 		Level: qrDefaultErrorCorrectionLevel,
 		Scale: qrDefaultScale,
@@ -163,8 +146,11 @@ func (ns *Namespace) QR(args ...any) (images.ImageResource, error) {
 		return nil, errors.New("cannot encode an empty string")
 	}
 
+	// The hash source is the text and the options as provided by the user.
+	var optsm any
 	if len(args) == 2 {
-		err := mapstructure.WeakDecode(args[1], &opts)
+		optsm = args[1]
+		err := mapstructure.WeakDecode(optsm, &opts)
 		if err != nil {
 			return nil, err
 		}
@@ -179,18 +165,26 @@ func (ns *Namespace) QR(args ...any) (images.ImageResource, error) {
 		return nil, errors.New("scale must be an integer greater than or equal to 2")
 	}
 
-	targetPath := path.Join(opts.TargetDir, fmt.Sprintf("qr_%s.png", hashing.HashStringHex(text, opts)))
+	fgColor, err := qrColor("fgColor", opts.FgColor)
+	if err != nil {
+		return nil, err
+	}
+	bgColor, err := qrColor("bgColor", opts.BgColor)
+	if err != nil {
+		return nil, err
+	}
+
+	targetPath := path.Join(opts.TargetDir, fmt.Sprintf("qr_%s.png", hashing.HashStringHex(text, optsm)))
 
 	r, err := ns.createClient.FromOpts(
 		create.Options{
 			TargetPath:        targetPath,
 			TargetPathHasHash: true,
 			CreateContent: func() (func() (hugio.ReadSeekCloser, error), error) {
-				code, err := qr.Encode(text, level)
+				code, err := qr.Encode(text, qr.Options{Level: level, Scale: opts.Scale, FgColor: fgColor, BgColor: bgColor})
 				if err != nil {
 					return nil, err
 				}
-				code.Scale = opts.Scale
 				png := code.PNG()
 				return func() (hugio.ReadSeekCloser, error) {
 					return hugio.NewReadSeekerNoOpCloserFromBytes(png), nil
@@ -208,4 +202,20 @@ func (ns *Namespace) QR(args ...any) (images.ImageResource, error) {
 	}
 
 	return ir, nil
+}
+
+// qrColor converts v, a hex color string or a Color, to a color.Color.
+// It returns nil if v is nil or an empty string.
+func qrColor(name string, v any) (color.Color, error) {
+	if v == nil || v == "" {
+		return nil, nil
+	}
+	c, ok, err := images.ToColorGo(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s: %w", name, err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("invalid %s: unsupported type %T", name, v)
+	}
+	return c, nil
 }

@@ -1,14 +1,13 @@
 ---
 title: collections.Delimit
-description: Loops through any array, slice, or map and returns a string of all the values separated by a delimiter.
+description: Returns a string by joining the values of the given slice or map with a delimiter.
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [delimit]
     returnType: string
-    signatures: ['collections.Delimit COLLECTION DELIMITER [LAST]']
-aliases: [/functions/delimit]
+    signatures: ['collections.Delimit SLICE|MAP DELIMITER [LAST]']
 ---
 
 Delimit a slice:
@@ -21,7 +20,7 @@ Delimit a slice:
 
 Delimit a map:
 
-> [!note]
+> [!NOTE]
 > The `delimit` function sorts maps by key, returning the values.
 
 ```go-html-template

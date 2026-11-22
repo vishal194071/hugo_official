@@ -19,13 +19,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"reflect"
 	"strings"
 	"time"
 
 	"github.com/gohugoio/hugo/common/collections"
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hreflect"
+	"github.com/gohugoio/hugo/common/hstore"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/deps"
 	"github.com/gohugoio/hugo/langs"
@@ -35,15 +37,18 @@ import (
 
 // New returns a new instance of the collections-namespaced template functions.
 func New(deps *deps.Deps) *Namespace {
-	language := deps.Conf.Language()
+	language := deps.Conf.Language().(*langs.Language)
 	if language == nil {
 		panic("language must be set")
 	}
 	loc := langs.GetLocation(language)
 
+	dCache := hmaps.NewCacheWithOptions[dKey, []int](hmaps.CacheOptions{Size: 100})
+
 	return &Namespace{
 		loc:      loc,
 		sortComp: compare.New(loc, true),
+		dCache:   dCache,
 		deps:     deps,
 	}
 }
@@ -52,6 +57,7 @@ func New(deps *deps.Deps) *Namespace {
 type Namespace struct {
 	loc      *time.Location
 	sortComp *compare.Namespace
+	dCache   *hmaps.Cache[dKey, []int]
 	deps     *deps.Deps
 }
 
@@ -71,7 +77,7 @@ func (ns *Namespace) After(n any, l any) (any, error) {
 	}
 
 	lv := reflect.ValueOf(l)
-	lv, isNil := indirect(lv)
+	lv, isNil := hreflect.Indirect(lv)
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value")
 	}
@@ -110,12 +116,12 @@ func (ns *Namespace) Delimit(ctx context.Context, l, sep any, last ...any) (stri
 	}
 
 	lv := reflect.ValueOf(l)
-	lv, isNil := indirect(lv)
+	lv, isNil := hreflect.Indirect(lv)
 	if isNil {
 		return "", errors.New("can't iterate over a nil value")
 	}
 
-	var str string
+	var str strings.Builder
 	switch lv.Kind() {
 	case reflect.Map:
 		sortSeq, err := ns.Sort(ctx, l)
@@ -133,11 +139,11 @@ func (ns *Namespace) Delimit(ctx context.Context, l, sep any, last ...any) (stri
 			}
 			switch {
 			case i == lv.Len()-2 && dLast != nil:
-				str += valStr + *dLast
+				str.WriteString(valStr + *dLast)
 			case i == lv.Len()-1:
-				str += valStr
+				str.WriteString(valStr)
 			default:
-				str += valStr + d
+				str.WriteString(valStr + d)
 			}
 		}
 
@@ -145,7 +151,7 @@ func (ns *Namespace) Delimit(ctx context.Context, l, sep any, last ...any) (stri
 		return "", fmt.Errorf("can't iterate over %T", l)
 	}
 
-	return str, nil
+	return str.String(), nil
 }
 
 // Dictionary creates a new map from the given parameters by
@@ -203,7 +209,7 @@ func (ns *Namespace) First(limit any, l any) (any, error) {
 	}
 
 	lv := reflect.ValueOf(l)
-	lv, isNil := indirect(lv)
+	lv, isNil := hreflect.Indirect(lv)
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value")
 	}
@@ -236,7 +242,7 @@ func (ns *Namespace) In(l any, v any) (bool, error) {
 	switch lv.Kind() {
 	case reflect.Array, reflect.Slice:
 		for i := range lv.Len() {
-			lvv, isNil := indirectInterface(lv.Index(i))
+			lvv, isNil := hreflect.Indirect(lv.Index(i))
 			if isNil {
 				continue
 			}
@@ -341,7 +347,7 @@ func (ns *Namespace) IsSet(c any, key any) (bool, error) {
 			return av.MapIndex(kv).IsValid(), nil
 		}
 	default:
-		ns.deps.Log.Warnf("calling IsSet with unsupported type %q (%T) will always return false.\n", av.Kind(), c)
+		ns.deps.Log.Warnf("calling IsSet with unsupported type %q (%T) for key %v will always return false.\n", av.Kind(), c, key)
 	}
 
 	return false, nil
@@ -363,7 +369,7 @@ func (ns *Namespace) Last(limit any, l any) (any, error) {
 	}
 
 	seqv := reflect.ValueOf(l)
-	seqv, isNil := indirect(seqv)
+	seqv, isNil := hreflect.Indirect(seqv)
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value")
 	}
@@ -404,6 +410,11 @@ func (ns *Namespace) Reverse(l any) (any, error) {
 
 	return sliceCopy.Interface(), nil
 }
+
+// Sanity check for slices created by Seq and D.
+const maxSeqSize = 1000000
+
+var errSeqSizeExceedsLimit = errors.New("size of result exceeds limit")
 
 // Seq creates a sequence of integers from args. It's named and used as GNU's seq.
 //
@@ -458,14 +469,14 @@ func (ns *Namespace) Seq(args ...any) ([]int, error) {
 	}
 
 	// sanity check
-	if last < -100000 {
-		return nil, errors.New("size of result exceeds limit")
+	if last < -maxSeqSize {
+		return nil, errSeqSizeExceedsLimit
 	}
 	size := ((last - first) / inc) + 1
 
 	// sanity check
-	if size <= 0 || size > 2000 {
-		return nil, errors.New("size of result exceeds limit")
+	if size <= 0 || size > maxSeqSize {
+		return nil, errSeqSizeExceedsLimit
 	}
 
 	seq := make([]int, size)
@@ -488,7 +499,7 @@ func (ns *Namespace) Shuffle(l any) (any, error) {
 	}
 
 	lv := reflect.ValueOf(l)
-	lv, isNil := indirect(lv)
+	lv, isNil := hreflect.Indirect(lv)
 	if isNil {
 		return nil, errors.New("can't iterate over a nil value")
 	}
@@ -520,6 +531,70 @@ func (ns *Namespace) Slice(args ...any) any {
 	return collections.Slice(args...)
 }
 
+type dKey struct {
+	seed uint64
+	n    int
+	hi   int
+}
+
+// D returns a sorted slice of unique random integers in the half-open interval
+// [0, hi) using the provided seed value. The number of elements in the
+// resulting slice is n or hi, whichever is less.
+//
+// If n <= hi, it returns a sorted random sample of size n using J. S. Vitter’s
+// Method D for sequential random sampling.
+//
+// If n > hi, it returns the full, sorted range [0, hi) of size hi.
+//
+// If n == 0 or hi == 0, it returns an empty slice.
+//
+// Reference:
+//
+//	J. S. Vitter, "An efficient algorithm for sequential random sampling," ACM Trans. Math. Softw., vol. 11, no. 1, pp. 37–57, 1985.
+//	See also: https://getkerf.wordpress.com/2016/03/30/the-best-algorithm-no-one-knows-about/
+func (ns *Namespace) D(seed, n, hi any) ([]int, error) {
+	seedInt, err := cast.ToInt64E(seed)
+	if err != nil || seedInt < 0 {
+		return nil, fmt.Errorf("the seed value (%v) must be a non-negative integer", seed)
+	}
+
+	nInt, err := cast.ToIntE(n)
+	if err != nil || nInt < 0 || nInt > maxSeqSize {
+		return nil, fmt.Errorf("the number of requested values (%v) must be a non-negative integer <= %d", n, maxSeqSize)
+	}
+
+	hiInt, err := cast.ToIntE(hi)
+	if err != nil || hiInt < 0 || hiInt > maxSeqSize {
+		return nil, fmt.Errorf("the maximum requested value (%v) must be a non-negative integer <= %d", hi, maxSeqSize)
+	}
+
+	if nInt == 0 || hiInt == 0 {
+		return []int{}, nil
+	}
+
+	key := dKey{seed: uint64(seedInt), n: nInt, hi: hiInt}
+
+	v, err := ns.dCache.GetOrCreate(key, func() ([]int, error) {
+		if key.n > key.hi {
+			result := make([]int, key.hi)
+			for i := 0; i < key.hi; i++ {
+				result[i] = i
+			}
+			return result, nil
+		}
+
+		prng := rand.New(rand.NewPCG(key.seed, 0))
+		result := make([]int, 0, key.n)
+		_d(prng, key.n, key.hi, func(i int) {
+			result = append(result, i)
+		})
+
+		return result, nil
+	})
+
+	return v, err
+}
+
 type intersector struct {
 	r    reflect.Value
 	seen map[any]bool
@@ -534,24 +609,25 @@ func (i *intersector) appendIfNotSeen(v reflect.Value) {
 }
 
 func (i *intersector) handleValuePair(l1vv, l2vv reflect.Value) {
-	switch kind := l1vv.Kind(); {
+	v1, isNil1 := hreflect.Indirect(l1vv)
+	v2, isNil2 := hreflect.Indirect(l2vv)
+	if isNil1 || isNil2 {
+		return
+	}
+
+	var eq bool
+	switch kind := v1.Kind(); {
 	case kind == reflect.String:
-		l2t, err := toString(l2vv)
-		if err == nil && l1vv.String() == l2t {
-			i.appendIfNotSeen(l1vv)
-		}
-	case isNumber(kind):
-		f1, err1 := numberToFloat(l1vv)
-		f2, err2 := numberToFloat(l2vv)
-		if err1 == nil && err2 == nil && f1 == f2 {
-			i.appendIfNotSeen(l1vv)
-		}
-	case kind == reflect.Ptr, kind == reflect.Struct:
-		if types.Unwrapv(l1vv.Interface()) == types.Unwrapv(l2vv.Interface()) {
-			i.appendIfNotSeen(l1vv)
-		}
-	case kind == reflect.Interface:
-		i.handleValuePair(reflect.ValueOf(l1vv.Interface()), l2vv)
+		eq = v2.Kind() == reflect.String && v1.String() == v2.String()
+	case hreflect.IsNumber(kind):
+		c, ok := hreflect.CompareNumbers(v1, v2)
+		eq = ok && c == 0
+	case kind == reflect.Pointer, kind == reflect.Struct:
+		eq = types.Unwrapv(v1.Interface()) == types.Unwrapv(v2.Interface())
+	}
+
+	if eq {
+		i.appendIfNotSeen(l1vv)
 	}
 }
 
@@ -582,16 +658,16 @@ func (ns *Namespace) Union(l1, l2 any) (any, error) {
 			if l1v.Type() != l2v.Type() &&
 				l1v.Type().Elem().Kind() != reflect.Interface &&
 				l2v.Type().Elem().Kind() != reflect.Interface {
-				return ins.r.Interface(), nil
+				// Numeric element types unify through the conversion below,
+				// mirroring how intersect matches numbers across types.
+				if !hreflect.IsNumber(l1v.Type().Elem().Kind()) ||
+					!hreflect.IsNumber(l2v.Type().Elem().Kind()) {
+					return ins.r.Interface(), nil
+				}
 			}
 
-			var (
-				l1vv  reflect.Value
-				isNil bool
-			)
-
 			for i := range l1v.Len() {
-				l1vv, isNil = indirectInterface(l1v.Index(i))
+				l1vv, isNil := hreflect.Indirect(l1v.Index(i))
 
 				if !l1vv.Type().Comparable() {
 					return []any{}, errors.New("union does not support slices or arrays of uncomparable types")
@@ -602,33 +678,23 @@ func (ns *Namespace) Union(l1, l2 any) (any, error) {
 				}
 			}
 
-			if !l1vv.IsValid() {
-				// The first slice may be empty. Pick the first value of the second
-				// to use as a prototype.
-				if l2v.Len() > 0 {
-					l1vv = l2v.Index(0)
-				}
-			}
-
+			elemType := l1v.Type().Elem()
 			for j := range l2v.Len() {
 				l2vv := l2v.Index(j)
-
-				switch kind := l1vv.Kind(); {
-				case kind == reflect.String:
-					l2t, err := toString(l2vv)
-					if err == nil {
-						ins.appendIfNotSeen(reflect.ValueOf(l2t))
+				if l2vv.Kind() == reflect.Interface {
+					if l2vv.IsNil() {
+						continue
 					}
-				case isNumber(kind):
-					var err error
-					l2vv, err = convertNumber(l2vv, kind)
-					if err == nil {
-						ins.appendIfNotSeen(l2vv)
-					}
-				case kind == reflect.Interface, kind == reflect.Struct, kind == reflect.Ptr:
-					ins.appendIfNotSeen(l2vv)
-
+					l2vv = l2vv.Elem()
 				}
+				if !l2vv.Type().AssignableTo(elemType) {
+					var err error
+					// Values that cannot be represented in l1's element type are skipped.
+					if l2vv, err = convertValue(l2vv, elemType); err != nil {
+						continue
+					}
+				}
+				ins.appendIfNotSeen(l2vv)
 			}
 
 			return ins.r.Interface(), nil
@@ -662,7 +728,7 @@ func (ns *Namespace) Uniq(l any) (any, error) {
 	seen := make(map[any]bool)
 
 	for i := range v.Len() {
-		ev, _ := indirectInterface(v.Index(i))
+		ev, _ := hreflect.Indirect(v.Index(i))
 
 		key := normalize(ev)
 
@@ -682,6 +748,6 @@ func (ns *Namespace) KeyVals(key any, values ...any) (types.KeyValues, error) {
 
 // NewScratch creates a new Scratch which can be used to store values in a
 // thread safe way.
-func (ns *Namespace) NewScratch() *maps.Scratch {
-	return maps.NewScratch()
+func (ns *Namespace) NewScratch() *hstore.Scratch {
+	return hstore.NewScratch()
 }

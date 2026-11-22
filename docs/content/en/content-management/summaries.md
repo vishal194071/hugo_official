@@ -4,7 +4,6 @@ linkTitle: Summaries
 description: Create and render content summaries.
 categories: []
 keywords: []
-aliases: [/content/summaries/,/content-management/content-summaries/]
 ---
 
 <!-- Do not remove the manual summary divider below. -->
@@ -20,7 +19,7 @@ Review the [comparison table](#comparison) below to understand the characteristi
 
 Use a `<!--more-->` divider to indicate the end of the summary. Hugo will not render the summary divider itself.
 
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 +++
 title: 'Example'
 date: 2024-05-26T09:10:33-07:00
@@ -33,15 +32,42 @@ This is the first paragraph.
 This is the second paragraph.
 ```
 
-When using the Emacs Org Mode [content format], use a `# more` divider to indicate the end of the summary.
+> [!NOTE]
+> Place the summary divider on its own line. Do not place it inline with other content.
 
-[content format]: /content-management/formats/
+Correct placement:
+
+```md {file="content/example.md"}
+---
+title: 'Example'
+---
+
+This is an example of **strong text** in a sentence. This is another sentence.
+
+<!--more-->
+
+This is another paragraph.
+```
+
+Incorrect placement:
+
+```md {file="content/example.md"}
+---
+title: 'Example'
+---
+
+This is an example of **strong text** <!--more--> in a sentence. This is another sentence.
+
+This is another paragraph.
+```
+
+When using the Emacs Org Mode [content format][], use a `# more` divider to indicate the end of the summary.
 
 ## Front matter summary
 
 Use front matter to define a summary independent of content.
 
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 +++
 title: 'Example'
 date: 2024-05-26T09:10:33-07:00
@@ -55,11 +81,9 @@ This is the second paragraph.
 
 ## Automatic summary
 
-If you do not define the summary manually or in front matter, Hugo automatically defines the summary based on the [`summaryLength`] in your site configuration.
+If you do not define the summary manually or in front matter, Hugo automatically defines the summary based on the [`summaryLength`][] in your project configuration.
 
-[`summaryLength`]: /configuration/all/#summarylength
-
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 +++
 title: 'Example'
 date: 2024-05-26T09:10:33-07:00
@@ -91,9 +115,7 @@ Automatic|3|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mark:
 
 ## Rendering
 
-Render the summary in a template by calling the [`Summary`] method on a `Page` object.
-
-[`Summary`]: /methods/page/summary
+Render the summary in a template by calling the [`Summary`][] method on a `Page` object.
 
 ```go-html-template
 {{ range site.RegularPages }}
@@ -109,9 +131,7 @@ Render the summary in a template by calling the [`Summary`] method on a `Page` o
 
 ## Alternative
 
-Instead of calling the `Summary` method on a `Page` object, use the [`strings.Truncate`] function for granular control of the summary length. For example:
-
-[`strings.Truncate`]: /functions/strings/truncate/
+Instead of calling the `Summary` method on a `Page` object, use the [`strings.Truncate`][] function for granular control of the summary length. For example:
 
 ```go-html-template
 {{ range site.RegularPages }}
@@ -121,3 +141,8 @@ Instead of calling the `Summary` method on a `Page` object, use the [`strings.Tr
   </div>
 {{ end }}
 ```
+
+[`Summary`]: /methods/page/summary/
+[`strings.Truncate`]: /functions/strings/truncate/
+[`summaryLength`]: /configuration/all/#summarylength
+[content format]: /content-management/formats/

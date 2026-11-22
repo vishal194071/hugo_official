@@ -6,15 +6,13 @@ keywords: []
 params:
   functions_and_methods:
     returnType: string
-    signatures: [strings.TrimSpace INPUT]
+    signatures: [strings.TrimSpace STRING]
 ---
 
-{{< new-in 0.136.3 />}}
-
-Whitespace characters include `\t`, `\n`, `\v`, `\f`, `\r`, and characters in the [Unicode Space Separator] category.
-
-[Unicode Space Separator]: https://www.compart.com/en/unicode/category/Zs
+Whitespace characters include `\t`, `\n`, `\v`, `\f`, `\r`, and characters in the [Unicode Space Separator][] category.
 
 ```go-html-template
 {{ strings.TrimSpace "\n\r\t   foo   \n\r\t" }} → foo
 ```
+
+[Unicode Space Separator]: https://www.compart.com/en/unicode/category/Zs

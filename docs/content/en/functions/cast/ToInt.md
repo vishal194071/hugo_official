@@ -1,13 +1,12 @@
 ---
 title: cast.ToInt
-description: Converts a value to a decimal integer (base 10).
+description: Returns the given value converted to a decimal integer (base 10).
 keywords: []
 params:
   functions_and_methods:
     aliases: [int]
     returnType: int
     signatures: [cast.ToInt INPUT]
-aliases: [/functions/int]
 ---
 
 With a decimal (base 10) input:
@@ -44,7 +43,7 @@ With a hexadecimal (base 16) input:
 {{ int "0x11" }} → 17 (int)
 ```
 
-> [!note]
+> [!NOTE]
 > Values with a leading zero are octal (base 8). When casting a string representation of a decimal (base 10) number, remove leading zeros:
 
 `{{ strings.TrimLeft "0" "0011" | int }} → 11`

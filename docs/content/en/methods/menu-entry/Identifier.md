@@ -1,6 +1,6 @@
 ---
 title: Identifier
-description: Returns the `identifier` property of the given menu entry.
+description: Returns the identifier property of the given menu entry.
 categories: []
 keywords: []
 params:
@@ -9,7 +9,7 @@ params:
     signatures: [MENUENTRY.Identifier]
 ---
 
-The `Identifier` method returns the `identifier` property of the menu entry. If you define the menu entry [automatically], it returns the page's section.
+The `Identifier` method returns the `identifier` property of the menu entry. If you define the menu entry [automatically][], it returns the page's section.
 
 {{< code-toggle file=hugo >}}
 [[menus.main]]
@@ -25,7 +25,7 @@ pageRef = '/contact'
 weight = 20
 {{< /code-toggle >}}
 
-This example uses the `Identifier` method when querying the translation table on a multilingual site, falling back the `name` property if a matching key in the translation table does not exist:
+This example uses the `Identifier` method when querying the translation table on a multilingual project, falling back the `name` property if a matching key in the translation table does not exist:
 
 ```go-html-template
 <ul>
@@ -35,7 +35,7 @@ This example uses the `Identifier` method when querying the translation table on
 </ul>
 ```
 
-> [!note]
+> [!NOTE]
 > In the menu definition above, note that the `identifier` property is only required when two or more menu entries have the same name, or when localizing the name using translation tables.
 
 [automatically]: /content-management/menus/#define-automatically

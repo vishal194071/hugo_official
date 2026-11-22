@@ -1,6 +1,6 @@
 ---
 title: collections.Seq
-description: Returns a slice of integers.
+description: Returns a slice of integers starting from 1 or a given value, incrementing by 1 or a given value, and ending at a given value.
 categories: []
 keywords: []
 params:
@@ -11,7 +11,6 @@ params:
       - collections.Seq LAST
       - collections.Seq FIRST LAST
       - collections.Seq FIRST INCREMENT LAST
-aliases: [/functions/seq]
 ---
 
 ```go-html-template
@@ -31,5 +30,5 @@ A contrived example of iterating over a sequence of integers:
 {{ $product }} → 24
 ```
 
-> [!note]
-> The slice created by the `seq` function is limited to 2000 elements.
+> [!NOTE]
+> The slice created by this function is limited to 1 million elements.

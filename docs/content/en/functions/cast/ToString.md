@@ -1,6 +1,6 @@
 ---
 title: cast.ToString
-description: Converts a value to a string.
+description: Returns the given value converted to a string.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [string]
     returnType: string
     signatures: [cast.ToString INPUT]
-aliases: [/functions/string]
 ---
 
 With a decimal (base 10) input:

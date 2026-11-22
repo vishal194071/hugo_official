@@ -14,11 +14,14 @@
 package markup_config
 
 import (
-	"github.com/gohugoio/hugo/common/maps"
+	"fmt"
+
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/config"
 	"github.com/gohugoio/hugo/markup/asciidocext/asciidocext_config"
 	"github.com/gohugoio/hugo/markup/goldmark/goldmark_config"
 	"github.com/gohugoio/hugo/markup/highlight"
+	"github.com/gohugoio/hugo/markup/rst/rst_config"
 	"github.com/gohugoio/hugo/markup/tableofcontents"
 	"github.com/mitchellh/mapstructure"
 )
@@ -37,12 +40,21 @@ type Config struct {
 	// Configuration for the Goldmark markdown engine.
 	Goldmark goldmark_config.Config
 
-	// Configuration for the Asciidoc external markdown engine.
-	AsciidocExt asciidocext_config.Config
+	// Configuration for the AsciiDoc external markdown engine.
+	AsciiDocExt asciidocext_config.Config
+
+	// Configuration for the reStructuredText external markdown engine.
+	RST rst_config.Config
 }
 
 func (c *Config) Init() error {
-	return c.Goldmark.Init()
+	if err := c.Goldmark.Init(); err != nil {
+		return fmt.Errorf("goldmark: %s", err)
+	}
+	if err := c.RST.Init(); err != nil {
+		return fmt.Errorf("rst: %s", err)
+	}
+	return nil
 }
 
 func Decode(cfg config.Provider) (conf Config, err error) {
@@ -52,7 +64,7 @@ func Decode(cfg config.Provider) (conf Config, err error) {
 	if m == nil {
 		return
 	}
-	m = maps.CleanConfigStringMap(m)
+	m = hmaps.CleanConfigStringMap(m)
 
 	normalizeConfig(m)
 
@@ -73,9 +85,9 @@ func Decode(cfg config.Provider) (conf Config, err error) {
 }
 
 func normalizeConfig(m map[string]any) {
-	v, err := maps.GetNestedParam("goldmark.parser", ".", m)
+	v, err := hmaps.GetNestedParam("goldmark.parser", ".", m)
 	if err == nil {
-		vm := maps.ToStringMap(v)
+		vm := hmaps.ToStringMap(v)
 		// Changed from a bool in 0.81.0
 		if vv, found := vm["attribute"]; found {
 			if vvb, ok := vv.(bool); ok {
@@ -86,20 +98,26 @@ func normalizeConfig(m map[string]any) {
 		}
 	}
 
-	// Changed from a bool in 0.112.0.
-	v, err = maps.GetNestedParam("goldmark.extensions", ".", m)
+	// Handle changes to the Goldmark configuration.
+	v, err = hmaps.GetNestedParam("goldmark.extensions", ".", m)
 	if err == nil {
-		vm := maps.ToStringMap(v)
-		const typographerKey = "typographer"
-		if vv, found := vm[typographerKey]; found {
-			if vvb, ok := vv.(bool); ok {
-				if !vvb {
-					vm[typographerKey] = goldmark_config.Typographer{
-						Disable: true,
-					}
-				} else {
-					delete(vm, typographerKey)
-				}
+		vm := hmaps.ToStringMap(v)
+
+		// We changed the typographer extension config from a bool to a struct in 0.112.0.
+		migrateGoldmarkConfig(vm, "typographer", goldmark_config.Typographer{Disable: true})
+
+		// We changed the footnote extension config from a bool to a struct in 0.151.0.
+		migrateGoldmarkConfig(vm, "footnote", goldmark_config.Footnote{Enable: false})
+	}
+}
+
+func migrateGoldmarkConfig(vm map[string]any, key string, falseVal any) {
+	if vv, found := vm[key]; found {
+		if vvb, ok := vv.(bool); ok {
+			if !vvb {
+				vm[key] = falseVal
+			} else {
+				delete(vm, key)
 			}
 		}
 	}
@@ -112,5 +130,6 @@ var Default = Config{
 	Highlight:       highlight.DefaultConfig,
 
 	Goldmark:    goldmark_config.Default,
-	AsciidocExt: asciidocext_config.Default,
+	AsciiDocExt: asciidocext_config.Default,
+	RST:         rst_config.Default,
 }

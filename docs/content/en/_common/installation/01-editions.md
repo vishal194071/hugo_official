@@ -2,15 +2,22 @@
 _comment: Do not remove front matter.
 ---
 
-Hugo is available in three editions: standard, extended, and extended/deploy. While the standard edition provides core functionality, the extended and extended/deploy editions offer advanced features.
+## Editions
 
-Feature|extended edition|extended/deploy edition
-:--|:-:|:-:
-Encode to the WebP format when [processing images]. You can decode WebP images with any edition.|:heavy_check_mark:|:heavy_check_mark:
-[Transpile Sass to CSS] using the embedded LibSass transpiler. You can use the [Dart Sass] transpiler with any edition.|:heavy_check_mark:|:heavy_check_mark:
-Deploy your site directly to a Google Cloud Storage bucket, an AWS S3 bucket, or an Azure Storage container. See&nbsp;[details].|:x:|:heavy_check_mark:
+Hugo is available in several editions. Use the standard edition unless you need additional features.
 
-[dart sass]: /functions/css/sass/#dart-sass
-[processing images]: /content-management/image-processing/
-[transpile sass to css]: /functions/css/sass/
-[details]: /host-and-deploy/deploy-with-hugo-deploy/
+Feature|standard|deploy (1)|extended|extended/deploy
+:--|:-:|:-:|:-:|:-:
+Core features|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mark:|:heavy_check_mark:
+Direct cloud deployment (2)|:x:|:heavy_check_mark:|:x:|:heavy_check_mark:
+LibSass support (3)|:x:|:x:|:heavy_check_mark:|:heavy_check_mark:
+
+(1) {{< new-in v0.159.2 />}}
+
+(2) Deploy your site directly to a Google Cloud Storage bucket, an AWS S3 bucket, or an Azure Storage container. See [details][].
+
+(3) [Transpile Sass to CSS][] via embedded LibSass. Note that embedded LibSass was deprecated in v0.153.0 and will be removed in a future release. Use the [Dart Sass][] transpiler instead, which is compatible with any edition.
+
+[Dart Sass]: /functions/css/sass/#dart-sass
+[Transpile Sass to CSS]: /functions/css/sass/
+[details]: /host-and-deploy/deploy-with-hugo/

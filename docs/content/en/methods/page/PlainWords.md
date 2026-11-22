@@ -1,6 +1,6 @@
 ---
 title: PlainWords
-description: Calls the Plain method, splits the result into a slice of words, and returns the slice.
+description: Returns a slice of words created by calling the Plain method and splitting the result.
 categories: []
 keywords: []
 params:
@@ -9,10 +9,10 @@ params:
     signatures: [PAGE.PlainWords]
 ---
 
-The `PlainWords` method on a `Page` object calls the [`Plain`] method, then uses Go's [`strings.Fields`] function to split the result into words.
+The `PlainWords` method on a `Page` object calls the [`Plain`][] method, then uses Go's [`strings.Fields`][] function to split the result into words.
 
-> [!note]
-> `Fields` splits the string `s` around each instance of one or more consecutive whitespace characters, as defined by [`unicode.IsSpace`], returning a slice of substrings of `s` or an empty slice if `s` contains only whitespace.
+> [!NOTE]
+> `Fields` splits the string `s` around each instance of one or more consecutive whitespace characters, as defined by [`unicode.IsSpace`][], returning a slice of substrings of `s` or an empty slice if `s` contains only whitespace.
 
 As a result, elements within the slice may contain leading or trailing punctuation.
 

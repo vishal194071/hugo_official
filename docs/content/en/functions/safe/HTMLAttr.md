@@ -1,6 +1,6 @@
 ---
 title: safe.HTMLAttr
-description: Declares the given key-value pair as a safe HTML attribute.
+description: Returns the given key-value pair declared as a safe HTML attribute.
 categories: []
 keywords: []
 params:
@@ -8,7 +8,6 @@ params:
     aliases: [safeHTMLAttr]
     returnType: template.HTMLAttr
     signatures: [safe.HTMLAttr INPUT]
-aliases: [/functions/safehtmlattr]
 ---
 
 ## Introduction
@@ -21,9 +20,7 @@ Use the `safe.HTMLAttr` function to encapsulate an HTML attribute from a trusted
 
 Use of this type presents a security risk: the encapsulated content should come from a trusted source, as it will be included verbatim in the template output.
 
-See the [Go documentation] for details.
-
-[Go documentation]: https://pkg.go.dev/html/template#HTMLAttr
+See the [Go documentation][] for details.
 
 ## Example
 
@@ -58,3 +55,5 @@ Hugo renders the above to:
 ```html
 <time datetime="2024-05-26T07:19:55+02:00">26 May 2024</time>
 ```
+
+[Go documentation]: https://pkg.go.dev/html/template#HTMLAttr

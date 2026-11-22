@@ -16,13 +16,16 @@ package esbuild
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/hugio"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/identity"
+	"github.com/gohugoio/hugo/resources/resource_transformers/tocss/sass"
 
 	"github.com/evanw/esbuild/pkg/api"
 
@@ -46,7 +49,24 @@ var (
 		"es2022": api.ES2022,
 		"es2023": api.ES2023,
 		"es2024": api.ES2024,
+		"es2025": api.ES2025,
 	}
+
+	engineName = map[string]api.EngineName{
+		"chrome":  api.EngineChrome,
+		"deno":    api.EngineDeno,
+		"edge":    api.EngineEdge,
+		"firefox": api.EngineFirefox,
+		"hermes":  api.EngineHermes,
+		"ie":      api.EngineIE,
+		"ios":     api.EngineIOS,
+		"node":    api.EngineNode,
+		"opera":   api.EngineOpera,
+		"rhino":   api.EngineRhino,
+		"safari":  api.EngineSafari,
+	}
+
+	engineKeysSorted []string
 
 	// source names: https://github.com/evanw/esbuild/blob/9eca46464ed5615cb36a3beb3f7a7b9a8ffbe7cf/internal/config/config.go#L208
 	nameLoader = map[string]api.Loader{
@@ -70,6 +90,16 @@ var (
 	}
 )
 
+func init() {
+	for k := range engineName {
+		engineKeysSorted = append(engineKeysSorted, k)
+	}
+	// Sort by length descending to match longest prefix first.
+	sort.Slice(engineKeysSorted, func(i, j int) bool {
+		return len(engineKeysSorted[i]) > len(engineKeysSorted[j])
+	})
+}
+
 // DecodeExternalOptions decodes the given map into ExternalOptions.
 func DecodeExternalOptions(m map[string]any) (ExternalOptions, error) {
 	opts := ExternalOptions{
@@ -84,7 +114,9 @@ func DecodeExternalOptions(m map[string]any) (ExternalOptions, error) {
 		opts.TargetPath = paths.ToSlashTrimLeading(opts.TargetPath)
 	}
 
-	opts.Target = strings.ToLower(opts.Target)
+	for i, t := range opts.Target {
+		opts.Target[i] = strings.ToLower(t)
+	}
 	opts.Format = strings.ToLower(opts.Format)
 
 	return opts, nil
@@ -112,10 +144,11 @@ type ExternalOptions struct {
 
 	SourcesContent bool
 
-	// The language target.
-	// One of: es2015, es2016, es2017, es2018, es2019, es2020 or esnext.
-	// Default is esnext.
-	Target string
+	// This sets the target environment for the generated JavaScript and/or CSS code.
+	// It can specify the JavaScript language version to target (es2015, es2016, es2017, es2018, es2019, es2020 or esnext; default is esnext),
+	// in addition to a set of environments to support, as slice of environment name followed by a version number. e.g. "chrome80", "firefox73", "safari13" or "edge80".
+	// See https://esbuild.github.io/api/#target
+	Target []string
 
 	// The output format.
 	// One of: iife, cjs, esm
@@ -126,6 +159,17 @@ type ExternalOptions struct {
 	// Default is browser.
 	// See https://esbuild.github.io/api/#platform
 	Platform string
+
+	// One of ascii, utf8.
+	// Default is ascii, which escapes non-ASCII characters.
+	// See https://esbuild.github.io/api/#charset
+	Charset string
+
+	// When you import a package in node, the main field in that package's package.json file
+	// determines which file is imported (along with a lot of other rules).
+	// The default main fields is controlled by ESBuild and depend on the current platform setting.
+	// See https://esbuild.github.io/api/#main-fields
+	MainFields []string
 
 	// External dependencies, e.g. "react".
 	Externals []string
@@ -144,6 +188,9 @@ type ExternalOptions struct {
 
 	// Maps a component import to another.
 	Shims map[string]string
+
+	// User provided import context. If set, we will look here first.
+	ImportContext any
 
 	// Configuring a loader for a given file type lets you load that file type with an
 	// import statement or a require call. For example, configuring the .png file extension
@@ -171,6 +218,9 @@ type ExternalOptions struct {
 	// See https://esbuild.github.io/api/#jsx-import-source
 	JSXImportSource string
 
+	// User defined CSS variables. Will be available as CSS global scope CSS variables via @import "hugo:vars".
+	Vars map[string]any
+
 	// There is/was a bug in WebKit with severe performance issue with the tracking
 	// of TDZ checks in JavaScriptCore.
 	//
@@ -194,16 +244,21 @@ type InternalOptions struct {
 	AbsWorkingDir string
 	Metafile      bool
 
+	// Used as a prefix for asset references that go through the file loader.
+	// See https://esbuild.github.io/api/#public-path
+	PublicPath string
+
 	StdinSourcePath string
 
 	DependencyManager identity.Manager
 
 	Stdin                   bool // Set to true to pass in the entry point as a byte slice.
 	Splitting               bool
+	IsCSS                   bool // Entry point is CSS.
 	TsConfig                string
 	EntryPoints             []string
 	ImportOnResolveFunc     func(string, api.OnResolveArgs) string
-	ImportOnLoadFunc        func(api.OnLoadArgs) string
+	ImportOnLoadFunc        func(api.OnLoadArgs) (string, error)
 	ImportParamsOnLoadFunc  func(args api.OnLoadArgs) json.RawMessage
 	ErrorMessageResolveFunc func(api.Message) *ErrorMessageResolved
 	ResolveSourceMapSource  func(string) string // Used to resolve paths in error source maps.
@@ -218,15 +273,51 @@ type Options struct {
 }
 
 func (opts *Options) compile() (err error) {
-	target, found := nameTarget[opts.Target]
-	if !found {
-		err = fmt.Errorf("invalid target: %q", opts.Target)
-		return
+	var target api.Target
+	for _, value := range opts.Target {
+		if v, found := nameTarget[value]; found {
+			if v > target {
+				target = v
+			}
+		}
+	}
+
+	var engines []api.Engine
+
+OUTER:
+	for _, value := range opts.Target {
+		for _, engine := range engineKeysSorted {
+			if strings.HasPrefix(value, engine) {
+				version := value[len(engine):]
+				if version == "" {
+					return fmt.Errorf("invalid engine version: %q", value)
+				}
+				engines = append(engines, api.Engine{Name: engineName[engine], Version: version})
+				continue OUTER
+			}
+		}
+	}
+
+	if target == 0 && len(engines) == 0 && len(opts.Target) > 0 {
+		return fmt.Errorf("unsupported target: %v", opts.Target)
+	}
+
+	if target == 0 {
+		target = api.ESNext
 	}
 
 	var loaders map[string]api.Loader
-	if opts.Loaders != nil {
+	if opts.IsCSS {
 		loaders = make(map[string]api.Loader)
+		// Add default CSS file loaders.
+		// May be overridden by opts.Loaders.
+		maps.Copy(loaders, extensionToLoaderMapCSS)
+	}
+	if opts.Loaders != nil {
+		if loaders == nil {
+			loaders = make(map[string]api.Loader)
+		}
+
 		for k, v := range opts.Loaders {
 			loader, found := nameLoader[v]
 			if !found {
@@ -252,6 +343,8 @@ func (opts *Options) compile() (err error) {
 		loader = api.LoaderTSX
 	case media.Builtin.JSXType.SubType:
 		loader = api.LoaderJSX
+	case media.Builtin.CSSType.SubType:
+		loader = api.LoaderCSS
 	default:
 		err = fmt.Errorf("unsupported Media Type: %q", opts.MediaType)
 		return
@@ -297,9 +390,20 @@ func (opts *Options) compile() (err error) {
 		return
 	}
 
+	var charset api.Charset
+	switch opts.Charset {
+	case "", "ascii":
+		charset = api.CharsetASCII
+	case "utf8":
+		charset = api.CharsetUTF8
+	default:
+		err = fmt.Errorf("unsupported charset: %q", opts.Charset)
+		return
+	}
+
 	var defines map[string]string
 	if opts.Defines != nil {
-		defines = maps.ToStringMapString(opts.Defines)
+		defines = hmaps.ToStringMapString(opts.Defines)
 	}
 
 	var drop api.Drop
@@ -336,6 +440,12 @@ func (opts *Options) compile() (err error) {
 		sourcesContent = api.SourcesContentExclude
 	}
 
+	if opts.IsCSS && opts.MainFields == nil {
+		opts.MainFields = []string{"style", "main"}
+	}
+
+	opts.Vars = sass.PrepareVars(opts.Vars)
+
 	opts.compiled = api.BuildOptions{
 		Outfile:       outFile,
 		Bundle:        true,
@@ -343,8 +453,11 @@ func (opts *Options) compile() (err error) {
 		AbsWorkingDir: opts.AbsWorkingDir,
 
 		Target:         target,
+		Engines:        engines,
 		Format:         format,
+		MainFields:     opts.MainFields,
 		Platform:       platform,
+		Charset:        charset,
 		Sourcemap:      sourceMap,
 		SourcesContent: sourcesContent,
 
@@ -354,8 +467,9 @@ func (opts *Options) compile() (err error) {
 		MinifyIdentifiers: opts.Minify,
 		MinifySyntax:      opts.Minify,
 
-		Outdir:    outDir,
-		Splitting: opts.Splitting,
+		Outdir:     outDir,
+		PublicPath: opts.PublicPath,
+		Splitting:  opts.Splitting,
 
 		Define:   defines,
 		External: opts.Externals,
@@ -390,11 +504,12 @@ func (o Options) loaderFromFilename(filename string) api.Loader {
 			return l
 		}
 	}
-	l, found := extensionToLoaderMap[ext]
-	if found {
-		return l
+	if !o.IsCSS {
+		if l, found := extensionToLoaderMapJS[ext]; found {
+			return l
+		}
 	}
-	return api.LoaderJS
+	return api.LoaderDefault
 }
 
 func (opts *Options) validate() error {

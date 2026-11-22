@@ -7,11 +7,10 @@ params:
   functions_and_methods:
     aliases: [findRESubmatch]
     returnType: '[][]string'
-    signatures: ['strings.FindRESubmatch PATTERN INPUT [LIMIT]']
-aliases: [/functions/findresubmatch]
+    signatures: ['strings.FindRESubmatch PATTERN STRING [LIMIT]']
 ---
 
-By default, `findRESubmatch` finds all matches. You can limit the number of matches with an optional LIMIT argument. A return value of nil indicates no match.
+By default, `findRESubmatch` finds all matches. You can limit the number of matches with an optional LIMIT argument. A return value of `nil` indicates no match.
 
 {{% include "/_common/functions/regular-expressions.md" %}}
 
@@ -29,7 +28,7 @@ By default, `findRESubmatch` finds all matches. You can limit the number of matc
 
 This Markdown:
 
-```text
+```md
 - [Example](https://example.org)
 - [Hugo](https://gohugo.io)
 ```
@@ -82,5 +81,7 @@ https://example.org
 https://gohugo.io
 ```
 
-> [!note]
-> You can write and test your regular expression using [regex101.com](https://regex101.com/). Be sure to select the Go flavor before you begin.
+> [!NOTE]
+> You can write and test your regular expression using [regex101.com][]. Be sure to select the Go flavor before you begin.
+
+[regex101.com]: https://regex101.com/

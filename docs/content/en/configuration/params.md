@@ -10,8 +10,8 @@ Use the `params` key for custom parameters:
 
 {{< code-toggle file=hugo >}}
 baseURL = 'https://example.org/'
+locale = 'en-US'
 title = 'Project Documentation'
-languageCode = 'en-US'
 [params]
 subtitle = 'Reference, Tutorials, and Explanations'
 [params.contact]
@@ -19,9 +19,7 @@ email = 'info@example.org'
 phone = '+1 206-555-1212'
 {{< /code-toggle >}}
 
-Access the custom parameters from your templates using the [`Params`] method on a `Site` object:
-
-[`Params`]: /methods/site/params/
+Access the custom parameters from your templates using the [`Params`][] method on a `Site` object:
 
 ```go-html-template
 {{ .Site.Params.subtitle }} → Reference, Tutorials, and Explanations
@@ -43,18 +41,18 @@ But you cannot do this:
 {{ .Site.params.kebab-case.foo }}
 ```
 
-## Multilingual sites
+## Multilingual projects
 
-For multilingual sites, create a `params` key under each language:
+For multilingual projects, create a `params` key under each language:
 
 {{< code-toggle file=hugo >}}
 baseURL = 'https://example.org/'
 defaultContentLanguage = 'en'
 
 [languages.de]
-languageCode = 'de-DE'
-languageDirection = 'ltr'
-languageName = 'Deutsch'
+direction = 'ltr'
+label = 'Deutsch'
+locale = 'de-DE'
 title = 'Projekt Dokumentation'
 weight = 1
 
@@ -66,9 +64,9 @@ email = 'info@de.example.org'
 phone = '+49 30 1234567'
 
 [languages.en]
-languageCode = 'en-US'
-languageDirection = 'ltr'
-languageName = 'English'
+direction = 'ltr'
+label = 'English'
+locale = 'en-US'
 title = 'Project Documentation'
 weight = 2
 
@@ -98,3 +96,5 @@ To access the module/theme settings:
 {{ $cfg.colors.background }} → #efefef
 {{ $cfg.colors.font }} → #222222
 ```
+
+[`Params`]: /methods/site/params/

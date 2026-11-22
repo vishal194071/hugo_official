@@ -39,6 +39,7 @@ import (
 
 	"github.com/gohugoio/hugo/common/hstrings"
 	"github.com/gohugoio/hugo/common/htime"
+	"github.com/gohugoio/hugo/common/hugo"
 	"github.com/gohugoio/hugo/common/loggers"
 	"github.com/gohugoio/hugo/common/paths"
 	"github.com/gohugoio/hugo/common/types"
@@ -97,6 +98,7 @@ type commonConfig struct {
 type configKey struct {
 	counter                    int32
 	ignoreModulesDoesNotExists bool
+	skipNpmCheck               bool
 }
 
 // This is the root command.
@@ -131,6 +133,7 @@ type rootCommand struct {
 	gc              bool
 	poll            string
 	forceSyncStatic bool
+	panicOnWarning  bool
 
 	// Profile flags (for debugging of performance problems)
 	cpuprofile   string
@@ -148,6 +151,23 @@ type rootCommand struct {
 
 	cfgFile string
 	cfgDir  string
+}
+
+// resolveEnvironment sets r.environment if not already set.
+// server indicates whether the server command is running (defaults to development).
+func (r *rootCommand) resolveEnvironment(server bool) {
+	if r.environment != "" {
+		return
+	}
+	if env := os.Getenv("HUGO_ENVIRONMENT"); env != "" {
+		r.environment = env
+	} else if env := os.Getenv("HUGO_ENV"); env != "" {
+		r.environment = env
+	} else if server {
+		r.environment = hugo.EnvironmentDevelopment
+	} else {
+		r.environment = hugo.EnvironmentProduction
+	}
 }
 
 func (r *rootCommand) isVerbose() bool {
@@ -194,6 +214,7 @@ func (r *rootCommand) ConfigFromConfig(key configKey, oldConf *commonConfig) (*c
 				Logger:                   r.logger,
 				Environment:              r.environment,
 				IgnoreModuleDoesNotExist: key.ignoreModulesDoesNotExists,
+				SkipNpmCheck:             key.skipNpmCheck,
 			},
 		)
 		if err != nil {
@@ -220,6 +241,7 @@ func (r *rootCommand) ConfigFromProvider(key configKey, cfg config.Provider) (*c
 	if cfg == nil {
 		panic("cfg must be set")
 	}
+	r.resolveEnvironment(false)
 	cc, _, err := r.commonConfigs.GetOrCreate(key, func(key configKey) (*commonConfig, error) {
 		var dir string
 		if r.source != "" {
@@ -250,6 +272,7 @@ func (r *rootCommand) ConfigFromProvider(key configKey, cfg config.Provider) (*c
 				Environment:              r.environment,
 				Logger:                   r.logger,
 				IgnoreModuleDoesNotExist: key.ignoreModulesDoesNotExists,
+				SkipNpmCheck:             key.skipNpmCheck,
 			},
 		)
 		if err != nil {
@@ -331,6 +354,9 @@ func (r *rootCommand) ConfigFromProvider(key configKey, cfg config.Provider) (*c
 }
 
 func (r *rootCommand) HugFromConfig(conf *commonConfig) (*hugolib.HugoSites, error) {
+	if conf == nil {
+		return nil, fmt.Errorf("conf must be set")
+	}
 	k := configKey{counter: r.configVersionID.Load()}
 	h, _, err := r.hugoSites.GetOrCreate(k, func(key configKey) (*hugolib.HugoSites, error) {
 		depsCfg := r.newDepsConfig(conf)
@@ -401,9 +427,7 @@ func (r *rootCommand) Run(ctx context.Context, cd *simplecobra.Commandeer, args 
 
 	watchGroups := helpers.ExtractAndGroupRootPaths(watchDirs)
 
-	for _, group := range watchGroups {
-		r.Printf("Watching for changes in %s\n", group)
-	}
+	r.Printf("Watching for changes in %s\n", strings.Join(watchGroups, ", "))
 	watcher, err := b.newWatcher(r.poll, watchDirs...)
 	if err != nil {
 		return err
@@ -417,6 +441,7 @@ func (r *rootCommand) Run(ctx context.Context, cd *simplecobra.Commandeer, args 
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	<-sigs
+	b.progressInterrupted()
 
 	return nil
 }
@@ -487,12 +512,18 @@ func (r *rootCommand) createLogger(running bool) (loggers.Logger, error) {
 		}
 	}
 
+	var logHookLast func(e *logg.Entry) error
+	if r.panicOnWarning {
+		logHookLast = loggers.PanicOnWarningHook
+	}
+
 	optsLogger := loggers.Options{
 		DistinctLevel: logg.LevelWarn,
 		Level:         level,
 		StdOut:        r.StdOut,
 		StdErr:        r.StdErr,
 		StoreErrors:   running,
+		HandlerPost:   logHookLast,
 	}
 
 	return loggers.New(optsLogger), nil
@@ -519,8 +550,8 @@ func (r *rootCommand) initRootCommand(subCommandName string, cd *simplecobra.Com
 		commandName = subCommandName
 	}
 	cmd.Use = fmt.Sprintf("%s [flags]", commandName)
-	cmd.Short = "Build your site"
-	cmd.Long = `COMMAND_NAME is the main command, used to build your Hugo site.
+	cmd.Short = "Build your project"
+	cmd.Long = `COMMAND_NAME is the main command, used to build your Hugo project.
 
 Hugo is a Fast and Flexible Static Site Generator
 built with love by spf13 and friends in Go.
@@ -579,18 +610,18 @@ func applyLocalFlagsBuildConfig(cmd *cobra.Command, r *rootCommand) {
 // Flags needed to do a build (used by hugo and hugo server commands)
 func applyLocalFlagsBuild(cmd *cobra.Command, r *rootCommand) {
 	applyLocalFlagsBuildConfig(cmd, r)
-	cmd.Flags().Bool("cleanDestinationDir", false, "remove files from destination not found in static directories")
+	cmd.Flags().Bool("cleanDestinationDir", false, "remove stale files from destination")
 	cmd.Flags().BoolP("buildDrafts", "D", false, "include content marked as draft")
 	cmd.Flags().BoolP("buildFuture", "F", false, "include content with publishdate in the future")
 	cmd.Flags().BoolP("buildExpired", "E", false, "include expired content")
-	cmd.Flags().BoolP("ignoreCache", "", false, "ignores the cache directory")
+	cmd.Flags().BoolP("ignoreCache", "", false, "ignore the configured file caches")
 	cmd.Flags().Bool("enableGitInfo", false, "add Git revision, date, author, and CODEOWNERS info to the pages")
 	cmd.Flags().StringP("layoutDir", "l", "", "filesystem path to layout directory")
 	_ = cmd.MarkFlagDirname("layoutDir")
 	cmd.Flags().BoolVar(&r.gc, "gc", false, "enable to run some cleanup tasks (remove unused cache files) after the build")
 	cmd.Flags().StringVar(&r.poll, "poll", "", "set this to a poll interval, e.g --poll 700ms, to use a poll based approach to watch for file system changes")
 	_ = cmd.RegisterFlagCompletionFunc("poll", cobra.NoFileCompletions)
-	cmd.Flags().Bool("panicOnWarning", false, "panic on first WARNING log")
+	cmd.Flags().BoolVar(&r.panicOnWarning, "panicOnWarning", false, "panic on first WARNING log")
 	cmd.Flags().Bool("templateMetrics", false, "display metrics about template executions")
 	cmd.Flags().Bool("templateMetricsHints", false, "calculate some improvement hints when combined with --templateMetrics")
 	cmd.Flags().BoolVar(&r.forceSyncStatic, "forceSyncStatic", false, "copy all files when static is changed.")
@@ -621,13 +652,14 @@ func (r *rootCommand) timeTrack(start time.Time, name string) {
 }
 
 type simpleCommand struct {
-	use   string
-	name  string
-	short string
-	long  string
-	run   func(ctx context.Context, cd *simplecobra.Commandeer, rootCmd *rootCommand, args []string) error
-	withc func(cmd *cobra.Command, r *rootCommand)
-	initc func(cd *simplecobra.Commandeer) error
+	use     string
+	name    string
+	short   string
+	long    string
+	aliases []string
+	run     func(ctx context.Context, cd *simplecobra.Commandeer, rootCmd *rootCommand, args []string) error
+	withc   func(cmd *cobra.Command, r *rootCommand)
+	initc   func(cd *simplecobra.Commandeer) error
 
 	commands []simplecobra.Commander
 
@@ -654,6 +686,7 @@ func (c *simpleCommand) Init(cd *simplecobra.Commandeer) error {
 	cmd := cd.CobraCommand
 	cmd.Short = c.short
 	cmd.Long = c.long
+	cmd.Aliases = c.aliases
 	if c.use != "" {
 		cmd.Use = c.use
 	}
@@ -671,7 +704,7 @@ func (c *simpleCommand) PreRun(cd, runner *simplecobra.Commandeer) error {
 }
 
 func mapLegacyArgs(args []string) []string {
-	if len(args) > 1 && args[0] == "new" && !hstrings.EqualAny(args[1], "site", "theme", "content") {
+	if len(args) > 1 && args[0] == "new" && !hstrings.EqualAny(args[1], "project", "site", "theme", "content") {
 		// Insert "content" as the second argument
 		args = append(args[:1], append([]string{"content"}, args[1:]...)...)
 	}

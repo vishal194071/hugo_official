@@ -1,4 +1,4 @@
-// Copyright 2024 The Hugo Authors. All rights reserved.
+// Copyright 2026 The Hugo Authors. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package filecache
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"github.com/gohugoio/hugo/helpers"
 
 	"github.com/BurntSushi/locker"
+	"github.com/bep/helpers/maphelpers"
 	"github.com/spf13/afero"
 )
 
@@ -45,22 +47,17 @@ const (
 type Cache struct {
 	Fs afero.Fs
 
-	// Max age for items in this cache. Negative duration means forever,
-	// 0 is effectively turning this cache off.
-	maxAge time.Duration
+	cfg FileCacheConfig
 
-	// When set, we just remove this entire root directory on expiration.
-	pruneAllRootDir string
-
-	nlocker *lockTracker
+	entryLocker *lockTracker
 
 	initOnce sync.Once
+	isInited bool
 	initErr  error
 }
 
 type lockTracker struct {
-	seenMu sync.RWMutex
-	seen   map[string]struct{}
+	seen *maphelpers.ConcurrentSet[string]
 
 	*locker.Locker
 }
@@ -68,16 +65,7 @@ type lockTracker struct {
 // Lock tracks the ids in use. We use this information to do garbage collection
 // after a Hugo build.
 func (l *lockTracker) Lock(id string) {
-	l.seenMu.RLock()
-	if _, seen := l.seen[id]; !seen {
-		l.seenMu.RUnlock()
-		l.seenMu.Lock()
-		l.seen[id] = struct{}{}
-		l.seenMu.Unlock()
-	} else {
-		l.seenMu.RUnlock()
-	}
-
+	l.seen.AddIfAbsent(id)
 	l.Locker.Lock(id)
 }
 
@@ -88,12 +76,15 @@ type ItemInfo struct {
 }
 
 // NewCache creates a new file cache with the given filesystem and max age.
-func NewCache(fs afero.Fs, maxAge time.Duration, pruneAllRootDir string) *Cache {
+func NewCache(fs afero.Fs, cfg FileCacheConfig) *Cache {
+	if err := cfg.init(); err != nil {
+		panic(fmt.Sprintf("invalid cache config: %s", err))
+	}
+
 	return &Cache{
-		Fs:              fs,
-		nlocker:         &lockTracker{Locker: locker.NewLocker(), seen: make(map[string]struct{})},
-		maxAge:          maxAge,
-		pruneAllRootDir: pruneAllRootDir,
+		Fs:          fs,
+		entryLocker: &lockTracker{Locker: locker.NewLocker(), seen: maphelpers.NewConcurrentSet[string]()},
+		cfg:         cfg,
 	}
 }
 
@@ -109,9 +100,15 @@ func (l *lockedFile) Close() error {
 }
 
 func (c *Cache) init() error {
+	if c == nil {
+		panic("cache is nil")
+	}
+
 	c.initOnce.Do(func() {
+		c.isInited = true
 		// Create the base dir if it does not exist.
 		if err := c.Fs.MkdirAll("", 0o777); err != nil && !os.IsExist(err) {
+			err = fmt.Errorf("failled to create base cache directory: %s", err)
 			c.initErr = err
 		}
 	})
@@ -126,19 +123,19 @@ func (c *Cache) WriteCloser(id string) (ItemInfo, io.WriteCloser, error) {
 	}
 
 	id = cleanID(id)
-	c.nlocker.Lock(id)
+	c.entryLocker.Lock(id)
 
 	info := ItemInfo{Name: id}
 
 	f, err := helpers.OpenFileForWriting(c.Fs, id)
 	if err != nil {
-		c.nlocker.Unlock(id)
+		c.entryLocker.Unlock(id)
 		return info, nil, err
 	}
 
 	return info, &lockedFile{
 		File:   f,
-		unlock: func() { c.nlocker.Unlock(id) },
+		unlock: func() { c.entryLocker.Unlock(id) },
 	}, nil
 }
 
@@ -156,8 +153,8 @@ func (c *Cache) ReadOrCreate(id string,
 
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	info = ItemInfo{Name: id}
 
@@ -179,6 +176,12 @@ func (c *Cache) ReadOrCreate(id string,
 	}
 
 	err = create(info, f)
+	if err != nil {
+		// Don't leave a partial or empty file behind, it would be
+		// read as a valid cache entry on the next build.
+		f.Close()
+		c.Fs.Remove(id)
+	}
 
 	return
 }
@@ -186,9 +189,9 @@ func (c *Cache) ReadOrCreate(id string,
 // NamedLock locks the given id. The lock is released when the returned function is called.
 func (c *Cache) NamedLock(id string) func() {
 	id = cleanID(id)
-	c.nlocker.Lock(id)
+	c.entryLocker.Lock(id)
 	return func() {
-		c.nlocker.Unlock(id)
+		c.entryLocker.Unlock(id)
 	}
 }
 
@@ -201,8 +204,8 @@ func (c *Cache) GetOrCreate(id string, create func() (io.ReadCloser, error)) (It
 	}
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	info := ItemInfo{Name: id}
 
@@ -220,7 +223,7 @@ func (c *Cache) GetOrCreate(id string, create func() (io.ReadCloser, error)) (It
 		return info, nil, err
 	}
 
-	if c.maxAge == 0 {
+	if c.cfg.MaxAge == 0 {
 		// No caching.
 		return info, hugio.ToReadCloser(r), nil
 	}
@@ -229,6 +232,40 @@ func (c *Cache) GetOrCreate(id string, create func() (io.ReadCloser, error)) (It
 	return info,
 		hugio.ToReadCloser(&buff),
 		c.writeReader(id, io.TeeReader(r, &buff))
+}
+
+// AbsFilenameFromID returns the filename for the given id in the cache.
+// This will be an absolute path.
+func (c *Cache) AbsFilenameFromID(id string) string {
+	return filepath.Join(c.cfg.DirCompiled, cleanID(id))
+}
+
+// GetOrCreateInfo tries to get the item info with the given id from cache. If not found or expired, create will
+// be invoked with the id. The create function is expected to create the cache item with the given id. The returned ItemInfo will have the id as Name.
+// This method is protected by a named lock using the given id as identifier.
+func (c *Cache) GetOrCreateInfo(id string, create func(id string) error) (ItemInfo, error) {
+	if err := c.init(); err != nil {
+		return ItemInfo{}, err
+	}
+
+	id = cleanID(id)
+
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
+
+	info := ItemInfo{Name: id}
+
+	if !c.removeIfNeeded(id) {
+		// The file exists and is not expired, so we consider it a cache hit.
+		return info, nil
+	}
+
+	if err := create(id); err != nil {
+		c.remove(id)
+		return info, err
+	}
+
+	return info, nil
 }
 
 func (c *Cache) writeReader(id string, r io.Reader) error {
@@ -254,8 +291,8 @@ func (c *Cache) GetOrCreateBytes(id string, create func() ([]byte, error)) (Item
 	}
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	info := ItemInfo{Name: id}
 
@@ -275,7 +312,7 @@ func (c *Cache) GetOrCreateBytes(id string, create func() ([]byte, error)) (Item
 		return info, nil, err
 	}
 
-	if c.maxAge == 0 {
+	if c.cfg.MaxAge == 0 {
 		return info, b, nil
 	}
 
@@ -286,15 +323,39 @@ func (c *Cache) GetOrCreateBytes(id string, create func() ([]byte, error)) (Item
 	return info, b, nil
 }
 
+// SetBytes sets the file content with the given id in the cache.
+func (c *Cache) SetBytes(id string, data []byte) error {
+	if err := c.init(); err != nil {
+		return err
+	}
+	id = cleanID(id)
+
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
+
+	if c.cfg.MaxAge == 0 {
+		// No caching.
+		return nil
+	}
+
+	return c.writeReader(id, bytes.NewReader(data))
+}
+
 // GetBytes gets the file content with the given id from the cache, nil if none found.
-func (c *Cache) GetBytes(id string) (ItemInfo, []byte, error) {
+func (c *Cache) GetBytes(id string) ([]byte, error) {
+	_, b, err := c.GetItemBytes(id)
+	return b, err
+}
+
+// GetItemBytes gets the ItemInfo and file content with the given id from the cache, nil if none found.
+func (c *Cache) GetItemBytes(id string) (ItemInfo, []byte, error) {
 	if err := c.init(); err != nil {
 		return ItemInfo{}, nil, err
 	}
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	info := ItemInfo{Name: id}
 
@@ -314,8 +375,8 @@ func (c *Cache) Get(id string) (ItemInfo, io.ReadCloser, error) {
 	}
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	info := ItemInfo{Name: id}
 
@@ -324,10 +385,23 @@ func (c *Cache) Get(id string) (ItemInfo, io.ReadCloser, error) {
 	return info, r, nil
 }
 
+// removeIfNeeded checks if the file with the given id should be re-created.
+func (c *Cache) removeIfNeeded(id string) bool {
+	if c.cfg.MaxAge == 0 {
+		// No caching, remove.
+		c.remove(id)
+		return true
+	}
+	if removed, err := c.removeIfExpired(id); err != nil || removed {
+		return true
+	}
+	return false
+}
+
 // getOrRemove gets the file with the given id. If it's expired, it will
 // be removed.
 func (c *Cache) getOrRemove(id string) hugio.ReadSeekCloser {
-	if c.maxAge == 0 {
+	if c.cfg.MaxAge == 0 {
 		// No caching.
 		return nil
 	}
@@ -345,7 +419,7 @@ func (c *Cache) getOrRemove(id string) hugio.ReadSeekCloser {
 }
 
 func (c *Cache) getBytesAndRemoveIfExpired(id string) ([]byte, bool) {
-	if c.maxAge == 0 {
+	if c.cfg.MaxAge == 0 {
 		// No caching.
 		return nil, false
 	}
@@ -370,7 +444,7 @@ func (c *Cache) getBytesAndRemoveIfExpired(id string) ([]byte, bool) {
 }
 
 func (c *Cache) removeIfExpired(id string) (bool, error) {
-	if c.maxAge <= 0 {
+	if c.cfg.MaxAge <= 0 {
 		return false, nil
 	}
 
@@ -380,29 +454,37 @@ func (c *Cache) removeIfExpired(id string) (bool, error) {
 	}
 
 	if c.isExpired(fi.ModTime()) {
-		c.Fs.Remove(id)
+		c.remove(id)
 		return true, nil
 	}
 
 	return false, nil
 }
 
+func (c *Cache) remove(id string) {
+	if c.cfg.entryIsDir {
+		c.Fs.RemoveAll(id)
+	} else {
+		c.Fs.Remove(id)
+	}
+}
+
 func (c *Cache) isExpired(modTime time.Time) bool {
-	if c.maxAge < 0 {
+	if c.cfg.MaxAge < 0 {
 		return false
 	}
 
 	// Note the use of time.Since here.
 	// We cannot use Hugo's global Clock for this.
-	return c.maxAge == 0 || time.Since(modTime) > c.maxAge
+	return c.cfg.MaxAge == 0 || time.Since(modTime) > c.cfg.MaxAge
 }
 
 // For testing
 func (c *Cache) GetString(id string) string {
 	id = cleanID(id)
 
-	c.nlocker.Lock(id)
-	defer c.nlocker.Unlock(id)
+	c.entryLocker.Lock(id)
+	defer c.entryLocker.Unlock(id)
 
 	f, err := c.Fs.Open(id)
 	if err != nil {
@@ -417,6 +499,17 @@ func (c *Cache) GetString(id string) string {
 // Caches is a named set of caches.
 type Caches map[string]*Cache
 
+func (f Caches) SetResourceFs(fs afero.Fs) {
+	for _, c := range f {
+		if c.cfg.IsResourceDir {
+			if c.isInited {
+				panic("cannot set resource fs after init")
+			}
+			c.Fs = hugofs.NewBasePathFs(fs, c.cfg.DirCompiled)
+		}
+	}
+}
+
 // Get gets a named cache, nil if none found.
 func (f Caches) Get(name string) *Cache {
 	return f[strings.ToLower(name)]
@@ -424,34 +517,21 @@ func (f Caches) Get(name string) *Cache {
 
 // NewCaches creates a new set of file caches from the given
 // configuration.
-func NewCaches(p *helpers.PathSpec) (Caches, error) {
-	dcfg := p.Cfg.GetConfigSection("caches").(Configs)
-	fs := p.Fs.Source
+func NewCaches(dcfg Configs, sourceFs afero.Fs) (Caches, error) {
+	fs := sourceFs
 
 	m := make(Caches)
 	for k, v := range dcfg {
 		var cfs afero.Fs
-
 		if v.IsResourceDir {
-			cfs = p.BaseFs.ResourcesCache
+			cfs = nil // Set later. TODO(bep) this needs to be cleanded up.
 		} else {
-			cfs = fs
+			cfs = hugofs.NewBasePathFs(fs, v.DirCompiled)
 		}
 
-		if cfs == nil {
-			panic("nil fs")
-		}
+		c := NewCache(cfs, v)
 
-		baseDir := v.DirCompiled
-
-		bfs := hugofs.NewBasePathFs(cfs, baseDir)
-
-		var pruneAllRootDir string
-		if k == CacheKeyModules {
-			pruneAllRootDir = "pkg"
-		}
-
-		m[k] = NewCache(bfs, v.MaxAge, pruneAllRootDir)
+		m[k] = c
 	}
 
 	return m, nil
@@ -480,7 +560,7 @@ func (h *httpCache) Get(id string) (resp []byte, ok bool) {
 }
 
 func (h *httpCache) Set(id string, resp []byte) {
-	if h.c.maxAge == 0 {
+	if h.c.cfg.MaxAge == 0 {
 		return
 	}
 

@@ -5,11 +5,11 @@ url: /commands/hugo/
 ---
 ## hugo
 
-Build your site
+Build your project
 
 ### Synopsis
 
-hugo is the main command, used to build your Hugo site.
+hugo is the main command, used to build your Hugo project.
 
 Hugo is a Fast and Flexible Static Site Generator
 built with love by spf13 and friends in Go.
@@ -28,7 +28,7 @@ hugo [flags]
   -E, --buildExpired               include expired content
   -F, --buildFuture                include content with publishdate in the future
       --cacheDir string            filesystem path to cache directory
-      --cleanDestinationDir        remove files from destination not found in static directories
+      --cleanDestinationDir        remove stale files from destination
       --clock string               set the clock used by Hugo, e.g. --clock 2021-11-06T22:30:00.00+09:00
       --config string              config file (default is hugo.yaml|json|toml)
       --configDir string           config dir (default "config")
@@ -40,7 +40,7 @@ hugo [flags]
       --forceSyncStatic            copy all files when static is changed.
       --gc                         enable to run some cleanup tasks (remove unused cache files) after the build
   -h, --help                       help for hugo
-      --ignoreCache                ignores the cache directory
+      --ignoreCache                ignore the configured file caches
       --ignoreVendorPaths string   ignores any _vendor for module paths matching the given Glob pattern
   -l, --layoutDir string           filesystem path to layout directory
       --logLevel string            log level (debug|info|warn|error)
@@ -68,17 +68,16 @@ hugo [flags]
 
 ### SEE ALSO
 
-* [hugo build](/commands/hugo_build/)	 - Build your site
+* [hugo build](/commands/hugo_build/)	 - Build your project
 * [hugo completion](/commands/hugo_completion/)	 - Generate the autocompletion script for the specified shell
-* [hugo config](/commands/hugo_config/)	 - Display site configuration
+* [hugo config](/commands/hugo_config/)	 - Display project configuration
 * [hugo convert](/commands/hugo_convert/)	 - Convert front matter to another format
-* [hugo deploy](/commands/hugo_deploy/)	 - Deploy your site to a cloud provider
+* [hugo deploy](/commands/hugo_deploy/)	 - Deploy your project to a cloud provider
 * [hugo env](/commands/hugo_env/)	 - Display version and environment info
 * [hugo gen](/commands/hugo_gen/)	 - Generate documentation and syntax highlighting styles
-* [hugo import](/commands/hugo_import/)	 - Import a site from another system
+* [hugo import](/commands/hugo_import/)	 - Import a project from another system
 * [hugo list](/commands/hugo_list/)	 - List content
 * [hugo mod](/commands/hugo_mod/)	 - Manage modules
 * [hugo new](/commands/hugo_new/)	 - Create new content
 * [hugo server](/commands/hugo_server/)	 - Start the embedded web server
 * [hugo version](/commands/hugo_version/)	 - Display version
-

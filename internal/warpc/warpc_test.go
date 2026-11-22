@@ -16,10 +16,14 @@ package warpc
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
+	"image"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 )
@@ -263,8 +267,7 @@ func BenchmarkExecuteKatex(b *testing.B) {
 
 	input := katexInputTemplate
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		message := Message[KatexInput]{
 			Header: Header{
 				Version: currentVersion,
@@ -293,7 +296,7 @@ func BenchmarkKatexStartStop(b *testing.B) {
 	}
 
 	runBench := func(b *testing.B, opts Options) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			d, err := Start[KatexInput, KatexOutput](opts)
 			if err != nil {
 				b.Fatal(err)
@@ -389,8 +392,7 @@ func BenchmarkExecuteGreet(b *testing.B) {
 		Name: "Person",
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		message := Message[person]{
 			Header: Header{
 				Version: currentVersion,
@@ -469,7 +471,59 @@ var (
 	}
 
 	quickjsBinary = Binary{
-		Name: "javy_quickjs_provider_v2",
+		Name: quickjsPluginName,
 		Data: quickjsWasm,
 	}
 )
+
+// A timed out call must leave the instance in a well defined broken state,
+// and must not block Close. See issue 15522.
+func TestTimeoutIsBroken(t *testing.T) {
+	c := qt.New(t)
+
+	dispatchers := AllDispatchers(Options{}, Options{}, Options{PoolSize: 1, Timeout: time.Millisecond, Memory: 384})
+	codec, err := dispatchers.NewAvifCodec()
+	c.Assert(err, qt.IsNil)
+
+	img := image.NewNRGBA(image.Rect(0, 0, 512, 512))
+	for i := range img.Pix {
+		img.Pix[i] = uint8(i * 7)
+	}
+	opts := map[string]any{"quality": 75, "compression": "lossy", "encoderSpeed": 1, "hint": "photo"}
+
+	err = codec.Encode(io.Discard, img, opts)
+	c.Assert(err, qt.ErrorMatches, `avif: timed out after 1ms .*`)
+	c.Assert(errors.Is(err, ErrBroken), qt.IsTrue)
+
+	// The instance is gone, later calls must fail right away.
+	start := time.Now()
+	err = codec.Encode(io.Discard, img, opts)
+	c.Assert(errors.Is(err, ErrBroken), qt.IsTrue)
+	c.Assert(time.Since(start) < time.Millisecond*500, qt.IsTrue)
+
+	// The guest is still busy encoding; Close must not wait for it.
+	start = time.Now()
+	c.Assert(dispatchers.Close(), qt.IsNil)
+	c.Assert(time.Since(start) < time.Millisecond*500, qt.IsTrue)
+}
+
+// Closing healthy image dispatchers (which use the binary blob protocol)
+// must succeed, or the wazero runtime is never closed.
+func TestCloseImageDispatchers(t *testing.T) {
+	c := qt.New(t)
+
+	img := image.NewNRGBA(image.Rect(0, 0, 16, 16))
+
+	for range 3 {
+		dispatchers := AllDispatchers(Options{}, Options{PoolSize: 2, Memory: 384}, Options{PoolSize: 2, Memory: 384})
+		avif, err := dispatchers.NewAvifCodec()
+		c.Assert(err, qt.IsNil)
+		webp, err := dispatchers.NewWepCodec()
+		c.Assert(err, qt.IsNil)
+
+		c.Assert(avif.Encode(io.Discard, img, map[string]any{"quality": 75, "compression": "lossy", "encoderSpeed": 10, "hint": "photo"}), qt.IsNil)
+		c.Assert(webp.Encode(io.Discard, img, map[string]any{"quality": 75, "compression": "lossy", "hint": "photo", "useSharpYuv": 0, "method": 2}), qt.IsNil)
+
+		c.Assert(dispatchers.Close(), qt.IsNil)
+	}
+}

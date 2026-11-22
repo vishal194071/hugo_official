@@ -32,9 +32,13 @@ type Tree struct {
 	treeSet    map[string]*Tree
 	actionLine int // line of left delim starting action
 	rangeDepth int
+	stackDepth int // depth of nested parenthesized expressions
+
+	leftDelim  string
+	rightDelim string
 }
 
-// A mode value is a set of flags (or 0). Modes control parser behavior.
+// A Mode value is a set of flags (or 0). Modes control parser behavior.
 type Mode uint
 
 const (
@@ -42,16 +46,29 @@ const (
 	SkipFuncCheck                  // do not check that functions are defined
 )
 
+// maxStackDepth is the maximum depth permitted for nested
+// parenthesized expressions.
+var maxStackDepth = 10000
+
+// init reduces maxStackDepth for WebAssembly due to its smaller stack size.
+func init() {
+	if runtime.GOARCH == "wasm" {
+		maxStackDepth = 1000
+	}
+}
+
 // Copy returns a copy of the [Tree]. Any parsing state is discarded.
 func (t *Tree) Copy() *Tree {
 	if t == nil {
 		return nil
 	}
 	return &Tree{
-		Name:      t.Name,
-		ParseName: t.ParseName,
-		Root:      t.Root.CopyList(),
-		text:      t.text,
+		Name:       t.Name,
+		ParseName:  t.ParseName,
+		Root:       t.Root.CopyList(),
+		text:       t.text,
+		leftDelim:  t.leftDelim,
+		rightDelim: t.rightDelim,
 	}
 }
 
@@ -223,6 +240,7 @@ func (t *Tree) startParse(funcs []map[string]any, lex *lexer, treeSet map[string
 	t.vars = []string{"$"}
 	t.funcs = funcs
 	t.treeSet = treeSet
+	t.stackDepth = 0
 	lex.options = lexOptions{
 		emitComment: t.Mode&ParseComments != 0,
 		breakOK:     !t.hasFunction("break"),
@@ -245,7 +263,15 @@ func (t *Tree) stopParse() {
 func (t *Tree) Parse(text, leftDelim, rightDelim string, treeSet map[string]*Tree, funcs ...map[string]any) (tree *Tree, err error) {
 	defer t.recover(&err)
 	t.ParseName = t.Name
-	lexer := lex(t.Name, text, leftDelim, rightDelim)
+	t.leftDelim = leftDelim
+	if t.leftDelim == "" {
+		t.leftDelim = defaultLeftDelim
+	}
+	t.rightDelim = rightDelim
+	if t.rightDelim == "" {
+		t.rightDelim = defaultRightDelim
+	}
+	lexer := lex(t.Name, text, t.leftDelim, t.rightDelim)
 	t.startParse(funcs, lexer, treeSet)
 	t.text = text
 	t.parse()
@@ -305,6 +331,8 @@ func (t *Tree) parse() {
 				newT := New("definition") // name will be updated once we know it.
 				newT.text = t.text
 				newT.Mode = t.Mode
+				newT.leftDelim = t.leftDelim
+				newT.rightDelim = t.rightDelim
 				newT.ParseName = t.ParseName
 				newT.startParse(t.funcs, t.lex, t.treeSet)
 				newT.parseDefinition()
@@ -637,6 +665,8 @@ func (t *Tree) blockControl() Node {
 	block := New(name) // name will be updated once we know it.
 	block.text = t.text
 	block.Mode = t.Mode
+	block.leftDelim = t.leftDelim
+	block.rightDelim = t.rightDelim
 	block.ParseName = t.ParseName
 	block.startParse(t.funcs, t.lex, t.treeSet)
 	var end Node
@@ -787,6 +817,11 @@ func (t *Tree) term() Node {
 		}
 		return number
 	case itemLeftParen:
+		if t.stackDepth >= maxStackDepth {
+			t.errorf("max expression depth exceeded")
+		}
+		t.stackDepth++
+		defer func() { t.stackDepth-- }()
 		return t.pipeline("parenthesized pipeline", itemRightParen)
 	case itemString, itemRawString:
 		s, err := strconv.Unquote(token.val)

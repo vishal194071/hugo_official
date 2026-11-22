@@ -16,7 +16,6 @@ package cssjs_test
 import (
 	"testing"
 
-	"github.com/bep/logg"
 	qt "github.com/frankban/quicktest"
 	"github.com/gohugoio/hugo/htesting"
 	"github.com/gohugoio/hugo/hugolib"
@@ -29,6 +28,7 @@ func TestTailwindV4Basic(t *testing.T) {
 
 	files := `
 -- hugo.toml --
+security.exec.allow = ['^go$', '^git$', '^node$', '^tailwindcss$']
 -- package.json --
 {
   "license": "MIT",
@@ -55,30 +55,67 @@ func TestTailwindV4Basic(t *testing.T) {
   --color-neon-lime: oklch(91.5% 0.258 129);
   --color-neon-cyan: oklch(91.3% 0.139 195.8);
 }
--- layouts/index.html --
+-- layouts/home.html --
 {{ $css := resources.Get "css/styles.css" | css.TailwindCSS }}
 CSS: {{ $css.Content | safeCSS }}|
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:               t,
-			TxtarString:     files,
-			NeedsOsFS:       true,
-			NeedsNpmInstall: true,
-			LogLevel:        logg.LevelInfo,
-		}).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithNpmInstall(), hugolib.TestOptInfo())
 
 	b.AssertFileContent("public/index.html", "/*! tailwindcss v4.")
 }
 
+// See issue 15103.
+func TestTailwindCSSImportContext(t *testing.T) {
+	t.Parallel()
+	htesting.SkipSlowTestUnlessCI(t)
+
+	files := `
+-- hugo.toml --
+disableKinds = ['page','rss','section','sitemap','taxonomy','term']
+security.exec.allow = ['^go$', '^git$', '^node$', '^tailwindcss$']
+-- assets/css/main.css --
+@import "tailwindcss";
+
+@import "foo.css";
+@import "bar.css";
+-- assets/css/foo.css --
+.foo {color: orange;}
+-- layouts/home.html --
+{{ $foo := resources.FromString "foo.css" ".foo {color: blue;}" }}
+{{ $bar := resources.FromString "bar.css" ".bar {color: green;}" }}
+{{ $opts := dict "importContext" (slice $foo $bar) }}
+{{ $css := resources.Get "css/main.css" | css.TailwindCSS $opts }}
+CSS: {{ $css.Content | safeCSS }}|
+-- package.json --
+{
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.7",
+    "tailwindcss": "^4.1.7"
+  }
+}
+`
+
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithNpmInstall(), hugolib.TestOptInfo())
+
+	// foo.css resolves in the import context before the assets filesystem.
+	b.AssertFileContent(
+		"public/index.html",
+		".foo {\n    color: blue;\n  }",
+		".bar {\n    color: green;\n  }",
+	)
+}
+
 func TestTailwindCSSNoInlineImportsIssue13719(t *testing.T) {
 	t.Parallel()
+	htesting.SkipSlowTestUnlessCI(t)
 
 	files := `
 -- hugo.toml --
 disableKinds = ['page','rss','section','sitemap','taxonomy','term']
 theme = 'my-theme'
+
+security.exec.allow = ['^go$', '^git$', '^node$', '^tailwindcss$']
 
 [[module.mounts]]
 source = 'assets'
@@ -121,16 +158,56 @@ target = 'assets/css'
 }
 `
 
-	b, err := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:               t,
-			TxtarString:     files,
-			NeedsOsFS:       true,
-			NeedsNpmInstall: true,
-			LogLevel:        logg.LevelInfo,
-		}).BuildE()
+	b, err := hugolib.TestE(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithNpmInstall(), hugolib.TestOptInfo())
 
 	b.Assert(err, qt.IsNotNil)
 	b.Assert(err.Error(), qt.Contains, "Can't resolve 'colors/red.css'")
 	b.Assert(err.Error(), qt.Contains, "You may want to set the 'disableInlineImports' option to false")
+}
+
+// This tests an internal feature used in the Hugo themes sites building to allow us to build with
+// default security policy and still get a partial build even for themes using TailwindCSS.
+func TestTailwindCSSIgnoreSecError(t *testing.T) {
+	if !htesting.IsCI() {
+		t.Skip("Skip long running test when running locally")
+	}
+
+	files := `
+-- hugo.toml --
+[internalExternal]
+ignoreTailwindCSSSecurityError = true
+-- package.json --
+{
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bep/hugo-starter-tailwind-basic.git"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.1",
+    "tailwindcss": "^4.0.1"
+  },
+  "name": "hugo-starter-tailwind-basic",
+  "version": "0.1.0"
+}
+-- assets/css/styles.css --
+@import "tailwindcss";
+
+@theme {
+  --font-family-display: "Satoshi", "sans-serif";
+
+  --breakpoint-3xl: 1920px;
+
+  --color-neon-pink: oklch(71.7% 0.25 360);
+  --color-neon-lime: oklch(91.5% 0.258 129);
+  --color-neon-cyan: oklch(91.3% 0.139 195.8);
+}
+-- layouts/home.html --
+{{ $css := resources.Get "css/styles.css" | css.TailwindCSS }}
+CSS: {{ $css.Content | safeCSS }}|
+`
+
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithNpmInstall(), hugolib.TestOptInfo())
+
+	b.AssertFileContent("public/index.html", ".tailwindcss-security-error-ignored")
 }

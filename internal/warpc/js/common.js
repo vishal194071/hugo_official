@@ -1,17 +1,24 @@
+// Javy writes console.log to stdout, which we use for the JSONL output.
+console.log = (...args) => {
+	// Stderr file descriptor
+	Javy.IO.writeSync(2, new TextEncoder().encode(args.join(' ') + '\n'));
+};
+
+// Not implemented by QuickJS.
+console.warn = (value) => {
+	console.log(value);
+};
+
+// Not implemented by QuickJS.
+console.error = (value) => {
+	throw new Error(value);
+};
+
 // Read JSONL from stdin.
 export function readInput(handle) {
 	const buffSize = 1024;
 	let currentLine = [];
 	const buffer = new Uint8Array(buffSize);
-
-	// These are not implemented by QuickJS.
-	console.warn = (value) => {
-		console.log(value);
-	};
-
-	console.error = (value) => {
-		throw new Error(value);
-	};
 
 	// Read all the available bytes
 	while (true) {

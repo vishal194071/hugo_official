@@ -24,17 +24,18 @@ import (
 	"sync/atomic"
 
 	"github.com/gohugoio/hugo/identity"
-	"github.com/gohugoio/hugo/lazy"
 	"github.com/gohugoio/hugo/resources/internal"
+	"github.com/spf13/cast"
 
 	"github.com/gohugoio/hugo/common/hashing"
 	"github.com/gohugoio/hugo/common/herrors"
+	"github.com/gohugoio/hugo/common/hmaps"
+	"github.com/gohugoio/hugo/common/hsync"
 	"github.com/gohugoio/hugo/common/paths"
 
 	"github.com/gohugoio/hugo/media"
 
 	"github.com/gohugoio/hugo/common/hugio"
-	"github.com/gohugoio/hugo/common/maps"
 	"github.com/gohugoio/hugo/resources/resource"
 
 	"github.com/gohugoio/hugo/helpers"
@@ -90,10 +91,13 @@ type ResourceSourceDescriptor struct {
 	Data map[string]any
 
 	// The Params to associate with this resource.
-	Params maps.Params
+	Params hmaps.Params
 
 	// Delay publishing until either Permalink or RelPermalink is called. Maybe never.
 	LazyPublish bool
+
+	// Whether to include the hash of the source content in the resource key.
+	IncludeHashInKey bool
 
 	// Set when its known up front, else it's resolved from the target filename.
 	MediaType media.Type
@@ -121,7 +125,7 @@ func (fd *ResourceSourceDescriptor) init(r *Spec) error {
 	}
 
 	if fd.Params == nil {
-		fd.Params = make(maps.Params)
+		fd.Params = make(hmaps.Params)
 	}
 
 	if fd.Path == nil {
@@ -185,7 +189,7 @@ func (fd *ResourceSourceDescriptor) init(r *Spec) error {
 	fd.MediaType = mediaType
 
 	if fd.DependencyManager == nil {
-		fd.DependencyManager = r.Cfg.NewIdentityManager("resource")
+		fd.DependencyManager = r.Cfg.NewIdentityManager()
 	}
 
 	return nil
@@ -201,21 +205,21 @@ type Transformer interface {
 	TransformWithContext(context.Context, ...ResourceTransformation) (ResourceTransformer, error)
 }
 
-func NewFeatureNotAvailableTransformer(key string, elements ...any) ResourceTransformation {
-	return transformerNotAvailable{
+func NewExecNotFoundTransformer(key string, elements ...any) ResourceTransformation {
+	return transformerExecNotFound{
 		key: internal.NewResourceTransformationKey(key, elements...),
 	}
 }
 
-type transformerNotAvailable struct {
+type transformerExecNotFound struct {
 	key internal.ResourceTransformationKey
 }
 
-func (t transformerNotAvailable) Transform(ctx *ResourceTransformationCtx) error {
-	return herrors.ErrFeatureNotAvailable
+func (t transformerExecNotFound) Transform(ctx *ResourceTransformationCtx) error {
+	return herrors.ErrExecNotFound
 }
 
-func (t transformerNotAvailable) Key() internal.ResourceTransformationKey {
+func (t transformerExecNotFound) Key() internal.ResourceTransformationKey {
 	return t.key
 }
 
@@ -241,6 +245,7 @@ type baseResourceInternal interface {
 	resource.Source
 	resource.NameNormalizedProvider
 
+	sourcePath() string
 	fileInfo
 	mediaTypeAssigner
 	targetPather
@@ -358,7 +363,7 @@ func GetTestInfoForResource(r resource.Resource) GenericResourceTestInfo {
 
 // genericResource represents a generic linkable resource.
 type genericResource struct {
-	publishInit *lazy.OnceMore
+	publishInit *hsync.OnceMore
 
 	key     string
 	keyInit *sync.Once
@@ -496,7 +501,7 @@ func (l *genericResource) NameNormalized() string {
 	return l.sd.NameNormalized
 }
 
-func (l *genericResource) Params() maps.Params {
+func (l *genericResource) Params() hmaps.Params {
 	return l.params
 }
 
@@ -636,7 +641,7 @@ func (rc *genericResource) cloneWithUpdates(u *transformationUpdate) (baseResour
 }
 
 func (l genericResource) clone() *genericResource {
-	l.publishInit = &lazy.OnceMore{}
+	l.publishInit = &hsync.OnceMore{}
 	l.keyInit = &sync.Once{}
 	return &l
 }
@@ -701,6 +706,18 @@ func InternalResourceSourcePath(r resource.Resource) string {
 		}
 	}
 	return ""
+}
+
+// InternalResourceSourceContent is used internally to get the source content for a Resource.
+func InternalResourceSourceContent(ctx context.Context, r resource.Resource) (string, error) {
+	if cp, ok := r.(resource.ContentProvider); ok {
+		c, err := cp.Content(ctx)
+		if err != nil {
+			return "", err
+		}
+		return cast.ToStringE(c)
+	}
+	return "", nil
 }
 
 // InternalResourceSourcePathBestEffort is used internally to get the source path for a Resource.

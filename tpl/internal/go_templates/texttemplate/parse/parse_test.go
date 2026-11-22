@@ -2,9 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build go1.13
-// +build go1.13
-
 package parse
 
 import (
@@ -87,6 +84,11 @@ var numberTests = []numberTest{
 	{text: "'433937734937734969526500969526500'"}, // Integer too large - issue 10634.
 	// Issue 8622 - 0xe parsed as floating point. Very embarrassing.
 	{"0xef", true, true, true, false, 0xef, 0xef, 0xef, 0},
+}
+
+func init() {
+	// Use a small stack limit for testing to avoid creating huge expressions.
+	maxStackDepth = 3
 }
 
 func TestNumberParse(t *testing.T) {
@@ -330,6 +332,15 @@ var parseTests = []parseTest{
 	{"empty pipeline", `{{printf "%d" ( ) }}`, hasError, ""},
 	// Missing pipeline in block
 	{"block definition", `{{block "foo"}}hello{{end}}`, hasError, ""},
+
+	// Expression nested depth tests.
+	{"paren nesting normal", "{{ (( 1 )) }}", noError, "{{((1))}}"},
+	{"paren nesting at limit", "{{ ((( 1 ))) }}", noError, "{{(((1)))}}"},
+	{"paren nesting exceeds limit", "{{ (((( 1 )))) }}", hasError, "template: test:1: max expression depth exceeded"},
+	{"paren nesting in pipeline", "{{ ((( 1 ))) | printf }}", noError, "{{(((1))) | printf}}"},
+	{"paren nesting in pipeline exceeds limit", "{{ (((( 1 )))) | printf }}", hasError, "template: test:1: max expression depth exceeded"},
+	{"paren nesting with other constructs", "{{ if ((( true ))) }}YES{{ end }}", noError, "{{if (((true)))}}\"YES\"{{end}}"},
+	{"paren nesting with other constructs exceeds limit", "{{ if (((( true )))) }}YES{{ end }}", hasError, "template: test:1: max expression depth exceeded"},
 }
 
 var builtins = map[string]any{
@@ -398,6 +409,36 @@ func TestParseWithComments(t *testing.T) {
 				t.Errorf("%s=(%q): got\n\t%v\nexpected\n\t%v", test.name, test.input, result, test.result)
 			}
 		})
+	}
+}
+
+func TestDelimsStringRoundtrip(t *testing.T) {
+	// Each input is already in canonical String form, so parsing it with the
+	// custom delimiters and printing the resulting tree must reproduce the
+	// input exactly. This exercises the String/writeTo methods of every node
+	// type that emits delimiters.
+	const (
+		left  = "[["
+		right = "]]"
+	)
+	for _, input := range []string{
+		`[[.X]]`,                     // ActionNode
+		`[[/* a comment */]]`,        // CommentNode
+		`[[if .X]]y[[else]]z[[end]]`, // BranchNode (if), with else and end
+		`[[range .X]][[break]][[continue]][[end]]`, // RangeNode, BreakNode, ContinueNode
+		`[[with .X]]y[[end]]`,                      // BranchNode (with)
+		`[[template "name" .]]`,                    // TemplateNode
+	} {
+		tr := New("test")
+		tr.Mode = ParseComments
+		tmpl, err := tr.Parse(input, left, right, make(map[string]*Tree))
+		if err != nil {
+			t.Errorf("%q: unexpected parse error: %v", input, err)
+			continue
+		}
+		if got := tmpl.Root.String(); got != input {
+			t.Errorf("got\n\t%q\nexpected\n\t%q", got, input)
+		}
 	}
 }
 

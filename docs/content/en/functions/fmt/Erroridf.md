@@ -1,6 +1,6 @@
 ---
 title: fmt.Erroridf
-description: Log a suppressible ERROR from a template.
+description: Logs a suppressible ERROR from a template.
 categories: []
 keywords: []
 params:
@@ -8,12 +8,11 @@ params:
     aliases: [erroridf]
     returnType: string
     signatures: ['fmt.Erroridf ID FORMAT [INPUT]']
-aliases: [/functions/erroridf]
 ---
 
 {{% include "/_common/functions/fmt/format-string.md" %}}
 
-The `erroridf` function evaluates the format string, then prints the result to the ERROR log and fails the build. Unlike the [`errorf`] function, you may suppress errors logged by the `erroridf` function by adding the message ID to the `ignoreLogs` array in your site configuration.
+The `erroridf` function evaluates the format string, then prints the result to the ERROR log and fails the build. Unlike the [`errorf`][] function, you may suppress errors logged by the `erroridf` function by adding the message ID to the `ignoreLogs` array in your project configuration.
 
 This template code:
 
@@ -25,7 +24,7 @@ Produces this console log:
 
 ```text
 ERROR You should consider fixing this.
-You can suppress this error by adding the following to your site configuration:
+You can suppress this error by adding the following to your project configuration:
 ignoreLogs = ['error-42']
 ```
 

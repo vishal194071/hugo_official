@@ -77,10 +77,10 @@ config:
     full: true
     inline: true
     shortcut: true
-    url_inline: true
+    url_inline: false
   MD055:
     style: consistent
-  MD056: true
+  MD056: false # interferes with Markdown attributes
   # MD057 deprecated
   MD058: true
   MD059:
@@ -89,3 +89,6 @@ config:
       - here
       - link
       - more
+  MD060:
+    aligned_delimiter: false
+    style: any

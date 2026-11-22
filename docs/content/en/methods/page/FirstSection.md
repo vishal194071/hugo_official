@@ -11,12 +11,12 @@ params:
 
 {{% glossary-term section %}}
 
-> [!note]
+> [!NOTE]
 > When called on the home page, the `FirstSection` method returns the `Page` object of the home page itself.
 
 Consider this content structure:
 
-```text
+```tree
 content/
 ├── auctions/
 │   ├── 2023-11/
@@ -24,7 +24,7 @@ content/
 │   │   ├── auction-1.md
 │   │   └── auction-2.md  <-- first section: auctions
 │   ├── 2023-12/
-│   │   ├── _index.md     
+│   │   ├── _index.md
 │   │   ├── auction-3.md
 │   │   └── auction-4.md
 │   ├── _index.md         <-- first section: auctions

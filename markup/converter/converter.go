@@ -30,7 +30,7 @@ import (
 
 // ProviderConfig configures a new Provider.
 type ProviderConfig struct {
-	Conf      config.AllProvider // Site config
+	Conf      config.AllProvider // Project config
 	ContentFs afero.Fs
 	Logger    loggers.Logger
 	Exec      *hexec.Exec
@@ -149,6 +149,9 @@ type RenderContext struct {
 
 	// Src is the content to render.
 	Src []byte
+
+	// SourceInfo holds optional information about the source of the content to render.
+	SourceInfo any
 
 	// Whether to render TableOfContents.
 	RenderTOC bool

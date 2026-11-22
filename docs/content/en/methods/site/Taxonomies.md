@@ -9,6 +9,8 @@ params:
     signatures: [SITE.Taxonomies]
 ---
 
+## Usage
+
 Conceptually, the `Taxonomies` method on a `Site` object returns a data structure such&nbsp;as:
 
 <!-- markdownlint-disable MD007 MD032 -->
@@ -30,7 +32,7 @@ taxonomy b:
 
 For example, on a book review site you might create two taxonomies; one for genres and another for authors.
 
-With this site configuration:
+With this project configuration:
 
 {{< code-toggle file=hugo >}}
 [taxonomies]
@@ -40,7 +42,7 @@ author = 'authors'
 
 And this content structure:
 
-```text
+```tree
 content/
 ├── books/
 │   ├── and-then-there-were-none.md --> genres: suspense
@@ -93,14 +95,16 @@ Hugo renders this to:
 </ul>
 ```
 
-> [!note]
+> [!NOTE]
 > Hugo's taxonomy system is powerful, allowing you to classify content and create relationships between pages.
 >
-> Please see the [taxonomies] section for a complete explanation and examples.
+> Please see the [taxonomies][] section for a complete explanation and examples.
 
 ## Examples
 
-### List content with the same taxonomy term
+The following examples demonstrate common uses of a site's taxonomies.
+
+### Content by taxonomy term
 
 If you are using a taxonomy for something like a series of posts, you can list individual pages associated with the same term. For example:
 
@@ -112,9 +116,9 @@ If you are using a taxonomy for something like a series of posts, you can list i
 </ul>
 ```
 
-### List all content in a given taxonomy
+### All content in a taxonomy
 
-This would be very useful in a sidebar as “featured content”. You could even have different sections of “featured content” by assigning different terms to the content.
+This is useful in a sidebar as "featured content". You could even have different sections of "featured content" by assigning different terms to the content.
 
 ```go-html-template
 <section id="menu">

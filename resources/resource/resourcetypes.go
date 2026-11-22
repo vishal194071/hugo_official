@@ -16,7 +16,7 @@ package resource
 import (
 	"context"
 
-	"github.com/gohugoio/hugo/common/maps"
+	"github.com/gohugoio/hugo/common/hmaps"
 	"github.com/gohugoio/hugo/common/types"
 	"github.com/gohugoio/hugo/langs"
 	"github.com/gohugoio/hugo/media"
@@ -139,7 +139,7 @@ type NameNormalizedProvider interface {
 
 type ResourceParamsProvider interface {
 	// Params set in front matter for this resource.
-	Params() maps.Params
+	Params() hmaps.Params
 }
 
 type ResourceDataProvider interface {
@@ -171,17 +171,6 @@ type TransientIdentifier interface {
 	// This value is implemented by transient resources where pointers may be short lived and
 	// not suitable for use as a map keys.
 	TransientKey() string
-}
-
-// WeightProvider provides a weight.
-type WeightProvider interface {
-	Weight() int
-}
-
-// Weight0Provider provides a weight that's considered before the WeightProvider in sorting.
-// This allows the weight set on a given term to win.
-type Weight0Provider interface {
-	Weight0() int
 }
 
 // ContentResource represents a Resource that provides a way to get to its content.
@@ -219,6 +208,7 @@ type LengthProvider interface {
 // LanguageProvider is a Resource in a language.
 type LanguageProvider interface {
 	Language() *langs.Language
+	Lang() string
 }
 
 // TranslationKeyProvider connects translations of the same Resource.

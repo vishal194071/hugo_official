@@ -14,6 +14,7 @@
 package filesystems_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -226,11 +227,11 @@ disableWatch = true
 [[module.mounts]]
 source = 'content4'
 target = 'content/excludedsome'
-excludeFiles = 'p1.md'
+files = '! p1.md'
 [[module.mounts]]
 source = 'content5'
 target = 'content/excludedall'
-excludeFiles = '/**'
+files = '! /**'
 [[module.mounts]]
 source = "hugo_stats.json"
 target = "assets/watching/hugo_stats.json"
@@ -295,14 +296,9 @@ F1 text
 
 	os.Chdir(wd)
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			TxtarString: files,
-			NeedsOsFS:   true,
-			WorkingDir:  tmpDir,
-		},
-	).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptOsFs(), hugolib.TestOptWithConfig(func(c *hugolib.IntegrationTestConfig) {
+		c.WorkingDir = tmpDir
+	}))
 
 	bfs := b.H.BaseFs
 	watchFilenames := bfs.WatchFilenames()
@@ -431,13 +427,9 @@ title: "Foo"
 ---
 `
 
-	b := hugolib.NewIntegrationTestBuilder(
-		hugolib.IntegrationTestConfig{
-			T:           t,
-			WorkingDir:  tempDir,
-			TxtarString: files,
-		},
-	).Build()
+	b := hugolib.Test(t, files, hugolib.TestOptWithConfig(func(c *hugolib.IntegrationTestConfig) {
+		c.WorkingDir = tempDir
+	}))
 
 	abs1 := filepath.Join(tempDir, "content", "foo.md")
 	rel, abs2, err := b.H.BaseFs.AbsProjectContentDir("foo.md")
@@ -479,7 +471,7 @@ target = "content/posts"
 [[module.mounts]]
 source = "docs"
 target = "content/mydocs"
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 
 `
@@ -553,7 +545,7 @@ JS.
 body { color: red; }
 -- assets/scss/app.scss --
 body { color: blue; }
--- layouts/index.html --
+-- layouts/home.html --
 Home.
 SCSS: {{ with resources.Get "scss/app.scss" }}{{ .RelPermalink }}|{{ .Content }}{{ end }}|
 # Note that the pattern below will match 2 resources, which doesn't make much sense,
@@ -656,7 +648,7 @@ func countFilesAndGetFilenames(fs afero.Fs, dirname string) (int, []string, erro
 	counter := 0
 	var filenames []string
 
-	wf := func(path string, info hugofs.FileMetaInfo) error {
+	wf := func(ctx context.Context, path string, info hugofs.FileMetaInfo) error {
 		if !info.IsDir() {
 			counter++
 		}

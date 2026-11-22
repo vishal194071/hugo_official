@@ -1,6 +1,6 @@
 ---
 title: path.Clean
-description: Replaces path separators with slashes (`/`) and returns the shortest path name equivalent to the given path.
+description: Returns the shortest path name equivalent to the given path, after replacing path separators with slashes (/).
 categories: []
 keywords: []
 params:
@@ -8,12 +8,9 @@ params:
     aliases: []
     returnType: string
     signatures: [path.Clean PATH]
-aliases: [/functions/path.clean]
 ---
 
-See Go's [`path.Clean`] documentation for details.
-
-[`path.Clean`]: https://pkg.go.dev/path#Clean
+See Go's [`path.Clean`][] documentation for details.
 
 ```go-html-template
 {{ path.Clean "foo/bar" }} → foo/bar
@@ -25,3 +22,5 @@ See Go's [`path.Clean`] documentation for details.
 {{ path.Clean "/../foo/../bar/" }} → /bar
 {{ path.Clean "" }} → .
 ```
+
+[`path.Clean`]: https://pkg.go.dev/path#Clean

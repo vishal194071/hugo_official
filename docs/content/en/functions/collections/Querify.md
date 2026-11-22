@@ -1,14 +1,13 @@
 ---
 title: collections.Querify
-description: Returns a URL query string composed of the given key-value pairs, encoded and sorted by key.
+description: Returns a URL query string from the given map, slice, or sequence of key-value pairs.
 categories: []
 keywords: []
 params:
   functions_and_methods:
     aliases: [querify]
     returnType: string
-    signatures: ['collections.Querify [VALUE...]']
-aliases: [/functions/querify]
+    signatures: [collections.Querify MAP|SLICE|KEY VALUE...]
 ---
 
 Specify the key-value pairs as a map, a slice, or a sequence of scalar values. For example, the following are equivalent:
@@ -34,7 +33,7 @@ Hugo renders this to:
 <a href="https://example.org?a=1&amp;b=2">Link</a>
 ```
 
-You can also pass in a map from your site configuration or front matter. For example:
+You can also pass in a map from your project configuration or front matter. For example:
 
 {{< code-toggle file=content/example.md fm=true >}}
 title = 'Example'

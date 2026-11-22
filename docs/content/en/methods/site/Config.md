@@ -1,6 +1,6 @@
 ---
 title: Config
-description: Returns a subset of the site configuration.
+description: Returns a subset of your project configuration.
 categories: []
 keywords: []
 params:
@@ -9,15 +9,13 @@ params:
     signatures: [SITE.Config]
 ---
 
-The `Config` method on a `Site` object provides access to a subset of the site configuration, specifically the `services` and `privacy` keys.
+The `Config` method on a `Site` object provides access to a subset of your project configuration, specifically the `services` and `privacy` keys.
 
 ## Services
 
-See [configure services](/configuration/services).
+See [configure services][].
 
-For example, to use Hugo's built-in Google Analytics template you must add a [Google tag ID]:
-
-[Google tag ID]: https://support.google.com/tagmanager/answer/12326985?hl=en
+For example, to use Hugo's built-in Google Analytics template you must add a [Google tag ID][]:
 
 {{< code-toggle file=hugo >}}
 [services.googleAnalytics]
@@ -34,9 +32,9 @@ You must capitalize each identifier as shown above.
 
 ## Privacy
 
-See [configure privacy](/configuration/privacy).
+See [configure privacy][].
 
-For example, to disable usage of the built-in YouTube shortcode:
+For example, to disable usage of the built-in `youtube` shortcode:
 
 {{< code-toggle file=hugo >}}
 [privacy.youtube]
@@ -50,3 +48,7 @@ To access this value from a template:
 ```
 
 You must capitalize each identifier as shown above.
+
+[Google tag ID]: https://support.google.com/tagmanager/answer/12326985?hl=en
+[configure privacy]: /configuration/privacy/
+[configure services]: /configuration/services/

@@ -4,17 +4,6 @@ description: Create templates of different types to render your content, resourc
 categories: []
 keywords: []
 weight: 30
-aliases: [
-  '/templates/base/',
-  '/templates/content-view/',
-  '/templates/home/',
-  '/templates/lists/',
-  '/templates/partial/',
-  '/templates/section/',
-  '/templates/single/',
-  '/templates/taxonomy/',
-  '/templates/term/',
-]
 ---
 
 ## Structure
@@ -23,7 +12,7 @@ Create templates in the `layouts` directory in the root of your project.
 
 Although your site may not require each of these templates, the example below is typical for a site of medium complexity.
 
-```text
+```tree
 layouts/
 ├── _markup/
 │   ├── render-image.html   <-- render hook
@@ -38,8 +27,8 @@ layouts/
 │   ├── page.html
 │   └── section.html
 ├── films/
-│   ├── view_card.html      <-- content view
-│   ├── view_li.html        <-- content view
+│   ├── _views/
+│   │   └── card.html       <-- view template
 │   ├── page.html
 │   └── section.html
 ├── baseof.html
@@ -50,9 +39,9 @@ layouts/
 └── term.html
 ```
 
-Hugo's [template lookup order] determines the template path, allowing you to create unique templates for any page.
+Hugo's [template lookup order][] determines the template path, allowing you to create unique templates for any page.
 
-> [!note]
+> [!NOTE]
 > You must have thorough understanding of the template lookup order when creating templates. Template selection is based on template type, page kind, content type, section, language, and output format.
 
 The purpose of each template type is described below.
@@ -63,19 +52,19 @@ A _base_ template serves as a foundational layout that other templates can build
 
 Hugo can apply a _base_ template to the following template types: [home](#home), [page](#page), [section](#section), [taxonomy](#taxonomy), [term](#term), [single](#single), [list](#list), and [all](#all). When Hugo parses any of these template types, it will apply a _base_ template only if the template being parsed meets these specific conditions:
 
-- It must include at least one [`define`] [action](g).
-- It can only contain `define` actions, whitespace, and [template comments]. No other content is allowed.
+- It must include at least one [`define`][] [action](g).
+- It can only contain `define` actions, whitespace, and [template comments][]. No other content is allowed.
 
-> [!note]
+> [!NOTE]
 > If a template doesn't meet all these criteria, Hugo executes it exactly as provided, without applying a _base_ template.
 
-When Hugo applies a _base_ template, it replaces its [`block`] actions with content from the corresponding `define` actions found in the template to which the base template is applied.
+When Hugo applies a _base_ template, it replaces its [`block`][] actions with content from the corresponding `define` actions found in the template to which the _base_ template is applied.
 
-For example, the _base_ template below calls the [`partial`] function to include `head`, `header`, and `footer` elements. The `block` action acts as a placeholder, and its content will be replaced by a matching `define` action  from the template to which it is applied.
+For example, the _base_ template below calls the [`partial`][] function to include `head`, `header`, and `footer` elements. The `block` action acts as a placeholder, and its content will be replaced by a matching `define` action  from the template to which it is applied.
 
 ```go-html-template {file="layouts/baseof.html"}
 <!DOCTYPE html>
-<html lang="{{ site.Language.LanguageCode }}" dir="{{ or site.Language.LanguageDirection `ltr` }}">
+<html lang="{{ site.Language.Locale }}" dir="{{ or site.Language.Direction `ltr` }}">
 <head>
   {{ partial "head.html" . }}
 </head>
@@ -85,9 +74,9 @@ For example, the _base_ template below calls the [`partial`] function to include
   </header>
   <main>
     {{ block "main" . }}
-      This will be replaced with content from the 
+      This will be replaced with content from the
       corresponding "define" action found in the template
-      to which this base template is applied.
+      to which this _base_ template is applied.
     {{ end }}
   </main>
   <footer>
@@ -100,7 +89,7 @@ For example, the _base_ template below calls the [`partial`] function to include
 ```go-html-template {file="layouts/home.html"}
 {{ define "main" }}
   This will replace the content of the "block" action
-  found in the base template.
+  found in the _base_ template.
 {{ end }}
 ```
 
@@ -170,13 +159,13 @@ For example, Hugo applies a _base_ template to the _taxonomy_ template below, th
 
 {{% include "/_common/filter-sort-group.md" %}}
 
-Within a _taxonomy_ template, the [`Data`] object provides these taxonomy-specific methods:
+Within a _taxonomy_ template, the [`Data`][] object provides these taxonomy-specific methods:
 
 - [`Singular`][taxonomy-singular]
 - [`Plural`][taxonomy-plural]
-- [`Terms`]
+- [`Terms`][]
 
-The `Terms` method returns a [taxonomy object](g), allowing you to call any of its methods including [`Alphabetical`] and [`ByCount`]. For example, use the `ByCount` method to render a list of terms sorted by the number of pages associated with each term:
+The `Terms` method returns a [taxonomy object](g), allowing you to call any of its methods including [`Alphabetical`][] and [`ByCount`][]. For example, use the `ByCount` method to render a list of terms sorted by the number of pages associated with each term:
 
 ```go-html-template {file="layouts/taxonomy.html"}
 {{ define "main" }}
@@ -206,11 +195,11 @@ For example, Hugo applies a _base_ template to the _term_ template below, then r
 
 {{% include "/_common/filter-sort-group.md" %}}
 
-Within a _term_ template, the [`Data`] object provides these term-specific methods:
+Within a _term_ template, the [`Data`][] object provides these term-specific methods:
 
 - [`Singular`][term-singular]
 - [`Plural`][term-plural]
-- [`Term`]
+- [`Term`][]
 
 ## Single
 
@@ -279,14 +268,14 @@ For example, the _partial_ template below renders copyright information:
 <p>Copyright {{ now.Year }}. All rights reserved.</p>
 ```
 
-Execute the _partial_ template by calling the [`partial`] or [`partialCached`] function, optionally passing context as the second argument:
+Execute the _partial_ template by calling the [`partial`][] or [`partialCached`][] function, optionally passing context as the second argument:
 
 ```go-html-template {file="layouts/baseof.html"}
 {{ partial "footer.html" . }}
 ```
 
 <!-- https://github.com/gohugoio/hugo/pull/13614#issuecomment-2805977008 -->
-Unlike other template types, Hugo does not consider the current page kind, content type, logical path, language, or output format when searching for a matching _partial_ template. However, it _does_ apply the same name matching logic it uses for other template types. This means it tries to find the most specific match first, then progressively looks for more general versions if the specific one isn't found.
+Unlike other template types, Hugo does not consider the current page kind, content type, logical path, language, or output format when searching for a matching _partial_ template. However, it _does_ apply the same _name_ matching logic it uses for other template types. This means it tries to find the most specific match first, then progressively looks for more general versions if the specific one isn't found.
 
 For example, with this call:
 
@@ -301,6 +290,8 @@ Hugo uses this lookup order to find a matching template:
 1. `layouts/_partials/footer.de.html`
 1. `layouts/_partials/footer.html`
 
+## Inline partial
+
 A _partial_ template can also be defined inline within another template. However, it's important to note that the template namespace is global; ensuring unique names for these _partial_ templates is necessary to prevent conflicts.
 
 ```go-html-template
@@ -312,34 +303,33 @@ Value: {{ partial "my-inline-partial.html" . }}
 {{ end }}
 ```
 
-## Content view
+## View
 
-A _content view_ template is similar to a _partial_ template, invoked by calling the [`Render`] method on a `Page` object. Unlike _partial_ templates, _content view_ templates:
+A _view_ template is similar to a _partial_ template, invoked by calling the [`Render`][] method on a `Page` object, but with key differences.
 
-- Inherit the context of the current page
-- Can target any page kind, content type, logical path, language, or output format
+{{% include "/_common/render-vs-partial.md" %}}
 
-For example, Hugo applies a _base_ template to the _home_ template below, then renders the page content and a card component for each page within the "films" section of your site.
+For example, Hugo applies a _base_ template to the _home_ template below, then renders the page content and a card component for each page within the `films` section of your site.
 
 ```go-html-template {file="layouts/home.html"}
 {{ define "main" }}
   {{ .Content }}
   <ul>
     {{ range where site.RegularPages "Section" "films" }}
-      {{ .Render "view_card" }}
+      {{ .Render "_views/card" }}
     {{ end }}
   </ul>
 {{ end }}
 ```
 
-```go-html-template {file="layouts/films/view_card.html"}
+```go-html-template {file="layouts/films/_views/card.html"}
 <div class="card">
   <h2><a href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></h2>
   {{ .Summary }}
 </div>
 ```
 
-In the example above, the content view template's name starts with `view_`. While not strictly required, this naming convention helps distinguish content view templates from other templates within the same directory, improving organization and clarity.
+See the [`Render`][] method documentation for guidance on naming and organizing _view_ templates.
 
 ## Render hook
 
@@ -354,11 +344,11 @@ For example, the _render hook_ template below adds an anchor link to the right o
 </h{{ .Level }}>
 ```
 
-Learn more about [render hook templates](/render-hooks/).
+Learn more about [render hook templates][].
 
 ## Shortcode
 
-A _shortcode_ template is used to render a component of your site. Unlike _partial_ or _content view_ templates, _shortcode_ templates are called from content pages.
+A _shortcode_ template is used to render a component of your site. Unlike _partial_ or _view_ templates, _shortcode_ templates are called from content pages.
 
 For example, the _shortcode_ template below renders an audio element from a [global resource](g).
 
@@ -370,31 +360,37 @@ For example, the _shortcode_ template below renders an audio element from a [glo
 
 Then call the shortcode from within markup:
 
-```text {file="content/example.md"}
+```md {file="content/example.md"}
 {{</* audio src=/audio/test.mp3 */>}}
 ```
 
-Learn more about [shortcode templates](/templates/shortcode/).
+Learn more about [shortcode templates][].
 
 ## Other
 
 Use other specialized templates to create:
 
-- [Sitemaps](/templates/sitemap)
-- [RSS feeds](/templates/rss/)
-- [404 error pages](/templates/404/)
-- [robots.txt files](/templates/robots/)
+- [Sitemaps][]
+- [RSS feeds][]
+- [404 error pages][]
+- [robots.txt files][]
 
+[404 error pages]: /templates/404/
+[RSS feeds]: /templates/rss/
+[Sitemaps]: /templates/sitemap/
 [`Alphabetical`]: /methods/taxonomy/alphabetical/
-[`block`]: /functions/go-template/block/
 [`ByCount`]: /methods/taxonomy/bycount/
 [`Data`]: /methods/page/data/
-[`define`]: /functions/go-template/define/
-[`partial`]: /functions/partials/include/
-[`partialCached`]: /functions/partials/includeCached/
 [`Render`]: /methods/page/render/
 [`Term`]: /methods/page/data/#term
 [`Terms`]: /methods/page/data/#terms
+[`block`]: /functions/go-template/block/
+[`define`]: /functions/go-template/define/
+[`partialCached`]: /functions/partials/includeCached/
+[`partial`]: /functions/partials/include/
+[render hook templates]: /render-hooks/
+[robots.txt files]: /templates/robots/
+[shortcode templates]: /templates/shortcode/
 [taxonomy-plural]: /methods/page/data/#plural
 [taxonomy-singular]: /methods/page/data/#singular
 [template comments]: /templates/introduction/#comments
